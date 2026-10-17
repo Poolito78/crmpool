@@ -17,9 +17,15 @@ import { useCommercials } from '@/hooks/useCommercials';
 import {
   generateId, formatMontant, formatDate,
   STATUTS_FACTURE_CLIENT, type FactureClient, type StatutFactureClient, type LigneDevis,
-  calculerTotalDevis,
+  calculerTotalDevis, dbToFactureClient,
 } from '@/lib/store';
-import { Plus, Search, Trash2, Pencil, FileText, Receipt, CheckCircle2, AlertCircle, Euro, ArrowRight, Filter, X } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { EMETTEUR } from '@/lib/emetteur';
+import {
+  controlerFacture, clientFige, categorieSuggeree, mentionsPaiement,
+  CATEGORIES_OPERATION, type CategorieOperation,
+} from '@/lib/factureConforme';
+import { Plus, Search, Trash2, Pencil, FileText, Receipt, CheckCircle2, AlertCircle, Euro, ArrowRight, Filter, X, Stamp, Undo2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,7 +34,16 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { toast } from 'sonner';
 import ClientCombobox from '@/components/ClientCombobox';
 
+/** Statuts d'une facture ÉMISE : elle ne revient ni en brouillon ni en annulée (on émet un avoir). */
+const statutsEmise: StatutFactureClient[] = ['envoyée', 'payée'];
 const allStatuts = Object.keys(STATUTS_FACTURE_CLIENT) as StatutFactureClient[];
+
+/** Libellé du numéro : un brouillon n'en a pas encore (la base l'attribue à l'émission). */
+function libelleNumero(f: Pick<FactureClient, 'numero' | 'typeDocument'>) {
+  return f.numero || (f.typeDocument === 'avoir' ? 'Avoir brouillon' : 'Brouillon');
+}
+/** Montant signé : un avoir vient en déduction. */
+const signe = (f: FactureClient) => (f.typeDocument === 'avoir' ? -1 : 1);
 
 type ViewMode = 'toutes' | 'factures' | 'proformas';
 
@@ -78,6 +93,8 @@ export default function FacturesClient() {
   const [paiementDate, setPaiementDate] = useState('');
   const [convertConfirmOpen, setConvertConfirmOpen] = useState(false);
   const [convertTarget, setConvertTarget] = useState<FactureClient | null>(null);
+  const [emissionTarget, setEmissionTarget] = useState<FactureClient | null>(null);
+  const [emissionEnCours, setEmissionEnCours] = useState(false);
 
   // Form state
   const [estProforma, setEstProforma] = useState(false);
@@ -89,10 +106,21 @@ export default function FacturesClient() {
   const [statut, setStatut] = useState<StatutFactureClient>('brouillon');
   const [referenceAffaire, setReferenceAffaire] = useState('');
   const [notes, setNotes] = useState('');
+  // Réforme facture électronique
+  const [categorieOperation, setCategorieOperation] = useState<CategorieOperation | ''>('');
+  const [tvaSurDebits, setTvaSurDebits] = useState(false);
+  const [horsEInvoicing, setHorsEInvoicing] = useState(false);
+  const [livraisonALaFacturation, setLivraisonALaFacturation] = useState(false);
+  const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
+  const [typeDocument, setTypeDocument] = useState<'facture' | 'avoir'>('facture');
+  const [factureOrigineId, setFactureOrigineId] = useState('');
+  const [lignesFigees, setLignesFigees] = useState<FactureClient | null>(null);
 
+  /** Une proforma a sa série PRO- ; une facture brouillon n'a pas de numéro avant l'émission. */
   function nextNumero(proforma: boolean) {
+    if (!proforma) return '';
     const year = new Date().getFullYear();
-    return prochainNumero(facturesClient, proforma ? `PRO-${year}` : `FAC-${year}`);
+    return prochainNumero(facturesClient, `PRO-${year}`);
   }
 
   function resetForm(proforma = false) {
@@ -105,6 +133,14 @@ export default function FacturesClient() {
     setStatut('brouillon');
     setReferenceAffaire('');
     setNotes('');
+    setCategorieOperation('');
+    setTvaSurDebits(false);
+    setHorsEInvoicing(false);
+    setLivraisonALaFacturation(false);
+    setAdresseLivraisonId('');
+    setTypeDocument('facture');
+    setFactureOrigineId('');
+    setLignesFigees(null);
     setEditingId(null);
   }
 
@@ -124,38 +160,76 @@ export default function FacturesClient() {
     setStatut(f.statut);
     setReferenceAffaire(f.referenceAffaire || '');
     setNotes(f.notes || '');
+    setCategorieOperation(f.categorieOperation || '');
+    setTvaSurDebits(f.tvaSurDebits ?? false);
+    setHorsEInvoicing(f.horsEInvoicing ?? false);
+    setLivraisonALaFacturation(f.livraisonALaFacturation ?? false);
+    const cl = clients.find(c => c.id === f.clientId);
+    const adr = f.adresseLivraisonFigee
+      ? cl?.adressesLivraison?.find(a => a.adresse === f.adresseLivraisonFigee!.adresse && a.ville === f.adresseLivraisonFigee!.ville)
+      : undefined;
+    setAdresseLivraisonId(adr?.id || '');
+    setTypeDocument(f.typeDocument || 'facture');
+    setFactureOrigineId(f.factureOrigineId || '');
+    // Un avoir, ou une facture créée depuis une commande, garde SES lignes :
+    // ne pas les relire sur le devis, qui a pu bouger.
+    setLignesFigees(f.typeDocument === 'avoir' || f.commandeClientId ? f : null);
     setDialogOpen(true);
   }
 
   function save() {
     if (!clientId) { toast.error('Sélectionnez un client'); return; }
+    const enCours = editingId ? facturesClient.find(f => f.id === editingId) : undefined;
+    if (enCours?.emiseLe) { toast.error(`Facture ${enCours.numero} émise : elle ne se modifie plus. Émettre un avoir.`); return; }
 
     const linkedDevis = devisId ? devis.find(d => d.id === devisId) : null;
-    const lignes: LigneDevis[] = linkedDevis ? linkedDevis.lignes : [];
-    const fraisPortHT = linkedDevis?.fraisPortHT ?? 0;
+    let lignes: LigneDevis[] = linkedDevis ? linkedDevis.lignes : [];
+    let fraisPortHT = linkedDevis?.fraisPortHT ?? 0;
     const fraisPortTVA = linkedDevis?.fraisPortTVA ?? 20;
-    const total = linkedDevis
+    let total = linkedDevis
       ? calculerTotalDevis(lignes, fraisPortHT, fraisPortTVA)
       : { totalHT: 0, totalTVA: 0, totalTTC: 0 };
+    if (lignesFigees) {
+      lignes = lignesFigees.lignes;
+      fraisPortHT = lignesFigees.fraisPortHT;
+      total = { totalHT: lignesFigees.totalHT, totalTVA: lignesFigees.totalTVA, totalTTC: lignesFigees.totalTTC };
+    }
 
-    const linkedCC = commandesClient.find(cc => cc.devisId === devisId && devisId);
+    const linkedCC = lignesFigees?.commandeClientId
+      ? commandesClient.find(cc => cc.id === lignesFigees.commandeClientId)
+      : commandesClient.find(cc => cc.devisId === devisId && devisId);
+    const cl = clients.find(c => c.id === clientId);
+    const adr = cl?.adressesLivraison?.find(a => a.id === adresseLivraisonId);
+    const conformite = {
+      typeDocument,
+      factureOrigineId: factureOrigineId || undefined,
+      categorieOperation: categorieOperation || undefined,
+      tvaSurDebits,
+      horsEInvoicing,
+      livraisonALaFacturation,
+      adresseLivraisonFigee: adr && !livraisonALaFacturation
+        ? { libelle: adr.libelle, adresse: adr.adresse, codePostal: adr.codePostal, ville: adr.ville }
+        : undefined,
+    };
 
     if (editingId) {
       updateFacturesClient(prev => prev.map(f => f.id === editingId ? {
         ...f, clientId, devisId: devisId || undefined, commandeClientId: linkedCC?.id,
-        numero, dateCreation, dateEcheance: dateEcheance || undefined, statut,
+        numero: estProforma ? numero : '', dateCreation, dateEcheance: dateEcheance || undefined,
+        statut: estProforma ? statut : 'brouillon',
         lignes, totalHT: total.totalHT, totalTVA: total.totalTVA, totalTTC: total.totalTTC,
         fraisPortHT, referenceAffaire: referenceAffaire || undefined, notes: notes || undefined,
-        estProforma,
+        estProforma, ...conformite,
       } : f));
       toast.success(estProforma ? 'Proforma modifiée' : 'Facture modifiée');
     } else {
       const newFacture: FactureClient = {
         id: generateId(), clientId, devisId: devisId || undefined, commandeClientId: linkedCC?.id,
-        numero, dateCreation, dateEcheance: dateEcheance || undefined, statut,
+        numero: estProforma ? numero : '', dateCreation, dateEcheance: dateEcheance || undefined,
+        statut: estProforma ? statut : 'brouillon',
         lignes, totalHT: total.totalHT, totalTVA: total.totalTVA, totalTTC: total.totalTTC,
         fraisPortHT, referenceAffaire: referenceAffaire || undefined, notes: notes || undefined,
-        estProforma,
+        estProforma, ...conformite,
       };
       updateFacturesClient(prev => [...prev, newFacture]);
       toast.success(estProforma ? 'Proforma créée' : 'Facture créée');
@@ -187,18 +261,74 @@ export default function FacturesClient() {
   // Convertir une proforma en vraie facture
   function confirmConvert() {
     if (!convertTarget) return;
-    const year = new Date().getFullYear();
-    const newNumero = prochainNumero(facturesClient.filter(f => !f.estProforma), `FAC-${year}`);
+    // La facture issue de la proforma est un BROUILLON sans numéro : il lui
+    // sera attribué à l'émission, dans la suite continue tenue par la base.
     updateFacturesClient(prev => prev.map(f => f.id === convertTarget.id
-      ? { ...f, estProforma: false, numero: newNumero, statut: 'brouillon' as StatutFactureClient }
+      ? { ...f, estProforma: false, numero: '', statut: 'brouillon' as StatutFactureClient }
       : f));
-    toast.success(`Proforma ${convertTarget.numero} convertie → ${newNumero}`);
+    toast.success(`Proforma ${convertTarget.numero} convertie en facture brouillon — à émettre`);
     setConvertConfirmOpen(false);
     setConvertTarget(null);
   }
 
+  /** Avoir brouillon qui reprend la facture émise (lignes et montants), à ajuster avant émission. */
+  function creerAvoir(f: FactureClient) {
+    const avoir: FactureClient = {
+      ...f,
+      id: generateId(),
+      userId: undefined,
+      numero: '',
+      typeDocument: 'avoir',
+      factureOrigineId: f.id,
+      statut: 'brouillon',
+      dateCreation: new Date().toISOString().split('T')[0],
+      datePaiement: undefined,
+      emiseLe: undefined,
+      clientFige: undefined,
+      emetteurFige: undefined,
+      notes: `Avoir sur facture ${f.numero}`,
+    };
+    updateFacturesClient(prev => [...prev, avoir]);
+    toast.success(`Avoir brouillon créé sur ${f.numero} — à vérifier puis émettre`);
+  }
+
+  async function emettre() {
+    const f = emissionTarget;
+    if (!f) return;
+    const cl = clients.find(c => c.id === f.clientId);
+    if (!cl) return;
+    setEmissionEnCours(true);
+    try {
+      const { data, error } = await supabase.rpc('emettre_facture_client' as never, {
+        p_id: f.id,
+        p_client: clientFige(cl),
+        p_emetteur: { ...EMETTEUR },
+      } as never);
+      if (error) throw error;
+      const emise = dbToFactureClient(data);
+      // Remplacer par la ligne relue : mêmes valeurs qu'en base, le diff
+      // du store n'y trouve rien que le déclencheur refuserait.
+      updateFacturesClient(prev => prev.map(x => x.id === emise.id ? emise : x));
+      toast.success(`${emise.typeDocument === 'avoir' ? 'Avoir' : 'Facture'} ${emise.numero} émis(e) — désormais figé(e)`);
+      setEmissionTarget(null);
+    } catch (e) {
+      toast.error("Émission refusée", { description: (e as { message?: string })?.message || String(e) });
+    } finally {
+      setEmissionEnCours(false);
+    }
+  }
+
+  const controleEmission = useMemo(() => {
+    if (!emissionTarget) return null;
+    const cl = clients.find(c => c.id === emissionTarget.clientId);
+    const origine = emissionTarget.factureOrigineId ? facturesClient.find(x => x.id === emissionTarget.factureOrigineId) : undefined;
+    return controlerFacture(emissionTarget, cl, EMETTEUR, origine);
+  }, [emissionTarget, clients, facturesClient]);
+
   function confirmDelete() {
     if (!deleteTargetId) return;
+    const cible = facturesClient.find(f => f.id === deleteTargetId);
+    if (cible?.emiseLe) { toast.error(`Facture ${cible.numero} émise : elle ne se supprime pas. Émettre un avoir.`); setDeleteConfirmOpen(false); return; }
     updateFacturesClient(prev => prev.filter(f => f.id !== deleteTargetId));
     toast.success('Document supprimé');
     setDeleteConfirmOpen(false);
@@ -265,9 +395,9 @@ export default function FacturesClient() {
   // Stats globales
   const factures = facturesClient.filter(f => !f.estProforma);
   const proformas = facturesClient.filter(f => f.estProforma);
-  const totalEnvoye = factures.filter(f => f.statut === 'envoyée').reduce((s, f) => s + f.totalTTC, 0);
-  const totalPaye = factures.filter(f => f.statut === 'payée').reduce((s, f) => s + f.totalTTC, 0);
-  const enRetard = factures.filter(f => f.statut === 'envoyée' && f.dateEcheance && new Date(f.dateEcheance) < new Date());
+  const totalEnvoye = factures.filter(f => f.statut === 'envoyée').reduce((s, f) => s + signe(f) * f.totalTTC, 0);
+  const totalPaye = factures.filter(f => f.statut === 'payée').reduce((s, f) => s + signe(f) * f.totalTTC, 0);
+  const enRetard = factures.filter(f => f.statut === 'envoyée' && f.typeDocument !== 'avoir' && f.dateEcheance && new Date(f.dateEcheance) < new Date());
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-4">
@@ -398,14 +528,14 @@ export default function FacturesClient() {
                 const col = FC_COLS.find(c => c.key === key)!;
                 const base = `py-3 px-4 ${col.cls}`;
                 switch (key) {
-                  case 'numero': return <td style={ws} className={base}><div className="flex items-center gap-1.5"><span className="font-mono text-xs font-semibold">{f.numero}</span>{f.estProforma && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 font-bold tracking-wide">PROFORMA</span>}</div></td>;
+                  case 'numero': return <td style={ws} className={base}><div className="flex items-center gap-1.5"><span className={`font-mono text-xs font-semibold ${f.numero ? '' : 'italic text-muted-foreground'}`}>{libelleNumero(f)}</span>{f.emiseLe && <span title={`Émise le ${formatDate(f.emiseLe)} — figée`}><Lock className="w-3 h-3 text-muted-foreground" /></span>}{f.typeDocument === 'avoir' && <span className="text-[9px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400 font-bold tracking-wide">AVOIR</span>}{f.estProforma && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 font-bold tracking-wide">PROFORMA</span>}</div></td>;
                   case 'client': return <td style={ws} className={base}><div className="font-medium truncate">{client?.nom || '—'}</div>{client?.societe && <div className="text-xs text-muted-foreground truncate">{client.societe}</div>}</td>;
                   case 'ref': return <td style={ws} className={base}><div className="text-xs text-muted-foreground">{f.referenceAffaire || ''}</div><div className="flex items-center gap-1 flex-wrap mt-0.5">{dv && <button onClick={() => navigate(`/devis?search=${encodeURIComponent(dv.numero)}`)} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20"><FileText className="w-2.5 h-2.5" />{dv.numero}</button>}{cc && <button onClick={() => navigate(`/commandes-client?search=${encodeURIComponent(cc.numero)}`)} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium hover:bg-primary/20">{cc.numero}</button>}</div></td>;
                   case 'date': return <td style={ws} className={`${base} text-muted-foreground text-xs`}>{formatDate(f.dateCreation)}</td>;
                   case 'echeance': return <td style={ws} className={base}>{f.dateEcheance ? <span className={`text-xs font-medium ${isOverdue ? 'text-destructive' : 'text-muted-foreground'}`}>{formatDate(f.dateEcheance)}{isOverdue && <span className="block text-[10px]">Échu</span>}</span> : <span className="text-muted-foreground text-xs">—</span>}</td>;
                   case 'paiement': return <td style={ws} className={`${base} text-xs text-muted-foreground`}>{f.datePaiement ? formatDate(f.datePaiement) : '—'}</td>;
                   case 'total': return <td style={ws} className={`${base} font-semibold`}>{formatMontant(f.totalTTC)}</td>;
-                  case 'statut': return <td style={ws} className={base}>{f.estProforma ? <span className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 font-medium">{STATUTS_FACTURE_CLIENT[f.statut].label}</span> : <select value={f.statut} onChange={e => updateStatut(f.id, e.target.value as StatutFactureClient)} className={`text-xs font-medium px-2 py-1 rounded cursor-pointer border-0 ${statutInfo.color}`}>{allStatuts.map(s => <option key={s} value={s}>{STATUTS_FACTURE_CLIENT[s].label}</option>)}</select>}</td>;
+                  case 'statut': return <td style={ws} className={base}>{f.estProforma ? <span className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 font-medium">{STATUTS_FACTURE_CLIENT[f.statut].label}</span> : !f.emiseLe ? <span className={`text-xs px-2 py-1 rounded font-medium ${STATUTS_FACTURE_CLIENT.brouillon.color}`}>À émettre</span> : <select value={f.statut} onChange={e => updateStatut(f.id, e.target.value as StatutFactureClient)} className={`text-xs font-medium px-2 py-1 rounded cursor-pointer border-0 ${statutInfo.color}`}>{statutsEmise.map(s => <option key={s} value={s}>{STATUTS_FACTURE_CLIENT[s].label}</option>)}</select>}</td>;
                   case 'commercial': return <td style={ws} className={`${base} text-muted-foreground text-xs`} title={nameOf(f.userId)}>{nameOf(f.userId)}</td>;
                   default: return <td style={ws} className={base} />;
                 }
@@ -417,9 +547,11 @@ export default function FacturesClient() {
                     <div className="flex items-center justify-end">
                       <RowActionsMenu actions={[
                         { icon: <ArrowRight className="w-4 h-4 text-amber-600" />, label: 'Convertir en facture', onClick: () => { setConvertTarget(f); setConvertConfirmOpen(true); }, hidden: !f.estProforma },
-                        { icon: <CheckCircle2 className="w-4 h-4 text-emerald-600" />, label: 'Marquer payée', onClick: () => openPaiement(f), hidden: f.estProforma || f.statut === 'payée' },
-                        { icon: <Pencil className="w-4 h-4" />, label: 'Modifier', onClick: () => openEdit(f) },
-                        { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => { setDeleteTargetId(f.id); setDeleteConfirmOpen(true); }, danger: true },
+                        { icon: <Stamp className="w-4 h-4 text-primary" />, label: f.typeDocument === 'avoir' ? "Émettre l'avoir" : 'Émettre la facture', onClick: () => setEmissionTarget(f), hidden: f.estProforma || !!f.emiseLe },
+                        { icon: <CheckCircle2 className="w-4 h-4 text-emerald-600" />, label: f.typeDocument === 'avoir' ? 'Marquer remboursé / imputé' : 'Marquer payée', onClick: () => openPaiement(f), hidden: f.estProforma || !f.emiseLe || f.statut === 'payée' },
+                        { icon: <Undo2 className="w-4 h-4 text-rose-600" />, label: 'Créer un avoir', onClick: () => creerAvoir(f), hidden: !f.emiseLe || f.typeDocument === 'avoir' },
+                        { icon: <Pencil className="w-4 h-4" />, label: 'Modifier', onClick: () => openEdit(f), hidden: !!f.emiseLe },
+                        { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => { setDeleteTargetId(f.id); setDeleteConfirmOpen(true); }, danger: true, hidden: !!f.emiseLe },
                       ]} />
                     </div>
                   </td>
@@ -444,7 +576,7 @@ export default function FacturesClient() {
             <DialogTitle className="flex items-center gap-2">
               {estProforma
                 ? <><FileText className="w-4 h-4 text-amber-500" />{editingId ? `Modifier proforma — ${numero}` : 'Nouvelle facture proforma'}</>
-                : <><Receipt className="w-4 h-4" />{editingId ? `Modifier — ${numero}` : 'Nouvelle facture client'}</>
+                : <><Receipt className="w-4 h-4" />{typeDocument === 'avoir' ? `Avoir brouillon${factureOrigineId ? ` sur ${facturesClient.find(x => x.id === factureOrigineId)?.numero || ''}` : ''}` : editingId ? 'Modifier la facture brouillon' : 'Nouvelle facture client'}</>
               }
             </DialogTitle>
           </DialogHeader>
@@ -472,17 +604,10 @@ export default function FacturesClient() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Numéro</Label>
-                <Input value={numero} onChange={e => setNumero(e.target.value)} />
+                {estProforma
+                  ? <Input value={numero} onChange={e => setNumero(e.target.value)} />
+                  : <div className="h-10 flex items-center px-3 rounded-md border border-dashed border-input text-xs text-muted-foreground">Attribué à l'émission</div>}
               </div>
-              {!estProforma && (
-                <div>
-                  <Label>Statut</Label>
-                  <select value={statut} onChange={e => setStatut(e.target.value as StatutFactureClient)}
-                    className="w-full text-sm rounded-md border border-input bg-background px-3 py-2">
-                    {allStatuts.map(s => <option key={s} value={s}>{STATUTS_FACTURE_CLIENT[s].label}</option>)}
-                  </select>
-                </div>
-              )}
               {estProforma && (
                 <div>
                   <Label>Statut</Label>
@@ -495,11 +620,11 @@ export default function FacturesClient() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Date</Label>
-                <Input type="date" value={dateCreation} onChange={e => setDateCreation(e.target.value)} />
+                <Label>Date{!estProforma && <span className="text-[10px] text-muted-foreground font-normal"> (celle de l'émission)</span>}</Label>
+                <Input type="date" value={dateCreation} onChange={e => setDateCreation(e.target.value)} disabled={!estProforma} />
               </div>
               <div>
-                <Label>Échéance</Label>
+                <Label>Échéance{!estProforma && ' *'}</Label>
                 <Input type="date" value={dateEcheance} onChange={e => setDateEcheance(e.target.value)} />
               </div>
             </div>
@@ -517,6 +642,62 @@ export default function FacturesClient() {
               <Label>Référence affaire</Label>
               <Input value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
             </div>
+            {!estProforma && (() => {
+              const cl = clients.find(c => c.id === clientId);
+              const livraisons = (cl?.adressesLivraison || []).filter(a => a.type === 'livraison');
+              const lignesVues = lignesFigees?.lignes ?? devis.find(d => d.id === devisId)?.lignes ?? [];
+              const suggestion = categorieSuggeree(lignesVues);
+              return (
+                <div className="space-y-3 p-3 rounded-lg border border-border bg-muted/20">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Mentions de la facture électronique</p>
+                  <div>
+                    <Label>Catégorie d'opération *</Label>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {(Object.keys(CATEGORIES_OPERATION) as CategorieOperation[]).map(k => (
+                        <button key={k} type="button" onClick={() => setCategorieOperation(k)}
+                          className={`px-2.5 py-1 rounded text-xs border transition-colors ${categorieOperation === k ? 'bg-primary text-primary-foreground border-primary' : 'border-input hover:bg-muted'}`}>
+                          {CATEGORIES_OPERATION[k]}
+                        </button>
+                      ))}
+                    </div>
+                    {suggestion && !categorieOperation && (
+                      <button type="button" onClick={() => setCategorieOperation(suggestion)} className="text-[11px] text-primary underline mt-1">
+                        D'après les lignes : {CATEGORIES_OPERATION[suggestion].toLowerCase()} — retenir ?
+                      </button>
+                    )}
+                  </div>
+                  {categorieOperation && categorieOperation !== 'biens' && (
+                    <label className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={tvaSurDebits} onChange={e => setTvaSurDebits(e.target.checked)} />
+                      Option pour le paiement de la TVA d'après les débits
+                    </label>
+                  )}
+                  {livraisons.length > 0 && (
+                    <div>
+                      <Label>Adresse de livraison</Label>
+                      <div className="flex flex-col gap-1 mt-1">
+                        {livraisons.map(a => (
+                          <label key={a.id} className="flex items-start gap-2 text-xs">
+                            <input type="radio" name="adr-liv" checked={!livraisonALaFacturation && adresseLivraisonId === a.id}
+                              onChange={() => { setAdresseLivraisonId(a.id); setLivraisonALaFacturation(false); }} />
+                            <span><strong>{a.libelle}</strong> — {a.adresse}, {a.codePostal} {a.ville}</span>
+                          </label>
+                        ))}
+                        <label className="flex items-center gap-2 text-xs">
+                          <input type="radio" name="adr-liv" checked={livraisonALaFacturation}
+                            onChange={() => { setLivraisonALaFacturation(true); setAdresseLivraisonId(''); }} />
+                          Livré à l'adresse de facturation
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={horsEInvoicing} onChange={e => setHorsEInvoicing(e.target.checked)} />
+                    Client sans SIREN (particulier) — relève de l'e-reporting
+                  </label>
+                </div>
+              );
+            })()}
             <div>
               <Label>Notes</Label>
               <textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm min-h-[80px]"
@@ -526,8 +707,55 @@ export default function FacturesClient() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
             <Button onClick={save} className={estProforma ? 'bg-amber-500 hover:bg-amber-600' : ''}>
-              {editingId ? 'Enregistrer' : estProforma ? 'Créer la proforma' : 'Créer la facture'}
+              {editingId ? 'Enregistrer' : estProforma ? 'Créer la proforma' : 'Créer le brouillon'}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Émission : contrôle de conformité, puis numéro définitif et gel */}
+      <Dialog open={!!emissionTarget} onOpenChange={o => { if (!o && !emissionEnCours) setEmissionTarget(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Stamp className="w-4 h-4" />{emissionTarget?.typeDocument === 'avoir' ? "Émettre l'avoir" : 'Émettre la facture'}</DialogTitle>
+          </DialogHeader>
+          {emissionTarget && controleEmission && (
+            <div className="space-y-3 py-2 text-sm">
+              <p className="text-muted-foreground">
+                {clients.find(c => c.id === emissionTarget.clientId)?.societe || clients.find(c => c.id === emissionTarget.clientId)?.nom} — {formatMontant(emissionTarget.totalTTC)} TTC.
+                Le numéro définitif est attribué maintenant, à la date du jour. <strong>Ensuite la {emissionTarget.typeDocument === 'avoir' ? "pièce" : 'facture'} ne se modifie ni ne se supprime plus</strong> : une correction passe par un avoir.
+              </p>
+              {controleEmission.bloquants.length > 0 && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2.5">
+                  <p className="font-semibold text-destructive text-xs mb-1 flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" />À corriger avant d'émettre</p>
+                  <ul className="list-disc pl-5 space-y-0.5 text-xs">{controleEmission.bloquants.map(b => <li key={b}>{b}</li>)}</ul>
+                </div>
+              )}
+              {controleEmission.avertissements.length > 0 && (
+                <div className="rounded-md border border-amber-400/50 bg-amber-50/50 dark:bg-amber-950/20 p-2.5">
+                  <p className="font-semibold text-amber-700 dark:text-amber-400 text-xs mb-1">À vérifier</p>
+                  <ul className="list-disc pl-5 space-y-0.5 text-xs">{controleEmission.avertissements.map(b => <li key={b}>{b}</li>)}</ul>
+                </div>
+              )}
+              {controleEmission.bloquants.length === 0 && (
+                <div className="rounded-md border border-border p-2.5">
+                  <p className="font-semibold text-xs mb-1">Mentions de paiement portées</p>
+                  <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-muted-foreground">{mentionsPaiement(emissionTarget).map(m => <li key={m}>{m}</li>)}</ul>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmissionTarget(null)} disabled={emissionEnCours}>Annuler</Button>
+            {emissionTarget && controleEmission && controleEmission.bloquants.length > 0 ? (
+              <Button variant="outline" onClick={() => { const t = emissionTarget; setEmissionTarget(null); openEdit(t); }}>
+                <Pencil className="w-4 h-4 mr-2" />Compléter
+              </Button>
+            ) : (
+              <Button onClick={emettre} disabled={emissionEnCours || !controleEmission}>
+                <Stamp className="w-4 h-4 mr-2" />{emissionEnCours ? 'Émission…' : 'Émettre définitivement'}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -560,8 +788,7 @@ export default function FacturesClient() {
           <AlertDialogHeader>
             <AlertDialogTitle>Convertir en facture ?</AlertDialogTitle>
             <AlertDialogDescription>
-              La proforma <strong>{convertTarget?.numero}</strong> sera transformée en facture définitive avec un nouveau numéro FAC-…
-              Cette action est irréversible.
+              La proforma <strong>{convertTarget?.numero}</strong> deviendra une facture brouillon. Elle recevra son numéro FAC-… à l'émission.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

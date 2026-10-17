@@ -280,7 +280,6 @@ export default function CommandesClient() {
     } : c));
 
     // Créer une FactureClient liée
-    const year = new Date().getFullYear();
     const today = new Date().toISOString().split('T')[0];
     const lignesFacturees = factureCommande.lignes.filter(l => factureLignesSelectees.includes(l.id));
     const total = calculerTotalDevis(lignesFacturees, factureCommande.fraisPortHT, 20);
@@ -293,7 +292,8 @@ export default function CommandesClient() {
 
     const newFacture: FactureClient = {
       id: generateId(),
-      numero: prochainNumero(facturesClient.filter(f => !f.estProforma), `FAC-${year}`),
+      // Brouillon sans numéro : la base l'attribue à l'émission (suite continue).
+      numero: '',
       clientId: factureCommande.clientId,
       commandeClientId: factureCommande.id,
       devisId: factureCommande.devisId,
@@ -309,7 +309,7 @@ export default function CommandesClient() {
     };
     updateFacturesClient(prev => [...prev, newFacture]);
 
-    toast.success(`Facture ${newFacture.numero} créée`, {
+    toast.success('Facture brouillon créée — à émettre depuis Factures', {
       description: `Commande ${factureCommande.numero} — ${factureLignesSelectees.length} produit(s)`,
       action: { label: 'Voir factures', onClick: () => navigate('/factures-client') },
     });
@@ -520,7 +520,7 @@ export default function CommandesClient() {
                       <div className="flex items-center gap-1 flex-wrap mt-1">
                         {dvLie && <button onClick={() => navigate(`/devis?search=${encodeURIComponent(dvLie.numero)}`)} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20 transition-colors"><FileText className="w-2.5 h-2.5" />{dvLie.numero}</button>}
                         {cfLies.map(cf => <button key={cf.id} onClick={() => navigate(`/commandes?search=${encodeURIComponent(cf.numero)}`)} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-info/10 text-info font-medium hover:bg-info/20 transition-colors"><ShoppingCart className="w-2.5 h-2.5" />{cf.numero}</button>)}
-                        {facLies.map(fac => <button key={fac.id} onClick={() => navigate(`/factures-client?search=${encodeURIComponent(fac.numero)}`)} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium hover:bg-primary/20 transition-colors"><Receipt className="w-2.5 h-2.5" />{fac.numero}</button>)}
+                        {facLies.map(fac => <button key={fac.id} onClick={() => navigate(`/factures-client?search=${encodeURIComponent(fac.numero)}`)} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium hover:bg-primary/20 transition-colors"><Receipt className="w-2.5 h-2.5" />{fac.numero || 'Brouillon'}</button>)}
                       </div>
                     )}
                   </td>;

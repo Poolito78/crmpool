@@ -8,6 +8,7 @@ import { cederLaMain } from './prioriteLecture';
 import {
   lireCacheCatalogue, ecrireCacheCatalogue, lireDeltaCatalogue, appliquerDelta, curseurDe,
 } from './cacheCatalogue';
+import type { CategorieOperation } from './factureConforme';
 
 export type TypeAdresse = 'livraison' | 'facturation';
 
@@ -476,6 +477,28 @@ export interface FactureClient {
   referenceAffaire?: string;
   notes?: string;
   estProforma?: boolean;
+  /**
+   * Réforme de la facture électronique (migration 20261017120000).
+   * Une facture BROUILLON n'a pas de numéro (`numero` = '') : la base le lui
+   * attribue à l'émission (`emettre_facture_client`), puis la fige — plus
+   * aucune modification ni suppression, seuls le statut de paiement et les
+   * notes bougent. Corriger une facture émise = émettre un avoir.
+   */
+  typeDocument?: 'facture' | 'avoir';
+  /** Avoir : la facture qu'il corrige. */
+  factureOrigineId?: string;
+  categorieOperation?: CategorieOperation;
+  /** Option pour le paiement de la TVA d'après les débits (prestations). */
+  tvaSurDebits?: boolean;
+  /** Client sans SIREN (particulier) : hors e-invoicing, relève de l'e-reporting. */
+  horsEInvoicing?: boolean;
+  /** Livré à l'adresse de facturation (aucune adresse de livraison à mentionner). */
+  livraisonALaFacturation?: boolean;
+  adresseLivraisonFigee?: { libelle?: string; adresse: string; codePostal: string; ville: string };
+  /** Horodatage de l'émission. Présent = facture figée. */
+  emiseLe?: string;
+  clientFige?: Record<string, unknown>;
+  emetteurFige?: Record<string, unknown>;
 }
 
 export const STATUTS_FACTURE_CLIENT: Record<StatutFactureClient, { label: string; color: string }> = {
@@ -1480,7 +1503,7 @@ function commandeClientToDb(cc: CommandeClient, userId: string) {
 
 // ---- FactureClient mapping ----
 
-function dbToFactureClient(r: any): FactureClient {
+export function dbToFactureClient(r: any): FactureClient {
   return {
     id: r.id,
     userId: r.user_id || undefined,
@@ -1500,6 +1523,16 @@ function dbToFactureClient(r: any): FactureClient {
     referenceAffaire: r.reference_affaire || undefined,
     notes: r.notes || undefined,
     estProforma: r.est_proforma ?? false,
+    typeDocument: r.type_document === 'avoir' ? 'avoir' : 'facture',
+    factureOrigineId: r.facture_origine_id || undefined,
+    categorieOperation: r.categorie_operation || undefined,
+    tvaSurDebits: r.tva_sur_debits ?? false,
+    horsEInvoicing: r.hors_e_invoicing ?? false,
+    livraisonALaFacturation: r.livraison_a_la_facturation ?? false,
+    adresseLivraisonFigee: r.adresse_livraison_figee || undefined,
+    emiseLe: r.emise_le || undefined,
+    clientFige: r.client_fige || undefined,
+    emetteurFige: r.emetteur_fige || undefined,
   };
 }
 
@@ -1523,6 +1556,15 @@ function factureClientToDb(f: FactureClient, userId: string) {
     reference_affaire: f.referenceAffaire || null,
     notes: f.notes || null,
     est_proforma: f.estProforma ?? false,
+    /* emise_le, client_fige et emetteur_fige ne s'écrivent JAMAIS d'ici :
+       seule la fonction d'émission les pose (le déclencheur refuse le reste). */
+    ...(f.typeDocument !== undefined ? { type_document: f.typeDocument } : {}),
+    ...(f.factureOrigineId !== undefined ? { facture_origine_id: f.factureOrigineId || null } : {}),
+    ...(f.categorieOperation !== undefined ? { categorie_operation: f.categorieOperation || null } : {}),
+    ...(f.tvaSurDebits !== undefined ? { tva_sur_debits: f.tvaSurDebits } : {}),
+    ...(f.horsEInvoicing !== undefined ? { hors_e_invoicing: f.horsEInvoicing } : {}),
+    ...(f.livraisonALaFacturation !== undefined ? { livraison_a_la_facturation: f.livraisonALaFacturation } : {}),
+    ...(f.adresseLivraisonFigee !== undefined ? { adresse_livraison_figee: f.adresseLivraisonFigee || null } : {}),
   };
 }
 

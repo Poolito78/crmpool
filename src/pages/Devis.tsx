@@ -3377,7 +3377,7 @@ export default function Devis() {
                           onClick={() => navigate(`/factures-client?search=${encodeURIComponent(f.numero)}`)}
                           className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${f.estProforma ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 hover:bg-amber-200' : 'bg-primary/10 text-primary hover:bg-primary/20'}`}
                         >
-                          <Receipt className="w-3 h-3 inline mr-1" />{f.numero}
+                          <Receipt className="w-3 h-3 inline mr-1" />{f.numero || 'Facture brouillon'}
                         </button>
                       ))}
                       {(d.statut === 'envoyé' || d.statut === 'accepté') && facLies.filter(f => f.estProforma).length === 0 && (
