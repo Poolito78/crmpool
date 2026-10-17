@@ -1,9 +1,12 @@
 import { prochainNumero, prochainNumeroDevis } from '@/lib/numeroDevis';
+import { useSocietes } from '@/hooks/useSocietes';
+import { societeDuDocument } from '@/lib/societes';
+import SocieteDocumentDialog from '@/components/SocieteDocumentDialog';
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type ReactNode } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat } from 'lucide-react';
+import { Building2, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, type OdooPayload } from '@/lib/odooSync';
 import { compterBrides } from '@/lib/bridesDevis';
 import { Button } from '@/components/ui/button';
@@ -143,6 +146,10 @@ function statutCorrespond(d: DevisType, s: string, aujourdhui: string): boolean 
 
 export default function Devis() {
   const { devis, numerosLiberes, updateDevis, clients, updateClients, produits, updateProduits, assurerProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
+  const { serieDe, societes } = useSocietes();
+  /** Odoo ne concerne que les sociétés qui y sont reliées (ISOSIGN). */
+  const odooPermis = (d?: { societeId?: string } | null) => societeDuDocument(d, societes)?.odoo ?? true;
+  const [societeDoc, setSocieteDoc] = useState<DevisType | null>(null);
   const { canAchat, isAdmin, userId } = useCurrentUser();
   const { commercials, nameOf } = useCommercials();
   /* Les mots du client déjà retenus sur un article — pour ne pas réapprendre
@@ -1023,8 +1030,7 @@ export default function Devis() {
   }
 
   function createProforma(d: DevisType) {
-    const year = new Date().getFullYear();
-    const prefix = `PRO-${year}`;
+    const prefix = serieDe('PRO', d.societeId);
     const numero = prochainNumero(facturesClient, prefix);
     const client = clients.find(c => c.id === d.clientId);
     const total = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
@@ -1080,7 +1086,8 @@ export default function Devis() {
   }
 
   async function duplicate(d: DevisType) {
-    const numero = prochainNumeroDevis(devis, undefined, numerosLiberes);
+    // La copie reste dans la société de l'original (le spread copie societeId).
+    const numero = prochainNumeroDevis(devis, undefined, numerosLiberes, serieDe('DEV', d.societeId, false));
     const newId = generateId();
     const newDevis: DevisType = {
       ...d,
@@ -1098,7 +1105,7 @@ export default function Devis() {
 
   // Duplique un modèle « système » puis le remplit avec les infos dictées (client, chantier, surface…)
   async function duplicateSystemeEtRemplir(sysDevis: DevisType, opts: { client?: typeof clients[number]; chantier?: string; systeme?: string; surf: number; dictees: LigneDevis[] }) {
-    const numero = prochainNumeroDevis(devis, undefined, numerosLiberes);
+    const numero = prochainNumeroDevis(devis, undefined, numerosLiberes, serieDe('DEV', undefined, false));
     const newId = generateId();
     const surf = opts.surf;
     /* Lignes du modèle (nouveaux ids) + lignes dictées : quantités recalculées à la surface,
@@ -1123,6 +1130,9 @@ export default function Devis() {
     const newDevis: DevisType = {
       ...sysDevis,
       id: newId,
+      // Le modèle est un gabarit : le devis rempli va dans la société active.
+      societeId: undefined,
+      marque: undefined,
       numero,
       dateCreation: new Date().toISOString().split('T')[0],
       dateValidite: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
@@ -2337,7 +2347,7 @@ export default function Devis() {
         logHistorique({ entiteType: 'devis', entiteId: editingId, entiteNumero: existing?.numero ?? editingId, action: 'modification', details: { client: clients.find(c => c.id === clientId)?.nom, referenceAffaire: referenceAffaire || undefined, snapshot: existing ?? null } });
       }
     } else {
-      const numero = prochainNumeroDevis(devis, undefined, numerosLiberes);
+      const numero = prochainNumeroDevis(devis, undefined, numerosLiberes, serieDe('DEV', undefined, false));
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,
@@ -2726,7 +2736,7 @@ export default function Devis() {
       const dejaExistante = commandesClient.some(c => c.devisId === id);
       if (!dejaExistante) {
         const total = calculerTotalDevis(devisData.lignes, devisData.fraisPortHT, devisData.fraisPortTVA);
-        const newNumero = prochainNumero(commandesClient, `CMD-${new Date().getFullYear()}`, 4);
+        const newNumero = prochainNumero(commandesClient, serieDe('CMD', d.societeId), 4);
         const newCmd: CommandeClient = {
           id: generateId(),
           clientId: devisData.clientId,
@@ -3143,7 +3153,8 @@ export default function Devis() {
                             { icon: <Mail className="w-4 h-4" />, label: 'Envoyer par email', onClick: () => setEmailDevis(d) },
                             { icon: <BellRing className="w-4 h-4" />, label: 'Relancer par email', onClick: () => setRelance({ devis: d, mode: 'email' }), hidden: d.statut !== 'envoyé' },
                             { icon: <Phone className="w-4 h-4" />, label: 'Relance téléphonique', onClick: () => setRelance({ devis: d, mode: 'tel' }), hidden: d.statut !== 'envoyé' },
-                            { icon: <Send className="w-4 h-4" />, label: 'Créer le devis dans Odoo', onClick: () => { void creerDevisOdooDepuisListe(d); } },
+                            { icon: <Send className="w-4 h-4" />, label: 'Créer le devis dans Odoo', onClick: () => { void creerDevisOdooDepuisListe(d); }, hidden: !odooPermis(d) },
+                            { icon: <Building2 className="w-4 h-4" />, label: isAdmin ? 'Société et logo…' : 'Logo…', onClick: () => setSocieteDoc(d) },
                             { icon: <Archive className="w-4 h-4" />, label: 'Archiver', onClick: () => openArchiveDialog(d) },
                             { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => confirmRemove(d.id), danger: true },
                           ]} />
@@ -3425,7 +3436,8 @@ export default function Devis() {
                       { icon: <Mail className="w-4 h-4" />, label: 'Envoyer par email', onClick: () => setEmailDevis(d) },
                       { icon: <BellRing className="w-4 h-4" />, label: 'Relancer par email', onClick: () => setRelance({ devis: d, mode: 'email' }), hidden: d.statut !== 'envoyé' },
                       { icon: <Phone className="w-4 h-4" />, label: 'Relance téléphonique', onClick: () => setRelance({ devis: d, mode: 'tel' }), hidden: d.statut !== 'envoyé' },
-                      { icon: <Send className="w-4 h-4" />, label: 'Créer le devis dans Odoo', onClick: () => { void creerDevisOdooDepuisListe(d); } },
+                      { icon: <Send className="w-4 h-4" />, label: 'Créer le devis dans Odoo', onClick: () => { void creerDevisOdooDepuisListe(d); }, hidden: !odooPermis(d) },
+                      { icon: <Building2 className="w-4 h-4" />, label: isAdmin ? 'Société et logo…' : 'Logo…', onClick: () => setSocieteDoc(d) },
                       { icon: <Archive className="w-4 h-4" />, label: 'Archiver', onClick: () => openArchiveDialog(d) },
                       { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => confirmRemove(d.id), danger: true },
                     ]} />
@@ -3531,7 +3543,12 @@ export default function Devis() {
                           : <><Phone className="w-4 h-4 mr-2 text-muted-foreground" /> Relance téléphonique</>}
                       </DropdownMenuItem>
                     ))}
-                    {editingId && (
+                    {editingId && (() => { const ouvert = devis.find(x => x.id === editingId); return (
+                      <DropdownMenuItem onClick={() => ouvert && setSocieteDoc(ouvert)}>
+                        <Building2 className="w-4 h-4 mr-2 text-muted-foreground" /> {isAdmin ? 'Société et logo…' : 'Logo…'}
+                      </DropdownMenuItem>
+                    ); })()}
+                    {editingId && odooPermis(devis.find(x => x.id === editingId)) && (
                       <>
                         <DropdownMenuItem onClick={() => preparerOdoo(false)}>
                           <Send className="w-4 h-4 mr-2 text-muted-foreground" /> Créer le devis dans Odoo
@@ -6020,6 +6037,19 @@ ${dosage.source}` : ''}`}>
       />
 
       {/* Relance (mail type + devis joint, ou appel) */}
+      <SocieteDocumentDialog
+        doc={societeDoc}
+        onClose={() => setSocieteDoc(null)}
+        table="devis"
+        type="DEV"
+        transfert
+        onApply={({ societeId, marque, numero }) => {
+          const d = societeDoc;
+          if (!d) return;
+          updateDevis(prev => prev.map(x => x.id === d.id ? { ...x, societeId, marque, ...(numero ? { numero } : {}) } : x));
+          if (numero) logHistorique({ entiteType: 'devis', entiteId: d.id, entiteNumero: numero, action: 'modification', details: { transfert: { de: d.numero, vers: numero, societeId } } });
+        }}
+      />
       <RelanceDevisDialogs
         devis={relance?.devis ?? null}
         mode={relance?.mode ?? null}

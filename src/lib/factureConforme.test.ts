@@ -56,7 +56,7 @@ describe('contrôle avant émission', () => {
   it('une facture complète ne bloque pas (le SIRET émetteur reste à compléter)', () => {
     const r = controlerFacture(facture(), client(), EMETTEUR);
     expect(r.bloquants).toEqual([]);
-    expect(r.avertissements.some(a => a.includes('SIRET de l\'émetteur'))).toBe(true);
+    expect(r.avertissements.some(a => a.includes('SIRET de ISOSIGN'))).toBe(true);
   });
   it('bloque sans SIREN client, sans catégorie, sans échéance', () => {
     const r = controlerFacture(facture({ categorieOperation: undefined, dateEcheance: undefined }), client({ tvaIntra: '' }), EMETTEUR);

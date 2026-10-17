@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import logoIsofloor from '@/assets/logo-isofloor.png';
+import { useIdentiteDocument } from '@/hooks/useSocietes';
+import { imageEnDataUrl } from '@/lib/societes';
 import { savePdfFromElement, getStoredDirHandle, writeFileToFolder, generatePdfFromElement, storeDirHandle } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
 import { genererScriptOdoo, promptOdooPartnerName, coutChantierLigne, coutChantier } from '@/lib/odooSync';
@@ -172,6 +173,8 @@ export function parseImgPct(v: unknown): number {
 }
 
 export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, initialShowCoutLigne = false, initialShowCoutGroupe = false, initialShowLiens = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange, onUniteSurfaceChange, onImageTailleChange }: Props) {
+  /** Société et marque du devis : logo, coordonnées et pied de page. */
+  const identite = useIdentiteDocument(devis);
   const [showConso, setShowConso] = useState(initialShowConso);
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
@@ -508,20 +511,14 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
     try {
       const fileName = pdfFileName || buildFileName();
-      const logoDataUrl: string | null = await fetch(logoIsofloor)
-        .then(r => r.blob())
-        .then(blob => new Promise<string>(res => {
-          const reader = new FileReader();
-          reader.onload = () => res(reader.result as string);
-          reader.readAsDataURL(blob);
-        }))
-        .catch(() => null);
+      const logoDataUrl = await imageEnDataUrl(identite.logo);
       const refDate = devis.dateEnvoi || devis.dateCreation;
 
       const base64 = await generatePdfFromElement(printAreaRef.current, {
         devisNumero: devis.numero,
         devisDate: refDate ? formatDate(refDate) : undefined,
         logoDataUrl: logoDataUrl ?? undefined,
+        legal: identite.legal,
       });
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
       const blob = new Blob([bytes], { type: 'application/pdf' });
@@ -784,11 +781,24 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               {/* Ligne 1 : logo + DEVIS / numéro / date / validité */}
               <div className="flex justify-between items-start mb-5">
                 <div>
-                  <img src={logoIsofloor} alt="ISOFLOOR" className="h-11 mb-2" />
-                  <p className="text-muted-foreground text-xs">ZA DU MONAY</p>
-                  <p className="text-muted-foreground text-xs">71210 SAINT-EUSEBE</p>
-                  <p className="text-muted-foreground text-xs">Tél : 03 85 77 07 25</p>
-                  <p className="text-muted-foreground text-xs">Mail : contact@isofloor.fr</p>
+                  {identite.logo
+                    ? <img src={identite.logo} crossOrigin="anonymous" alt={identite.marque?.nom || identite.societe?.raisonSociale || 'Logo'} className="h-11 mb-2" />
+                    : <p className="font-heading text-xl font-bold mb-2">{identite.marque?.nom || identite.societe?.raisonSociale}</p>}
+                  {identite.societe ? (
+                    <>
+                      {identite.societe.adresse && <p className="text-muted-foreground text-xs">{identite.societe.adresse.toUpperCase()}</p>}
+                      {(identite.societe.codePostal || identite.societe.ville) && <p className="text-muted-foreground text-xs">{[identite.societe.codePostal, identite.societe.ville?.toUpperCase()].filter(Boolean).join(' ')}</p>}
+                      {identite.societe.telephone && <p className="text-muted-foreground text-xs">Tél : {identite.societe.telephone}</p>}
+                      {(identite.marque?.email || identite.societe.email) && <p className="text-muted-foreground text-xs">Mail : {identite.marque?.email || identite.societe.email}</p>}
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-muted-foreground text-xs">ZA DU MONAY</p>
+                      <p className="text-muted-foreground text-xs">71210 SAINT-EUSEBE</p>
+                      <p className="text-muted-foreground text-xs">Tél : 03 85 77 07 25</p>
+                      <p className="text-muted-foreground text-xs">Mail : contact@isofloor.fr</p>
+                    </>
+                  )}
                 </div>
                 <div className="text-right">
                   <h1 className="font-heading text-3xl font-bold tracking-tight">DEVIS</h1>

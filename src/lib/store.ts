@@ -412,6 +412,10 @@ export interface LigneReception {
 
 export interface CommandeFournisseur {
   id: string;
+  /** Société émettrice (multi-société, migration 20261017140000). Absent = ISOSIGN. */
+  societeId?: string;
+  /** Marque dont le logo s'imprime (ISOFLOOR, ISOSIGN, ISOMARK, STI, 4FLOORS…). Absent = marque par défaut de la société. */
+  marque?: string;
   devisId?: string;
   fournisseurId: string;
   numero: string;
@@ -432,6 +436,10 @@ export type StatutCommandeClient = 'a_traiter' | 'accuse_envoye' | 'commande_env
 
 export interface CommandeClient {
   id: string;
+  /** Société émettrice (multi-société, migration 20261017140000). Absent = ISOSIGN. */
+  societeId?: string;
+  /** Marque dont le logo s'imprime (ISOFLOOR, ISOSIGN, ISOMARK, STI, 4FLOORS…). Absent = marque par défaut de la société. */
+  marque?: string;
   /** Créateur (commercial) — user_id Supabase. */
   userId?: string;
   devisId?: string;
@@ -459,6 +467,10 @@ export type StatutFactureClient = 'brouillon' | 'envoyée' | 'payée' | 'annulé
 
 export interface FactureClient {
   id: string;
+  /** Société émettrice (multi-société, migration 20261017140000). Absent = ISOSIGN. */
+  societeId?: string;
+  /** Marque dont le logo s'imprime (ISOFLOOR, ISOSIGN, ISOMARK, STI, 4FLOORS…). Absent = marque par défaut de la société. */
+  marque?: string;
   /** Créateur (commercial) — user_id Supabase. */
   userId?: string;
   numero: string;
@@ -513,6 +525,10 @@ export type StatutFactureFournisseur = 'reçue' | 'validée' | 'payée' | 'conte
 
 export interface FactureFournisseur {
   id: string;
+  /** Société émettrice (multi-société, migration 20261017140000). Absent = ISOSIGN. */
+  societeId?: string;
+  /** Marque dont le logo s'imprime (ISOFLOOR, ISOSIGN, ISOMARK, STI, 4FLOORS…). Absent = marque par défaut de la société. */
+  marque?: string;
   numero: string;
   numeroFacture: string;
   fournisseurId: string;
@@ -692,6 +708,10 @@ export interface RelanceDevis {
 
 export interface Devis {
   id: string;
+  /** Société émettrice (multi-société, migration 20261017140000). Absent = ISOSIGN. */
+  societeId?: string;
+  /** Marque dont le logo s'imprime (ISOFLOOR, ISOSIGN, ISOMARK, STI, 4FLOORS…). Absent = marque par défaut de la société. */
+  marque?: string;
   /** Créateur (commercial) — user_id Supabase. */
   userId?: string;
   numero: string;
@@ -1152,6 +1172,8 @@ function produitToDb(p: Produit, userId: string) {
 function dbToDevis(r: any): Devis {
   return {
     id: r.id,
+    societeId: r.societe_id || undefined,
+    marque: r.marque || undefined,
     numero: r.numero,
     userId: r.user_id || undefined,
     clientId: r.client_id || '',
@@ -1198,6 +1220,8 @@ function dbToDevis(r: any): Devis {
 function devisToDb(d: Devis, userId: string) {
   return {
     id: d.id,
+    ...(d.societeId !== undefined ? { societe_id: d.societeId } : {}),
+    ...(d.marque !== undefined ? { marque: d.marque || null } : {}),
     user_id: d.userId || userId,
     numero: d.numero,
     client_id: d.clientId || null,
@@ -1411,6 +1435,8 @@ function produitFournisseurToDb(pf: ProduitFournisseur, userId: string) {
 function dbToCommandeFournisseur(r: any): CommandeFournisseur {
   return {
     id: r.id,
+    societeId: r.societe_id || undefined,
+    marque: r.marque || undefined,
     devisId: r.devis_id || undefined,
     fournisseurId: r.fournisseur_id,
     numero: r.numero,
@@ -1431,6 +1457,8 @@ function dbToCommandeFournisseur(r: any): CommandeFournisseur {
 function commandeFournisseurToDb(cf: CommandeFournisseur, userId: string) {
   return {
     id: cf.id,
+    ...(cf.societeId !== undefined ? { societe_id: cf.societeId } : {}),
+    ...(cf.marque !== undefined ? { marque: cf.marque || null } : {}),
     user_id: userId,
     devis_id: cf.devisId || null,
     fournisseur_id: cf.fournisseurId,
@@ -1454,6 +1482,8 @@ function commandeFournisseurToDb(cf: CommandeFournisseur, userId: string) {
 function dbToCommandeClient(r: any): CommandeClient {
   return {
     id: r.id,
+    societeId: r.societe_id || undefined,
+    marque: r.marque || undefined,
     userId: r.user_id || undefined,
     devisId: r.devis_id || undefined,
     clientId: r.client_id,
@@ -1479,6 +1509,8 @@ function dbToCommandeClient(r: any): CommandeClient {
 function commandeClientToDb(cc: CommandeClient, userId: string) {
   return {
     id: cc.id,
+    ...(cc.societeId !== undefined ? { societe_id: cc.societeId } : {}),
+    ...(cc.marque !== undefined ? { marque: cc.marque || null } : {}),
     user_id: cc.userId || userId,
     devis_id: cc.devisId || null,
     client_id: cc.clientId,
@@ -1506,6 +1538,8 @@ function commandeClientToDb(cc: CommandeClient, userId: string) {
 export function dbToFactureClient(r: any): FactureClient {
   return {
     id: r.id,
+    societeId: r.societe_id || undefined,
+    marque: r.marque || undefined,
     userId: r.user_id || undefined,
     numero: r.numero,
     clientId: r.client_id,
@@ -1539,6 +1573,8 @@ export function dbToFactureClient(r: any): FactureClient {
 function factureClientToDb(f: FactureClient, userId: string) {
   return {
     id: f.id,
+    ...(f.societeId !== undefined ? { societe_id: f.societeId } : {}),
+    ...(f.marque !== undefined ? { marque: f.marque || null } : {}),
     user_id: f.userId || userId,
     numero: f.numero,
     client_id: f.clientId,
@@ -1573,6 +1609,8 @@ function factureClientToDb(f: FactureClient, userId: string) {
 function dbToFactureFournisseur(r: any): FactureFournisseur {
   return {
     id: r.id,
+    societeId: r.societe_id || undefined,
+    marque: r.marque || undefined,
     numero: r.numero,
     numeroFacture: r.numero_facture || '',
     fournisseurId: r.fournisseur_id,
@@ -1591,6 +1629,8 @@ function dbToFactureFournisseur(r: any): FactureFournisseur {
 function factureFournisseurToDb(f: FactureFournisseur, userId: string) {
   return {
     id: f.id,
+    ...(f.societeId !== undefined ? { societe_id: f.societeId } : {}),
+    ...(f.marque !== undefined ? { marque: f.marque || null } : {}),
     user_id: userId,
     numero: f.numero,
     numero_facture: f.numeroFacture,

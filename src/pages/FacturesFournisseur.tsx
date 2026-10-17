@@ -1,4 +1,5 @@
 import { prochainNumero } from '@/lib/numeroDevis';
+import { useSocietes } from '@/hooks/useSocietes';
 import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
@@ -42,6 +43,7 @@ export default function FacturesFournisseur() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { facturesFournisseur, updateFacturesFournisseur, fournisseurs, commandesFournisseur, devis } = useCRM();
+  const { serieDe } = useSocietes();
   const ffCols = useTableColumns<FFColKey>('factures_fourn_table', FF_COLS.map(c => c.key));
 
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -87,8 +89,7 @@ export default function FacturesFournisseur() {
   const [notes, setNotes] = useState('');
 
   function nextNumero() {
-    const year = new Date().getFullYear();
-    return prochainNumero(facturesFournisseur, `FACF-${year}`);
+    return prochainNumero(facturesFournisseur, serieDe('FACF'));
   }
 
   function resetForm() {

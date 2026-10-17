@@ -1,4 +1,5 @@
 import { prochainNumero, prochainNumeroDevis } from '@/lib/numeroDevis';
+import { useSocietes } from '@/hooks/useSocietes';
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -268,6 +269,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     updateCommandesFournisseur, updateCommandesClient, updateClients, updateFournisseurs, updateDevis,
     updateProduits, updateProduitFournisseurs, creerProduits,
   } = useCRM();
+  const { serieDe } = useSocietes();
 
   /* Les mots du client déjà retenus sur un article : on n'apprend pas deux
      fois le même, et la recherche d'article les voit. */
@@ -1136,7 +1138,7 @@ const [contratOdoo, setContratOdoo] = useState<
           (assezLongF(f.societe) && result.nomPartenaire!.toLowerCase().includes(f.societe!.toLowerCase())))
       : undefined;
     setCreerCFFournisseurId(foundFourn?.id ?? '');
-    setCreerCFNumero(result.numeroDocument || prochainNumero(commandesFournisseur, `CF-${year}`));
+    setCreerCFNumero(result.numeroDocument || prochainNumero(commandesFournisseur, serieDe('CF', undefined, Number(year))));
     setCreerCFDateReception(result.dateDocument || today());
     setCreerCFDateLivraison(result.dateLivraisonPrevue || '');
     setCreerCFNotes(result.referencePartenaire ? `Réf. fournisseur : ${result.referencePartenaire}` : '');
@@ -1435,7 +1437,7 @@ const [contratOdoo, setContratOdoo] = useState<
 
     if (result.typeDocument === 'devis_client' || result.typeDocument === 'demande_devis') {
       setCreerDevisClientId(prev => garder(prev, foundClient?.id));
-      setCreerDevisNumero(result.numeroDocument || prochainNumeroDevis(devis, Number(year), numerosLiberes));
+      setCreerDevisNumero(result.numeroDocument || prochainNumeroDevis(devis, Number(year), numerosLiberes, serieDe('DEV', undefined, false)));
       setCreerDevisDate(result.dateDocument || today());
       setCreerDevisValidite(result.dateLivraisonPrevue || '');
       setCreerDevisRefAffaire(result.referencePartenaire || '');
@@ -1446,7 +1448,7 @@ const [contratOdoo, setContratOdoo] = useState<
       setCreerDevisNotes(result.notes || '');
     } else {
       setCreerCCClientId(prev => garder(prev, foundClient?.id));
-      setCreerCCNumero(result.numeroDocument || prochainNumero(commandesClient, `CC-${year}`));
+      setCreerCCNumero(result.numeroDocument || prochainNumero(commandesClient, serieDe('CC', undefined, Number(year))));
       setCreerCCDate(result.dateDocument || today());
       setCreerCCDateLivraison(result.dateLivraisonPrevue || '');
       setCreerCCNotes(result.notes || result.referencePartenaire || '');

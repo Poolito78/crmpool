@@ -75,6 +75,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 }
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { StoreProvider } from "@/lib/StoreContext";
+import { SocietesProvider } from "@/hooks/useSocietes";
 import { AuthProvider, useCurrentUser } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import CRMLayout from "@/components/CRMLayout";
@@ -185,6 +186,7 @@ function AppRoutes() {
   }
 
   return (
+    <SocietesProvider>
     <StoreProvider>
       <Suspense fallback={
         <div className="min-h-screen flex items-center justify-center bg-background">
@@ -216,6 +218,7 @@ function AppRoutes() {
         </Routes>
       </Suspense>
     </StoreProvider>
+    </SocietesProvider>
   );
 }
 

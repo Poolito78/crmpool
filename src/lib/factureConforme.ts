@@ -168,11 +168,16 @@ export function controlerFacture(
   if (f.emiseLe) bloquants.push('Cette facture est déjà émise.');
 
   // Émetteur
-  if (!sirenValide(emetteur.siren)) bloquants.push(`SIREN de l'émetteur invalide (${emetteur.siren}).`);
-  if (!emetteur.siret || !siretValide(emetteur.siret)) {
-    avertissements.push("SIRET de l'émetteur à compléter : celui des documents ISOSIGN (« 4949223130005 ») n'a que 13 chiffres. Le relire sur le Kbis.");
+  const nomEm = emetteur.raisonSociale || "l'émetteur";
+  if (!emetteur.raisonSociale?.trim()) bloquants.push("Raison sociale de la société émettrice absente (Paramètres → Sociétés).");
+  if (!emetteur.adresse?.trim() || !emetteur.codePostal?.trim() || !emetteur.ville?.trim()) {
+    bloquants.push(`Adresse de ${nomEm} incomplète (Paramètres → Sociétés).`);
   }
-  if (!tvaIntraFrValide(emetteur.tvaIntra)) bloquants.push(`N° de TVA de l'émetteur invalide (${emetteur.tvaIntra}).`);
+  if (!sirenValide(emetteur.siren)) bloquants.push(`SIREN de ${nomEm} absent ou invalide (${emetteur.siren || 'vide'}) — Paramètres → Sociétés.`);
+  if (!emetteur.siret || !siretValide(emetteur.siret)) {
+    avertissements.push(`SIRET de ${nomEm} absent ou invalide : le relire sur le Kbis et le saisir en Paramètres → Sociétés.`);
+  }
+  if (!tvaIntraFrValide(emetteur.tvaIntra)) bloquants.push(`N° de TVA de ${nomEm} absent ou invalide (${emetteur.tvaIntra || 'vide'}).`);
 
   // Client
   if (!client) {

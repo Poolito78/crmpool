@@ -46,3 +46,11 @@ describe('prochainNumero (commandes et factures)', () => {
     expect(prochainNumero([{ numero: 'CMD-2026-0007' }], 'CMD-2026', 4)).toBe('CMD-2026-0008');
   });
 });
+
+describe('séries par société', () => {
+  it('une société préfixée a sa propre suite de devis', () => {
+    const devis = [{ numero: 'DEV-2026-120' }, { numero: 'SIG-DEV-2026-004' }];
+    expect(prochainNumeroDevis(devis, 2026, [], 'SIG-DEV')).toBe('SIG-DEV-2026-005');
+    expect(prochainNumeroDevis(devis, 2026)).toBe('DEV-2026-121');
+  });
+});

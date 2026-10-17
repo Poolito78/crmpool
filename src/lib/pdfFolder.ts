@@ -1,6 +1,7 @@
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { logoAllege, pngIndexe } from './pdfImage';
+import { LEGAL_ISOSIGN_DEFAUT } from './societes';
 
 // ─── IndexedDB : persistance du dossier mémorisé ─────────────────────────────
 
@@ -155,7 +156,7 @@ export function zoneLienSurPage(
 
 export async function generatePdfFromElement(
   element: HTMLElement,
-  opts?: { devisNumero?: string; devisDate?: string; logoDataUrl?: string; docTitle?: string },
+  opts?: { devisNumero?: string; devisDate?: string; logoDataUrl?: string; docTitle?: string; legal?: [string, string] },
 ): Promise<string> {
   // ── Clone l'élément dans un conteneur hors-écran à la racine du body
   // pour éviter que les ancêtres (dialog overflow-y:auto → overflow-x:hidden)
@@ -234,8 +235,8 @@ export async function generatePdfFromElement(
   let contentHn = ph - footerH - headerH;  // pages 2+ (réduit + si bandeau d'en-tête répété)
   const contentH = contentH1;              // alias pour calculs globaux
 
-  const LEGAL_LINE1 = 'ISOSIGN® • ZA du Monay - 71210 SAINT-EUSÈBE - France - Tél. : 03 85 77 07 25 • Fax : 03 85 55 41 14 • isosign@isosign.fr • www.isosign.fr';
-  const LEGAL_LINE2 = 'SAS au capital de 40 000 € • RCS Chalon-sur-Saône 494922313 • SIRET 4949223130005 • APE 4669B • TVA FR76494922313';
+  // Pied de page de la société du document (multi-société) ; à défaut, ISOSIGN.
+  const [LEGAL_LINE1, LEGAL_LINE2] = opts?.legal ?? LEGAL_ISOSIGN_DEFAUT;
 
   function drawFooter(pageNum: number, totalPages: number) {
     // Trait de séparation
@@ -603,7 +604,7 @@ export async function generatePdfFromElement(
 export async function savePdfFromElement(
   element: HTMLElement,
   fileName: string,
-  opts?: { devisNumero?: string; devisDate?: string; logoDataUrl?: string },
+  opts?: { devisNumero?: string; devisDate?: string; logoDataUrl?: string; legal?: [string, string] },
 ): Promise<{ ok: boolean; folderName?: string; blobUrl: string }> {
   const base64 = await generatePdfFromElement(element, opts);
   const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));

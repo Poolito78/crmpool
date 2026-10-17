@@ -1,4 +1,6 @@
 import { prochainNumero } from '@/lib/numeroDevis';
+import { useSocietes } from '@/hooks/useSocietes';
+import SocieteDocumentDialog from '@/components/SocieteDocumentDialog';
 import { useState, useMemo, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
@@ -16,7 +18,7 @@ import { useCommercials } from '@/hooks/useCommercials';
 import FilterChoiceInput from '@/components/FilterChoiceInput';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, formatDateISO, calculerDateEcheance, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis, type FactureClient } from '@/lib/store';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
-import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, Mail, CalendarDays, Filter, X, Settings, Package, Check } from 'lucide-react';
+import { Building2, Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, Mail, CalendarDays, Filter, X, Settings, Package, Check } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,6 +51,8 @@ export default function CommandesClient() {
   const [searchParams] = useSearchParams();
   const ccCols = useTableColumns<CCColKey>('commandes_client_table', CC_COLS.map(c => c.key));
   const { commandesClient, updateCommandesClient, clients, devis, produits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, facturesClient, updateFacturesClient } = useCRM();
+  const { serieDe } = useSocietes();
+  const [logoCommande, setLogoCommande] = useState<CommandeClient | null>(null);
   const { isAdmin, userId } = useCurrentUser();
   const { commercials, nameOf } = useCommercials();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -111,7 +115,7 @@ export default function CommandesClient() {
   function resetForm() {
     setClientId('');
     setDevisId('');
-    setNumero(prochainNumero(commandesClient, `CMD-${new Date().getFullYear()}`, 4));
+    setNumero(prochainNumero(commandesClient, serieDe('CMD'), 4));
     setDateCreation(new Date().toISOString().split('T')[0]);
     setStatut('a_traiter');
     setReferenceAffaire('');
@@ -545,6 +549,7 @@ export default function CommandesClient() {
                         { icon: <Pencil className="w-4 h-4" />, label: 'Modifier', onClick: () => openEdit(cmd) },
                         { icon: <ShoppingCart className="w-4 h-4" />, label: 'Cmd Fournisseur', onClick: () => openCmdFournisseur(cmd) },
                         { icon: <Send className="w-4 h-4" />, label: 'Envoi AR + Dates', onClick: () => openArDialog(cmd) },
+                        { icon: <Building2 className="w-4 h-4" />, label: 'Logo…', onClick: () => setLogoCommande(cmd) },
                         { icon: <Receipt className="w-4 h-4" />, label: 'Facturer', onClick: () => openFactureDialog(cmd) },
                         { icon: <Mail className="w-4 h-4" />, label: 'Envoyer par email', onClick: () => openEmailFacture(cmd) },
                         { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => { setDeleteTargetId(cmd.id); setDeleteConfirmOpen(true); }, danger: true },
@@ -936,6 +941,19 @@ export default function CommandesClient() {
         produitFournisseurs={produitFournisseurs}
         onSaveCommandes={(commandes) => {
           updateCommandesFournisseur(prev => [...prev, ...commandes]);
+        }}
+      />
+
+      {/* Logo (marque) de la commande — la société suit celle du devis */}
+      <SocieteDocumentDialog
+        doc={logoCommande}
+        onClose={() => setLogoCommande(null)}
+        table="commandes_client"
+        type="CMD"
+        largeur={4}
+        onApply={({ marque }) => {
+          const c = logoCommande;
+          if (c) updateCommandesClient(prev => prev.map(x => x.id === c.id ? { ...x, marque } : x));
         }}
       />
 

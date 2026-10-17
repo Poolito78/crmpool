@@ -16,6 +16,7 @@ const AnalyseDocumentDialog = lazy(() => import('@/components/AnalyseDocumentDia
 /* Agent mail : lit Outlook, chargé à la première ouverture seulement. */
 const AgentMailDialog = lazy(() => import('@/components/AgentMailDialog'));
 import { PageHeaderSlotTarget } from '@/components/PageHeaderSlot';
+import SocieteSelecteur from '@/components/SocieteSelecteur';
 import { CA_ODOO_URL } from '@/lib/caOdoo';
 import { ouvrirFenetre } from '@/lib/fenetres';
 import { useFenetres } from '@/hooks/useFenetres';
@@ -630,6 +631,7 @@ export default function CRMLayout() {
             <span className="lg:hidden">{currentShort}</span>
             <span className="hidden lg:inline">{currentLabel}</span>
           </h1>
+          <SocieteSelecteur />
           <PageHeaderSlotTarget />
           {location.pathname === '/' && (
             <button

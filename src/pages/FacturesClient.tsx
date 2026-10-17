@@ -1,4 +1,5 @@
 import { prochainNumero } from '@/lib/numeroDevis';
+import { useSocietes } from '@/hooks/useSocietes';
 import { useState, useMemo, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
@@ -21,11 +22,13 @@ import {
 } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { EMETTEUR } from '@/lib/emetteur';
+import { societeDuDocument, emetteurDe } from '@/lib/societes';
 import {
   controlerFacture, clientFige, categorieSuggeree, mentionsPaiement,
   CATEGORIES_OPERATION, type CategorieOperation,
 } from '@/lib/factureConforme';
-import { Plus, Search, Trash2, Pencil, FileText, Receipt, CheckCircle2, AlertCircle, Euro, ArrowRight, Filter, X, Stamp, Undo2, Lock } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, FileText, Receipt, CheckCircle2, AlertCircle, Euro, ArrowRight, Filter, X, Stamp, Undo2, Lock, Building2 } from 'lucide-react';
+import SocieteDocumentDialog from '@/components/SocieteDocumentDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -64,6 +67,9 @@ export default function FacturesClient() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { facturesClient, updateFacturesClient, clients, devis, commandesClient } = useCRM();
+  const { serieDe, societes } = useSocietes();
+  /** Émetteur d'une facture : sa société ; ISOSIGN codé en dur tant que la table manque. */
+  const emetteurDeFacture = (f: FactureClient) => { const soc = societeDuDocument(f, societes); return soc ? emetteurDe(soc) : EMETTEUR; };
   const { isAdmin, userId } = useCurrentUser();
   const { commercials, nameOf } = useCommercials();
   const fcCols = useTableColumns<FCColKey>('factures_client_table', FC_COLS.map(c => c.key));
@@ -95,6 +101,7 @@ export default function FacturesClient() {
   const [convertTarget, setConvertTarget] = useState<FactureClient | null>(null);
   const [emissionTarget, setEmissionTarget] = useState<FactureClient | null>(null);
   const [emissionEnCours, setEmissionEnCours] = useState(false);
+  const [logoFacture, setLogoFacture] = useState<FactureClient | null>(null);
 
   // Form state
   const [estProforma, setEstProforma] = useState(false);
@@ -119,8 +126,7 @@ export default function FacturesClient() {
   /** Une proforma a sa série PRO- ; une facture brouillon n'a pas de numéro avant l'émission. */
   function nextNumero(proforma: boolean) {
     if (!proforma) return '';
-    const year = new Date().getFullYear();
-    return prochainNumero(facturesClient, `PRO-${year}`);
+    return prochainNumero(facturesClient, serieDe('PRO'));
   }
 
   function resetForm(proforma = false) {
@@ -302,7 +308,6 @@ export default function FacturesClient() {
       const { data, error } = await supabase.rpc('emettre_facture_client' as never, {
         p_id: f.id,
         p_client: clientFige(cl),
-        p_emetteur: { ...EMETTEUR },
       } as never);
       if (error) throw error;
       const emise = dbToFactureClient(data);
@@ -322,8 +327,9 @@ export default function FacturesClient() {
     if (!emissionTarget) return null;
     const cl = clients.find(c => c.id === emissionTarget.clientId);
     const origine = emissionTarget.factureOrigineId ? facturesClient.find(x => x.id === emissionTarget.factureOrigineId) : undefined;
-    return controlerFacture(emissionTarget, cl, EMETTEUR, origine);
-  }, [emissionTarget, clients, facturesClient]);
+    return controlerFacture(emissionTarget, cl, emetteurDeFacture(emissionTarget), origine);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emissionTarget, clients, facturesClient, societes]);
 
   function confirmDelete() {
     if (!deleteTargetId) return;
@@ -551,6 +557,7 @@ export default function FacturesClient() {
                         { icon: <CheckCircle2 className="w-4 h-4 text-emerald-600" />, label: f.typeDocument === 'avoir' ? 'Marquer remboursé / imputé' : 'Marquer payée', onClick: () => openPaiement(f), hidden: f.estProforma || !f.emiseLe || f.statut === 'payée' },
                         { icon: <Undo2 className="w-4 h-4 text-rose-600" />, label: 'Créer un avoir', onClick: () => creerAvoir(f), hidden: !f.emiseLe || f.typeDocument === 'avoir' },
                         { icon: <Pencil className="w-4 h-4" />, label: 'Modifier', onClick: () => openEdit(f), hidden: !!f.emiseLe },
+                        { icon: <Building2 className="w-4 h-4" />, label: 'Logo…', onClick: () => setLogoFacture(f), hidden: !!f.emiseLe },
                         { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => { setDeleteTargetId(f.id); setDeleteConfirmOpen(true); }, danger: true, hidden: !!f.emiseLe },
                       ]} />
                     </div>
@@ -723,7 +730,7 @@ export default function FacturesClient() {
             <div className="space-y-3 py-2 text-sm">
               <p className="text-muted-foreground">
                 {clients.find(c => c.id === emissionTarget.clientId)?.societe || clients.find(c => c.id === emissionTarget.clientId)?.nom} — {formatMontant(emissionTarget.totalTTC)} TTC.
-                Le numéro définitif est attribué maintenant, à la date du jour. <strong>Ensuite la {emissionTarget.typeDocument === 'avoir' ? "pièce" : 'facture'} ne se modifie ni ne se supprime plus</strong> : une correction passe par un avoir.
+                Émise par <strong>{emetteurDeFacture(emissionTarget).raisonSociale}</strong>. Le numéro définitif est attribué maintenant, à la date du jour. <strong>Ensuite la {emissionTarget.typeDocument === 'avoir' ? "pièce" : 'facture'} ne se modifie ni ne se supprime plus</strong> : une correction passe par un avoir.
               </p>
               {controleEmission.bloquants.length > 0 && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/5 p-2.5">
@@ -759,6 +766,18 @@ export default function FacturesClient() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Logo (marque) d'une facture brouillon ; figé à l'émission */}
+      <SocieteDocumentDialog
+        doc={logoFacture ? { ...logoFacture, numero: libelleNumero(logoFacture) } : null}
+        onClose={() => setLogoFacture(null)}
+        table="factures_client"
+        type="FAC"
+        onApply={({ marque }) => {
+          const f = logoFacture;
+          if (f) updateFacturesClient(prev => prev.map(x => x.id === f.id ? { ...x, marque } : x));
+        }}
+      />
 
       {/* Paiement Dialog */}
       <Dialog open={paiementDialogOpen} onOpenChange={setPaiementDialogOpen}>

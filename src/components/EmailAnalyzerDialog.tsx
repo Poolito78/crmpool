@@ -1,4 +1,5 @@
 import { prochainNumeroDevis } from '@/lib/numeroDevis';
+import { useSocietes } from '@/hooks/useSocietes';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -70,6 +71,7 @@ const CATALOGUE_CLE = 'crm_catalogue_analyse';
 
 export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated }: Props) {
   const { clients, produits, devis, numerosLiberes, updateDevis } = useCRM();
+  const { serieDe } = useSocietes();
   const { regles } = useReglesAccompagnement();
   const [emailText, setEmailText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -396,7 +398,7 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
       return;
     }
 
-    const numero = prochainNumeroDevis(devis, undefined, numerosLiberes);
+    const numero = prochainNumeroDevis(devis, undefined, numerosLiberes, serieDe('DEV', undefined, false));
     const newDevis: DevisType = {
       id: generateId(),
       numero,

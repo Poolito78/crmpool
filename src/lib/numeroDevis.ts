@@ -39,8 +39,10 @@ export function prochainNumeroDevis(
   devis: { numero?: string }[],
   annee = new Date().getFullYear(),
   liberes: string[] = [],
+  /** Type de la série, préfixe de société compris : 'DEV' (ISOSIGN), 'SIG-DEV'… */
+  base = 'DEV',
 ): string {
-  const prefixe = `DEV-${annee}`;
+  const prefixe = `${base}-${annee}`;
   const motif = new RegExp(`^${prefixe}-(\\d+)$`);
   const pris = new Set(devis.map(d => (d.numero || '').trim()));
   const candidats = liberes

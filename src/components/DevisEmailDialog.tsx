@@ -16,7 +16,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { liensDesProduits, copierLiens, type LienProduit, type CibleLien } from '@/lib/liensProduit';
 import { liensDocumentsCategorie, dbToDocumentCategorie } from '@/lib/categorieDocuments';
 import { dbToSysteme, liensFichesSystemes, systemeEstObjet } from '@/lib/systemes';
-import logoIsofloor from '@/assets/logo-isofloor.png';
+import { useIdentiteDocument } from '@/hooks/useSocietes';
+import { imageEnDataUrl } from '@/lib/societes';
 import { useMailsTypes, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteDuMail, estHtmlMail, placerDansHtml, placerDansTexte, type ImageMail } from '@/lib/mailsTypes';
 import EditeurMail from '@/components/EditeurMail';
 
@@ -351,6 +352,7 @@ function ChoixMailTypeRelance({ modeleId, corps, champs, onChoisir }: {
 }
 
 export default function DevisEmailDialog({ open, onOpenChange, devis, client, produits = [], relance = false, onSent, pdfContainerRef, previewOptions, onPreviewOptionsChange }: Props) {
+  const identite = useIdentiteDocument(devis);
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -632,14 +634,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     setGenerating(true);
     try {
       // Même options que le bouton PDF : logo + numéro + date en entête pages 2+
-      const logoDataUrl: string | null = await fetch(logoIsofloor)
-        .then(r => r.blob())
-        .then(blob => new Promise<string>(res => {
-          const reader = new FileReader();
-          reader.onload = () => res(reader.result as string);
-          reader.readAsDataURL(blob);
-        }))
-        .catch(() => null);
+      const logoDataUrl = await imageEnDataUrl(identite.logo);
       const refDate = devis.dateEnvoi || devis.dateCreation;
       // Capturer le document A4 lui-même (#devis-print), pas le wrapper externe
       // (qui ajoute le padding p-4/p-8 de l'aperçu → contenu décalé/rogné).
@@ -648,6 +643,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
         devisNumero: devis.numero,
         devisDate: refDate ? formatDate(refDate) : undefined,
         logoDataUrl: logoDataUrl ?? undefined,
+        legal: identite.legal,
       });
       setPdfReady(true);
     } catch (err) {

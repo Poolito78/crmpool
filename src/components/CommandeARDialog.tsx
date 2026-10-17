@@ -13,7 +13,8 @@ import { Mail, Send, Loader2, FileText, FolderOpen, Eye, CheckCircle2, AlertCirc
 import { type CommandeClient, type Client, formatMontant, formatDate, calculerTotalDevis } from '@/lib/store';
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToSubfolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
-import logoIsofloor from '@/assets/logo-isofloor.png';
+import { useIdentiteDocument } from '@/hooks/useSocietes';
+import { imageEnDataUrl } from '@/lib/societes';
 import CommandeARPreview from '@/components/CommandeARPreview';
 import { useMailsTypes, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteDuMail, estHtmlMail, type ImageMail } from '@/lib/mailsTypes';
 import EditeurMail from '@/components/EditeurMail';
@@ -110,6 +111,7 @@ interface Props {
 }
 
 export default function CommandeARDialog({ open, onOpenChange, commande, client, dateDepart, dateLivraison, onSent }: Props) {
+  const identite = useIdentiteDocument(commande);
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -156,18 +158,13 @@ export default function CommandeARDialog({ open, onOpenChange, commande, client,
     if (!previewRef.current || !commande) return;
     setGenerating(true);
     try {
-      const logoDataUrl: string = await fetch(logoIsofloor)
-        .then(r => r.blob())
-        .then(blob => new Promise<string>(res => {
-          const reader = new FileReader();
-          reader.onloadend = () => res(reader.result as string);
-          reader.readAsDataURL(blob);
-        }));
+      const logoDataUrl = (await imageEnDataUrl(identite.logo)) ?? undefined;
 
       const base64 = await generatePdfFromElement(previewRef.current, {
         devisNumero: commande.numero,
         logoDataUrl,
         docTitle: 'ACCUSÉ DE RÉCEPTION',
+        legal: identite.legal,
       });
       pdfBase64Ref.current = base64;
       setPdfReady(true);

@@ -2,7 +2,7 @@
  * CommandeARPreview — Rendu HTML d'un Accusé de Réception de commande client.
  * Même charte graphique que DevisPreview, utilisé pour la génération PDF.
  */
-import logoIsofloor from '@/assets/logo-isofloor.png';
+import { useIdentiteDocument } from '@/hooks/useSocietes';
 import { type CommandeClient, type Client, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 
 const ISOSIGN_ADRESSE = [
@@ -22,6 +22,7 @@ interface Props {
 }
 
 export default function CommandeARPreview({ commande, client, dateDepart, dateLivraison }: Props) {
+  const identite = useIdentiteDocument(commande);
   const totaux = calculerTotalDevis(commande.lignes, commande.fraisPortHT, 20);
 
   // Adresse de livraison éventuelle
@@ -47,7 +48,9 @@ export default function CommandeARPreview({ commande, client, dateDepart, dateLi
     >
       {/* ── En-tête ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px' }}>
-        <img src={logoIsofloor} alt="ISOSIGN" style={{ height: '40px', objectFit: 'contain' }} />
+        {identite.logo
+          ? <img src={identite.logo} crossOrigin="anonymous" alt={identite.marque?.nom || identite.societe?.raisonSociale || 'Logo'} style={{ height: '40px', objectFit: 'contain' }} />
+          : <div style={{ fontSize: '18px', fontWeight: 'bold' }}>{identite.marque?.nom || identite.societe?.raisonSociale}</div>}
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1a1a1a', letterSpacing: '1px' }}>
             ACCUSÉ DE RÉCEPTION
@@ -208,9 +211,9 @@ export default function CommandeARPreview({ commande, client, dateDepart, dateLi
 
       {/* ── Pied de page ── */}
       <div style={{ borderTop: '1px solid #ddd', paddingTop: '8px', textAlign: 'center', fontSize: '7.5px', color: '#999' }}>
-        ISOSIGN® • ZA du Monay - 71210 SAINT-EUSÈBE - France - Tél. : 03 85 77 07 25 • Fax : 03 85 55 41 14 • isosign@isosign.fr • www.isosign.fr
+        {identite.legal[0]}
         <br />
-        SAS au capital de 40 000 € • RCS Chalon-sur-Saône 494922313 • SIRET 4949223130005 • APE 4669B • TVA FR76494922313
+        {identite.legal[1]}
       </div>
     </div>
   );

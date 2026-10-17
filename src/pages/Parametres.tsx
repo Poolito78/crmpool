@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import SocietesPanel from '@/components/SocietesPanel';
 import { useSearchParams } from 'react-router-dom';
 import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3, Settings, Download, Users } from 'lucide-react';
 import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
@@ -191,6 +192,7 @@ export default function Parametres() {
           <TabsTrigger value="devis">Devis</TabsTrigger>
           {isAdmin && <TabsTrigger value="clients">Clients</TabsTrigger>}
           {isAdmin && <TabsTrigger value="veille">Veille Concurrence</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="societes">Sociétés</TabsTrigger>}
           {isAdmin && <TabsTrigger value="administration">Administration</TabsTrigger>}
           {isAdmin && <TabsTrigger value="stockage">Quotas</TabsTrigger>}
         </TabsList>
@@ -462,6 +464,11 @@ export default function Parametres() {
           </div>
         </div>
       ))}
+        </TabsContent>
+        <TabsContent value="societes" className="space-y-4 mt-4">
+          {isAdmin ? <SocietesPanel /> : (
+            <div className="bg-card rounded-xl border border-border p-5 text-sm text-muted-foreground">Accès réservé aux administrateurs.</div>
+          )}
         </TabsContent>
         <TabsContent value="administration" className="space-y-4 mt-4">
           {isAdmin ? (
