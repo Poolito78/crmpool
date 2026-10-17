@@ -17,6 +17,7 @@ const AnalyseDocumentDialog = lazy(() => import('@/components/AnalyseDocumentDia
 const AgentMailDialog = lazy(() => import('@/components/AgentMailDialog'));
 import { PageHeaderSlotTarget } from '@/components/PageHeaderSlot';
 import SocieteSelecteur from '@/components/SocieteSelecteur';
+import { useCRM } from '@/lib/StoreContext';
 import { CA_ODOO_URL } from '@/lib/caOdoo';
 import { ouvrirFenetre } from '@/lib/fenetres';
 import { useFenetres } from '@/hooks/useFenetres';
@@ -124,6 +125,7 @@ function BoutonFenetre({ path, actif }: { path: string; actif: boolean }) {
 }
 
 export default function CRMLayout() {
+  const { etatQuota } = useCRM();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [analyseOpen, setAnalyseOpen] = useState(false);
   const analyseDejaOuvert = useRef(false);
@@ -654,6 +656,12 @@ export default function CRMLayout() {
             </button>
           )}
         </header>
+        {etatQuota?.economie && (
+          <div className="shrink-0 px-4 md:px-6 py-1.5 text-xs bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300 border-b border-amber-300/50">
+            Mode économie Supabase : les changements faits ailleurs n'apparaissent plus en direct — actualisez la page pour les voir.
+            Rétabli seul au début du prochain cycle (Paramètres → Quotas).
+          </div>
+        )}
 
         <main className="relative flex-1 flex flex-col min-h-0 px-4 md:px-6 pt-2 md:pt-2 pb-20 md:pb-6 overflow-x-hidden">
           <Outlet />

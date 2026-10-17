@@ -3,12 +3,15 @@ import { Loader2, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { formatTaille } from '@/lib/gedFournisseur';
+import { useCRM } from '@/lib/StoreContext';
+import { formatOctets } from '@/lib/quotaEgress';
+import { toast } from 'sonner';
 
 /**
  * Quotas d'utilisation Supabase (forfait gratuit) : base 500 Mo, fichiers 1 Go.
  * Les chiffres viennent de la fonction `usage_stockage()` (administrateurs).
- * Le trafic sortant (5 Go/mois) n'est pas mesurable depuis l'application :
- * il se lit dans le tableau de bord Supabase.
+ * Le trafic sortant (5 Go/mois) est MESURÉ par l'application (quotaEgress.ts)
+ * et déclenche le mode économie avant la limite.
  */
 const QUOTA_BASE = 500 * 1024 * 1024;
 const QUOTA_FICHIERS = 1024 * 1024 * 1024;
@@ -41,6 +44,17 @@ export default function UsageStockagePanel() {
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState('');
   const [seau, setSeau] = useState<string>('tous');
+  const { etatQuota } = useCRM();
+  const [mode, setMode] = useState<string | null>(null);
+  const modeActuel = mode ?? etatQuota?.mode ?? 'auto';
+
+  async function changerMode(m: 'auto' | 'force' | 'off') {
+    const { error } = await supabase.from('parametres_app' as never)
+      .upsert({ cle: 'mode_economie', valeur: m, maj_le: new Date().toISOString() } as never);
+    if (error) { toast.error('Changement refusé : ' + error.message); return; }
+    setMode(m);
+    toast.success(m === 'force' ? 'Mode économie forcé' : m === 'off' ? 'Mode économie désactivé (à vos risques)' : 'Mode économie automatique');
+  }
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -63,11 +77,34 @@ export default function UsageStockagePanel() {
         </Button>
       </div>
       {erreur && <p className="text-sm text-destructive">Lecture impossible : {erreur}</p>}
+      {etatQuota && (
+        <div className={`bg-card rounded-xl border p-5 space-y-3 ${etatQuota.economie ? 'border-amber-400' : 'border-border'}`}>
+          <Jauge titre={`Trafic sortant mesuré depuis le ${new Date(etatQuota.debut_cycle).toLocaleDateString('fr-FR')}`} utilise={Number(etatQuota.mesure)} quota={Number(etatQuota.seuil)} />
+          <p className="text-xs text-muted-foreground">
+            Seuil de mise en économie : {formatOctets(Number(etatQuota.seuil))} mesurés par l'application, pour 5 Go autorisés par Supabase
+            (la marge couvre ce que l'application ne voit pas : fonctions, temps réel).
+            {etatQuota.reel_go && <> Dernier relevé réel sur Supabase : <strong>{etatQuota.reel_go} Go</strong>.</>}
+          </p>
+          <p className="text-sm">
+            {etatQuota.economie
+              ? <span className="text-amber-700 dark:text-amber-400 font-medium">Mode économie ACTIF : mises à jour en direct et tâches de nuit (stock Odoo, grilles) suspendues jusqu'au prochain cycle.</span>
+              : <span className="text-muted-foreground">Mode économie inactif.</span>}
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {([['auto', 'Automatique (recommandé)'], ['force', 'Forcer l\'économie'], ['off', 'Désactiver']] as const).map(([m, label]) => (
+              <button key={m} onClick={() => void changerMode(m)}
+                className={`px-2.5 py-1 rounded text-xs border ${modeActuel === m ? 'bg-primary text-primary-foreground border-primary' : 'border-input hover:bg-muted'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {usage && (<>
         <div className="bg-card rounded-xl border border-border p-5 space-y-4">
           <Jauge titre="Base de données" utilise={Number(usage.base_octets)} quota={QUOTA_BASE} />
           <Jauge titre="Fichiers (stockage)" utilise={totalFichiers} quota={QUOTA_FICHIERS} />
-          <p className="text-xs text-muted-foreground">Quotas du forfait gratuit. Le trafic sortant (5 Go/mois) se lit dans le tableau de bord Supabase.</p>
+          <p className="text-xs text-muted-foreground">Quotas du forfait gratuit.</p>
         </div>
 
         <div className="bg-card rounded-xl border border-border p-5">

@@ -9,6 +9,7 @@ import {
   lireCacheCatalogue, ecrireCacheCatalogue, lireDeltaCatalogue, appliquerDelta, curseurDe,
 } from './cacheCatalogue';
 import type { CategorieOperation } from './factureConforme';
+import { prendreCompte, rendreCompte, type EtatQuota } from './quotaEgress';
 
 export type TypeAdresse = 'livraison' | 'facturation';
 
@@ -1879,6 +1880,8 @@ export function useStore() {
      fait foi (`next_devis_numero`) ; ceci ne sert qu'au numéro AFFICHÉ avant
      l'enregistrement, pour qu'il soit le même. */
   const [numerosLiberes, setNumerosLiberes] = useState<string[]>([]);
+  /** Quota Supabase : mesure du cycle et mode économie (voir quotaEgress.ts). */
+  const [etatQuota, setEtatQuota] = useState<EtatQuota | null>(null);
   const lireNumerosLiberes = useCallback(async () => {
     const { data, error } = await supabase.from('devis_numeros_liberes' as any).select('numero');
     if (!error && data) setNumerosLiberes((data as unknown as { numero: string }[]).map(r => r.numero));
@@ -2248,7 +2251,10 @@ export function useStore() {
     };
 
     let channel: ReturnType<typeof supabase.channel> | null = null;
-    load().then(() => {
+    let charge = false;
+    let economie = false;
+    const abonner = () => {
+      if (channel || economie) return;
       channel = supabase.channel('crm-realtime');
       for (const table of Object.keys(refetchers)) {
         channel.on('postgres_changes' as any, { event: '*', schema: 'public', table }, (payload: any) => {
@@ -2259,10 +2265,36 @@ export function useStore() {
         });
       }
       channel.subscribe();
+    };
+
+    /* GARDE-FOU DU QUOTA (quotaEgress.ts) : ce que l'app a reçu part en base
+       toutes les 2 minutes ; la réponse dit si le seuil du cycle est franchi.
+       En mode économie, le temps réel est coupé — chaque message déclenchait
+       une relecture. Les données restent à jour en actualisant la page. */
+    const verifierQuota = async () => {
+      const lot = prendreCompte();
+      const { data, error } = await supabase.rpc('noter_egress' as never, { p_octets: Math.round(lot.octets), p_requetes: lot.requetes } as never);
+      if (error) { rendreCompte(lot); return; }   // migration absente ou réseau : on réessaiera
+      const etat = data as unknown as EtatQuota;
+      setEtatQuota(etat);
+      economie = !!etat?.economie;
+      if (economie && channel) { supabase.removeChannel(channel); channel = null; }
+      if (!economie && charge) abonner();
+    };
+    const intervalleQuota = setInterval(() => { void verifierQuota(); }, 120_000);
+    const auMasquage = () => { if (document.visibilityState === 'hidden') void verifierQuota(); };
+    document.addEventListener('visibilitychange', auMasquage);
+
+    load().then(async () => {
+      charge = true;
+      await verifierQuota();
+      abonner();
     });
 
     return () => {
       Object.values(timers).forEach(clearTimeout);
+      clearInterval(intervalleQuota);
+      document.removeEventListener('visibilitychange', auMasquage);
       if (channel) supabase.removeChannel(channel);
     };
   }, []);
@@ -2552,7 +2584,7 @@ export function useStore() {
     await ecrituresProduits.current.get(id);
   }, []);
 
-  return { clients, fournisseurs, produits, produitsCharges, nbProduits, assurerProduits, devis, numerosLiberes, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, attendreEcritureProduit, creerProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
+  return { clients, fournisseurs, produits, produitsCharges, nbProduits, assurerProduits, devis, numerosLiberes, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, attendreEcritureProduit, creerProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading, etatQuota };
 }
 
 // ── Entrepôts DB mapping ────────────────────────────────────────────────────
