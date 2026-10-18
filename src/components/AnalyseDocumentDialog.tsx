@@ -4955,16 +4955,21 @@ const [contratOdoo, setContratOdoo] = useState<
         quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0,
       };
       /* Les zones, comme la note du devis Odoo : c'est d'elles que sortent
-         les quantités, le client doit pouvoir les relire. */
-      const zones: LigneDevis = {
-        id: generateId(), type: 'texte',
-        description: zonesDocument.map(z => {
-          const zd = systemeDocument?.zones.get(Number(z.id));
-          const calcul = surfaceSysteme[Number(z.id)] == null && zd ? zd.calcul : `${fr(z.surfaceM2)} m²`;
-          return `${z.libelle} : ${calcul}`;
-        }).join('\n'),
-        quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0,
-      };
+         les quantités, le client doit pouvoir les relire.
+         ⚠️ UNE LIGNE DE NOTE PAR ZONE : jointes par des retours à la ligne dans une
+         seule note, le devis n'en montrait que la première — la bande blanche
+         restait seule, le vert et le jaune disparaissaient (métré du Chiffrage
+         ISOSIGN, 18/10). Le « Zone — » d'en-tête de ligne est retiré du libellé. */
+      const zones: LigneDevis[] = zonesDocument.map(z => {
+        const zd = systemeDocument?.zones.get(Number(z.id));
+        const calcul = surfaceSysteme[Number(z.id)] == null && zd ? zd.calcul : `${fr(z.surfaceM2)} m²`;
+        const libelle = z.libelle.replace(/^\s*zone\s*[—–-]\s*/i, '');
+        return {
+          id: generateId(), type: 'texte',
+          description: `${libelle} : ${calcul}`,
+          quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0,
+        };
+      });
       const composants = chiffrageDocument.map((ls): LigneDevis => {
         const p = produitDocument(ls);
         return {
@@ -4987,7 +4992,7 @@ const [contratOdoo, setContratOdoo] = useState<
           note: [ls.composant.role, ls.explication].filter(Boolean).join(' — '),
         };
       });
-      return [entete, zones, ...composants];
+      return [entete, ...zones, ...composants];
     };
 
     /* PAR ENSEMBLE, CHAQUE ENSEMBLE DU PLAN OUVRE SON GROUPE, sous le nom et
