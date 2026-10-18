@@ -1,0 +1,13 @@
+Windows Registry Editor Version 5.00
+
+; Liens outlook:<EntryID> de MonCRM (bouton "Ouvrir dans Outlook" de l'Agent mail).
+; Pour l'utilisateur courant seulement (HKCU), sans droit administrateur.
+; Double-cliquer ce fichier une fois par poste. Outlook installe ailleurs :
+; corriger le chemin de OUTLOOK.EXE ci-dessous.
+
+[HKEY_CURRENT_USER\Software\Classes\outlook]
+@="URL:Outlook"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\outlook\shell\open\command]
+@="\"C:\\Program Files\\Microsoft Office\\Root\\Office16\\OUTLOOK.EXE\" /select \"%1\""

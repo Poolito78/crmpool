@@ -146,6 +146,33 @@ export async function dernierExport(dossier: FileSystemDirectoryHandle): Promise
   return max;
 }
 
+/**
+ * Nom du .msg → EntryID Outlook, noté par la macro dans `entryids.txt` (en
+ * ANSI : lu en windows-1252, sinon les accents des objets ne collent plus au
+ * nom du fichier). Un mail exporté avant l'index ou glissé n'y est pas.
+ */
+export async function lireIndexOutlook(dossier: FileSystemDirectoryHandle): Promise<Map<string, string>> {
+  const res = new Map<string, string>();
+  try {
+    const f = await (await dossier.getFileHandle('entryids.txt')).getFile();
+    const texte = new TextDecoder('windows-1252').decode(await f.arrayBuffer());
+    for (const ligne of texte.split(/\r?\n/)) {
+      const [nom, id] = ligne.split('\t');
+      if (nom && id && /^[0-9A-F]+$/i.test(id.trim())) res.set(nom, id.trim());
+    }
+  } catch { /* pas encore d'index */ }
+  return res;
+}
+
+/**
+ * Rouvre le mail dans Outlook (`OUTLOOK.EXE /select`). Le protocole n'existe
+ * pas d'office : `outlook_macro/lien-outlook.reg`, une fois par poste.
+ * ⚠️ Un mail déplacé dans Outlook peut changer d'EntryID : le lien échoue.
+ */
+export function lienOutlook(entryId: string): string {
+  return `outlook:${entryId}`;
+}
+
 /** Copie détachée du disque : reste lisible une fois l'original rangé. */
 export async function copieEnMemoire(f: File): Promise<File> {
   return new File([await f.arrayBuffer()], f.name, { type: f.type, lastModified: f.lastModified });

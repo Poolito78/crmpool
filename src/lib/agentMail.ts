@@ -74,6 +74,8 @@ export interface MailAgent {
   fichier?: File;
   /** Lu dans le dossier d'export : peut y être rangé dans « Traites ». */
   duDossier?: boolean;
+  /** EntryID Outlook (index de la macro) : lien `outlook:` vers le mail. */
+  entryId?: string;
   /** Ligne de `mails_agent` (source `transfert`). */
   ligneId?: string;
 }

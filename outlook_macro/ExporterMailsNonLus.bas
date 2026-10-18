@@ -23,6 +23,8 @@
 '  L'IA de MonCRM trie ensuite : ce qui n'est pas une demande reste masque.
 '  Les mails restent NON LUS dans Outlook. Un mail deja exporte (present
 '  dans le dossier ou dans son sous-dossier Traites) n'est pas reexporte.
+'  "Ouvrir dans Outlook" (MonCRM) : l'EntryID de chaque mail est note dans
+'  entryids.txt ; executer une fois outlook_macro\lien-outlook.reg.
 ' ============================================================
 
 Private erreurExport As String
@@ -105,20 +107,52 @@ Public Function ExporterUnMail(ByVal it As Object) As Integer
     nom = Format(it.ReceivedTime, "yyyymmdd-hhnn") & " - " & NomFichierMail(it.Subject) & ".msg"
     If Dir(dossier & nom) <> "" Or Dir(dossier & "Traites\" & nom) <> "" Then
         ExporterUnMail = 0
-        Exit Function
+    Else
+        On Error Resume Next
+        it.SaveAs dossier & nom, 9                                     ' olMSGUnicode
+        If Err.Number = 0 Then
+            ExporterUnMail = 1
+        Else
+            ExporterUnMail = -1
+            If erreurExport = "" Then erreurExport = it.Subject & " : " & Err.Description
+        End If
+        Err.Clear
+        On Error GoTo 0
     End If
 
-    On Error Resume Next
-    it.SaveAs dossier & nom, 9                                         ' olMSGUnicode
-    If Err.Number = 0 Then
-        ExporterUnMail = 1
-    Else
-        ExporterUnMail = -1
-        If erreurExport = "" Then erreurExport = it.Subject & " : " & Err.Description
+    ' Deja present : indexe quand meme (mail exporte avant l'index).
+    If ExporterUnMail >= 0 Then
+        On Error Resume Next
+        IndexerMail dossier, nom, it.EntryID
+        Err.Clear
+        On Error GoTo 0
     End If
-    Err.Clear
-    On Error GoTo 0
 End Function
+
+' ------------------------------------------------------------
+' Note l'EntryID du mail dans entryids.txt (nom du .msg <TAB> EntryID) :
+' MonCRM en fait un lien outlook:<EntryID>, qui rouvre le mail dans la boite
+' (une fois par poste : executer outlook_macro\lien-outlook.reg).
+' Ecrit en ANSI ; MonCRM le lit en windows-1252.
+Private Sub IndexerMail(ByVal dossier As String, ByVal nom As String, ByVal entryId As String)
+    Dim f       As Integer
+    Dim contenu As String
+    Dim chemin  As String
+
+    chemin = dossier & "entryids.txt"
+    If Dir(chemin) <> "" Then
+        f = FreeFile
+        Open chemin For Binary Access Read As #f
+        contenu = Space$(LOF(f))
+        Get #f, , contenu
+        Close #f
+        If InStr(1, contenu, nom & vbTab, vbBinaryCompare) > 0 Then Exit Sub
+    End If
+    f = FreeFile
+    Open chemin For Append As #f
+    Print #f, nom & vbTab & entryId
+    Close #f
+End Sub
 
 ' ------------------------------------------------------------
 ' Les regles de l'en-tete. Un mail lu n'est pas un mail traite : tant

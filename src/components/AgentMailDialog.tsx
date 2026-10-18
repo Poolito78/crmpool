@@ -42,7 +42,7 @@ import {
 } from '@/lib/microsoftGraph';
 import {
   DOSSIER_MAILS, copieEnMemoire, dernierExport, dossierMails, dossierMailsDisponible, fichiersDuDossier,
-  lireMailFichier, nomDossierMails, rangerTraite,
+  lienOutlook, lireIndexOutlook, lireMailFichier, nomDossierMails, rangerTraite,
 } from '@/lib/dossierMails';
 import {
   type MailAgent, type TriMail, CATEGORIE_MAIL, clientDuMail, estFichierMail, invitationTri, lireTri, numerosDevisCites,
@@ -209,6 +209,8 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
       setNomDossier(d.name);
       if (!silencieux) setLecture(true);
       const mailsDossier = await lireFichiers(await fichiersDuDossier(d), true);
+      const index = await lireIndexOutlook(d);
+      for (const m of mailsDossier) m.entryId = index.get(m.fichier!.name);
       setBilanDossier({
         n: mailsDossier.length,
         heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
@@ -327,6 +329,20 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
       else setEcartes(noterId(CLE_ECARTES, m.id));
       setMails(memoire.mails.filter(x => x.id !== m.id));
     } catch (e) { echec(e); } finally { setEnCours(null); }
+  };
+
+  /* Sans EntryID (mail glissé, ou exporté avant l'index) : une copie du .msg,
+     qu'Outlook ouvre — on peut y répondre, mais ce n'est pas le mail de la boîte. */
+  const ouvrirCopie = async (m: MailAgent) => {
+    try {
+      const copie = await copieEnMemoire(m.fichier!);
+      const url = URL.createObjectURL(copie);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = copie.name;
+      a.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) { echec(e); }
   };
 
   const ecarter = async (m: MailAgent) => {
@@ -661,6 +677,19 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
                       <a href={m.lienWeb} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3.5 h-3.5 mr-1" />Répondre dans Outlook</a>
                     </Button>
                   )}
+                  {m.source === 'fichier' && (m.entryId ? (
+                    <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                      <a href={lienOutlook(m.entryId)}
+                        title="Rouvre le mail dans Outlook. Rien ne se passe ? Exécuter une fois outlook_macro\lien-outlook.reg sur ce poste.">
+                        <ExternalLink className="w-3.5 h-3.5 mr-1" />Ouvrir dans Outlook
+                      </a>
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => ouvrirCopie(m)}
+                      title="Mail sans lien vers la boîte (glissé, ou exporté avant l'index de la macro) : télécharge une copie du .msg, qu'Outlook ouvre.">
+                      <ExternalLink className="w-3.5 h-3.5 mr-1" />Ouvrir le .msg
+                    </Button>
+                  ))}
                   {(m.source === 'outlook' || m.source === 'transfert' || m.duDossier) && (
                     <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={occupe} onClick={() => ranger(m)}
                       title={m.source === 'outlook' ? 'Marquer comme lu dans Outlook' : m.source === 'transfert' ? 'Classer comme traité (sur tous les appareils)' : 'Ranger dans le sous-dossier « Traites »'}>
