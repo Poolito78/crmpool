@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 import { registerSW } from "virtual:pwa-register";
+import { ecouterDepotChiffrage } from "@/lib/depotChiffrage";
 
 /* Service worker : mise à jour PROPOSÉE, jamais imposée.
  *
@@ -218,6 +219,7 @@ try {
   const u = new URL(window.location.href);
   if (u.searchParams.get('analyse') === '1' && u.hash.startsWith('#texte=')) {
     sessionStorage.setItem('crm_analyse_texte', decodeURIComponent(u.hash.slice('#texte='.length)));
+    ecouterDepotChiffrage();   // le PDF du métré arrive du Chiffrage, joint au devis créé
     const type = u.searchParams.get('type');
     if (type) sessionStorage.setItem('crm_analyse_type', type);   // ex. « demande_devis »
     u.searchParams.delete('analyse'); u.searchParams.delete('t'); u.searchParams.delete('type');

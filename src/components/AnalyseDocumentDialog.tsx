@@ -32,6 +32,7 @@ import { useReglesAccompagnement } from '@/hooks/useReglesAccompagnement';
 import { appliquerAccompagnements, type LigneChiffrage } from '@/lib/chiffrage';
 import { produitParId, produitParReference } from '@/lib/indexProduits';
 import { rattacherContact, type ContactSource } from '@/lib/contactAffaire';
+import { prendreFichierChiffrage, joindreAuDevis } from '@/lib/depotChiffrage';
 import { cleAppelOdoo, type CorpsAppelOdoo } from '@/lib/appelOdoo';
 import { extraireImages, lireSignature, type ContactSignature } from '@/lib/lireSignature';
 import {
@@ -5227,6 +5228,14 @@ const [contratOdoo, setContratOdoo] = useState<
       });
     }
     updateDevis(prev => [nouveauDevis, ...prev]);
+    /* Demande venue du Chiffrage ISOSIGN : son PDF (plan annoté + résumé) rejoint
+       d'office « Notes & Fichiers » du devis. Pris seulement pour CE texte. */
+    const pdfChiffrage = /Chiffrage ISOSIGN/i.test(texte) ? prendreFichierChiffrage() : null;
+    if (pdfChiffrage) {
+      joindreAuDevis(nouveauDevis.id, pdfChiffrage)
+        .then(() => toast.success(`${pdfChiffrage.name} joint au devis ${creerDevisNumero}`))
+        .catch((e: Error) => toast.error(`PDF du Chiffrage non joint : ${e.message}`));
+    }
     const nb = aEcrire.size;
     toast.success(`Devis ${creerDevisNumero} créé`,
       nb ? { description: `${nb} article(s) Odoo repris au catalogue.` } : undefined);
