@@ -33,7 +33,7 @@ import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
 import RelanceDevisDialogs, { DateRelanceInput, type ModeRelanceOuvert } from '@/components/RelanceDevisDialogs';
 import { estRelance, etatRelance, prochaineRelance, devisARelancer, derniereRelance, ajouterJours, RELANCE_AVANT_REALISATION_JOURS } from '@/lib/relanceDevis';
-import OptionsArticleDialog from '@/components/OptionsArticleDialog';
+import OptionsArticleDialog, { type OptionChoisie } from '@/components/OptionsArticleDialog';
 import TeintesCompoDialog from '@/components/TeintesCompoDialog';
 import DetailCompoLigne from '@/components/DetailCompoLigne';
 import ChampSysteme from '@/components/ChampSysteme';
@@ -1790,29 +1790,38 @@ export default function Devis() {
     ouvrirOptionsDe(cible.ligneId, cible.racine);
   }
 
-  function insererOptions(ligneId: string, choisies: NonNullable<Produit['lignesOptions']>) {
+  function insererOptions(ligneId: string, choisies: OptionChoisie[]) {
     if (choisies.length === 0) { fermerOptions(); return; }
     saveSnapshot();
     /* Deux façons de prendre une option :
        - LIGNE EN PLUS : une ligne chiffrée sous l'article ;
-       - INCLUSE À LA LIGNE : non chiffrée, elle complète la désignation de l'article. */
+       - INCLUSE À LA LIGNE : non chiffrée, elle complète la désignation de l'article.
+       La teinte choisie dans la fenêtre (pigment) suit l'option : en variante de
+       la ligne en plus, en clair dans la désignation de l'option incluse. */
     const enPlus = choisies.filter(lk => !lk.inclusALaLigne);
     const incluses = choisies.filter(lk => lk.inclusALaLigne);
-    const nouvelles: LigneDevis[] = enPlus.map(lk => ({
-      id: generateId(),
-      produitId: lk.produitId || undefined,
-      description: lk.description,
-      quantite: lk.quantite,
-      unite: lk.unite,
-      prixUnitaireHT: lk.prixUnitaireHT,
-      tva: 20,
-      remise: lk.remise,
-      consommation: lk.consommation || undefined,
-      note: lk.note,
-    }));
+    const nouvelles: LigneDevis[] = enPlus.map(lk => {
+      const prod = lk.produitId ? produitParId(produits, lk.produitId) : undefined;
+      const diff = prod && lk.variantesChoisies ? getVarianteDiff(prod, lk.variantesChoisies) : 0;
+      return {
+        id: generateId(),
+        produitId: lk.produitId || undefined,
+        description: lk.description,
+        quantite: lk.quantite,
+        unite: lk.unite,
+        prixUnitaireHT: Math.round((lk.prixUnitaireHT + diff) * 100) / 100,
+        tva: 20,
+        remise: lk.remise,
+        consommation: lk.consommation || undefined,
+        note: lk.note,
+        ...(lk.variantesChoisies ? { variantesChoisies: lk.variantesChoisies } : {}),
+      };
+    });
+    const libelleInclus = (o: OptionChoisie) =>
+      [o.description, ...valeursVisibles(o.variantesChoisies)].filter(Boolean).join(' ');
     setLignes(prev => {
       const complete = incluses.length > 0
-        ? prev.map(l => l.id === ligneId ? { ...l, description: `${l.description} + ${incluses.map(o => o.description).join(' + ')}` } : l)
+        ? prev.map(l => l.id === ligneId ? { ...l, description: `${l.description} + ${incluses.map(libelleInclus).join(' + ')}` } : l)
         : prev;
       const i = complete.findIndex(l => l.id === ligneId);
       if (i < 0) return [...complete, ...nouvelles];
@@ -6011,6 +6020,7 @@ ${dosage.source}` : ''}`}>
 
       <OptionsArticleDialog
         produit={optionsPour?.produit ?? null}
+        trouver={id => produitParId(produits, id)}
         onConfirm={choisies => optionsPour && insererOptions(optionsPour.ligneId, choisies)}
         onCancel={fermerOptions}
       />
