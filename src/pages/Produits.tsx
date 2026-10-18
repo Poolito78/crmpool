@@ -913,12 +913,24 @@ export default function Produits() {
   const totalLignes = modeServeur ? serveur.total : sortedFiltered.length;
   const nbPages = Math.max(1, Math.ceil(totalLignes / PAR_PAGE));
   const pageCourante = Math.min(page, nbPages);
-  const affiches = useMemo(
-    () => modeServeur
+  /* LA RÉFÉRENCE EXACTE EN TÊTE de la première page, comme dans le sélecteur
+     d'article (`chercherProduits`) : taper « FLOWFAST319 » doit la montrer
+     d'abord, pas parmi FLOWFAST31910, FLOWFAST31920… triés par la base.
+     Espaces et points ne comptent pas. */
+  const exacte = useMemo(() => {
+    const cle = search.trim().toLowerCase().replace(/[\s.]+/g, '');
+    if (!cle) return undefined;
+    return produits.find(p => (p.reference || '').toLowerCase().replace(/[\s.]+/g, '') === cle);
+  }, [search, produits]);
+  const affiches = useMemo(() => {
+    const page = modeServeur
       ? serveur.lignes.map(l => produitsParId.get(l.id) ?? l)
-      : sortedFiltered.slice((pageCourante - 1) * PAR_PAGE, pageCourante * PAR_PAGE),
-    [modeServeur, serveur.lignes, sortedFiltered, pageCourante, produitsParId],
-  );
+      : sortedFiltered.slice((pageCourante - 1) * PAR_PAGE, pageCourante * PAR_PAGE);
+    /* Un tri choisi à la main est respecté ; un modèle ouvert ne liste que ses
+       variantes ; un filtre de colonne pourrait écarter l'article. */
+    if (!exacte || pageCourante !== 1 || sortCol || modeleOuvert || filtresActifs.length) return page;
+    return [exacte, ...page.filter(p => p.id !== exacte.id)];
+  }, [modeServeur, serveur.lignes, sortedFiltered, pageCourante, produitsParId, exacte, sortCol, modeleOuvert, filtresActifs.length]);
 
   // Un nouveau filtre ou un nouveau tri renvoie au début : rester page 12
   // après avoir tapé une recherche donnerait une liste vide sans raison visible.

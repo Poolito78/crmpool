@@ -83,6 +83,21 @@ describe('chercherProduits — classement des finitions', () => {
     expect(resultats[0].reference).toBe('A11.1000.C1.BTR.IS.BRUT');
   });
 
+  it('met la référence exacte en tête, devant ses voisines du catalogue', () => {
+    const flowfast: Produit[] = [
+      art('FLOWFAST31910', 'FLOWFAST 319 (10KG)'),
+      art('FLOWFAST31920', 'FLOWFAST 319 (20KG)'),
+      art('FLOWFAST319R', 'KIT FLOWFAST 319 ROAD'),
+      art('FLOWFAST319', 'FLOWFAST 319 Flexible Seal Unpigmented (20 kg)'),
+    ];
+    for (const saisie of ['FLOWFAST319', 'flowfast319', 'flowfast 319']) {
+      expect(chercherProduits(flowfast, saisie).resultats[0].reference).toBe('FLOWFAST319');
+    }
+    // Plafond à 2 : l'exacte reste, même rangée en fin de catalogue.
+    expect(chercherProduits(flowfast, 'FLOWFAST319', 2).resultats.map(p => p.reference))
+      .toEqual(['FLOWFAST319', 'FLOWFAST31910']);
+  });
+
   it('garde la priorité de la référence sur la description', () => {
     const mixte: Produit[] = [
       art('BALISE.J11', 'balise conforme J11'),

@@ -202,6 +202,14 @@ export function chercherProduits(
      ses segments. */
   const termes = q.split(/[\s.]+/).filter(Boolean);
 
+  /* LA RÉFÉRENCE EXACTE PASSE DEVANT TOUT. Taper « FLOWFAST319 » rendait
+     FLOWFAST31910, FLOWFAST31920, FLOWFAST319R… dans l'ordre du catalogue, et
+     l'article nommé tel quel se perdait parmi ses voisins — il fallait
+     préciser une saisie déjà complète. Espaces et points ne comptent pas :
+     « flowfast 319 » et « A13A.700.C1.BTR.IS.BRUT » désignent leur article. */
+  const compacte = termes.join('');
+  const exacts: Produit[] = [];
+
   /* Six seaux : trois rangs de pertinence × deux finitions (brut d'abord).
      Chaque seau est plafonné séparément — plafonner AVANT de trier ferait
      disparaître les BRUT quand soixante laquées les précèdent au catalogue. */
@@ -225,6 +233,7 @@ export function chercherProduits(
     if (rang < 0) continue;
 
     total++;
+    if (rang === 0 && e.ref.replace(/[\s.]+/g, '') === compacte) { exacts.push(e.p); continue; }
     // Une laquée ne recule que si la saisie ne la nomme pas.
     /* Le RAL n'est « demandé » que si un mot le nomme : il commence par L
        (L7016, L70…) ou vaut BRUT. Sans cette précaution, chercher la cote
@@ -237,7 +246,7 @@ export function chercherProduits(
   }
 
   return {
-    resultats: seaux.flat().slice(0, limite),
+    resultats: [...exacts, ...seaux.flat()].slice(0, limite),
     total,
   };
 }
