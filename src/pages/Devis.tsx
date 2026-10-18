@@ -15,6 +15,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { NIVEAUX_TARIF, LIBELLE_NIVEAU, estNiveauTarif, prixAuNiveau, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
 import { prixGamme } from '@/lib/remiseGammes';
+import { chargerFichiersDevis, type FichierDevis } from '@/lib/piecesJointesDevis';
+import DocumentsDevis from '@/components/DocumentsDevis';
 import { chargerGrille } from '@/lib/grilleTarif.charger';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -219,6 +221,9 @@ export default function Devis() {
   const [commandeConfirmDevis, setCommandeConfirmDevis] = useState<DevisType | null>(null);
   const [chatterDevis, setChatterDevis] = useState<DevisType | null>(null);
   const [chatterMode, setChatterMode] = useState<'note' | 'fichier' | null>(null);
+  /* Les documents joints de chaque devis, montrés sur sa carte (`piecesJointesDevis.ts`).
+     Relus à la fermeture du devis ou de « Notes & Fichiers » : c'est là qu'on en ajoute. */
+  const [fichiersParDevis, setFichiersParDevis] = useState<Map<string, FichierDevis[]>>(new Map());
   const [sidebarPjs, setSidebarPjs] = useState<Array<{ id: string; type: string; contenu?: string; fichierNom?: string; fichierUrl?: string; fichierTaille?: number; fichierMime?: string; confidentiel?: boolean; date: string }>>([]);
   // Images collées dans les notes de ligne : ligneId → [{url, name, taille}] (taille = % largeur impression)
   const [lineImages, setLineImages] = useState<Record<string, { url: string; name: string; taille?: number }[]>>({});
@@ -850,6 +855,14 @@ export default function Devis() {
   // Tableau trié+filtré (colonne sort → remplace le sortBy select en mode tableau)
   // ⚠️ DOIT être déclaré APRÈS `sorted` : cette IIFE lit `sorted` à l'exécution.
   const aujourdhuiISO = formatDateISO(new Date());
+  const idsDevis = devis.map(d => d.id).join(',');
+  useEffect(() => {
+    if (dialogOpen || chatterDevis || !idsDevis) return;
+    let annule = false;
+    chargerFichiersDevis(idsDevis.split(',')).then(m => { if (!annule) setFichiersParDevis(m); });
+    return () => { annule = true; };
+  }, [idsDevis, dialogOpen, chatterDevis]);
+
   // Relances dues, dans le périmètre du commercial (même règle que `filtered`).
   const nbARelancer = devisARelancer(devis.filter(d => isAdmin || !d.userId || d.userId === userId), aujourdhuiISO).length;
   const sortedTable = (() => {
@@ -3165,7 +3178,14 @@ export default function Devis() {
                     const ws = devisCols.widthStyle(key);
                     const trunc = ws ? ' truncate' : '';
                     switch (key) {
-                      case 'numero': return <td style={ws} className={`px-3 py-2.5${trunc}`}><p className="font-semibold text-sm truncate">{d.numero}</p></td>;
+                      case 'numero': return (
+                        <td style={ws} className={`px-3 py-2.5${trunc}`}>
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <p className="font-semibold text-sm truncate">{d.numero}</p>
+                            <DocumentsDevis fichiers={fichiersParDevis.get(d.id)} compact />
+                          </div>
+                        </td>
+                      );
                       case 'statut': return (
                         <td style={ws} className="px-3 py-2.5">
                           <select value={d.statut} onClick={e => e.stopPropagation()} onChange={e => { const ns = e.target.value as DevisType['statut']; const patch = ns === 'accepté' ? { probabiliteReussite: 100, dateRealisation: d.dateRealisation || new Date().toISOString().split('T')[0] } : {}; updateDevis(prev => prev.map(dv => dv.id === d.id ? { ...dv, statut: ns, ...patch } : dv)); }} className={`text-xs px-1.5 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary ${couleurStatut(d) || 'bg-muted text-muted-foreground'}`}>
@@ -3381,6 +3401,7 @@ export default function Devis() {
                     </p>
                   )}
                   {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
+                  <DocumentsDevis fichiers={fichiersParDevis.get(d.id)} />
                   {/* ── Relance : où on en est, et de quoi relancer d'un clic ── */}
                   {d.statut === 'envoyé' && visDevisTableCols.has('relance') && (() => {
                     const p = prochaineRelance(d);
