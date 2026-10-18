@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import VarianteSelect from '@/components/VarianteSelect';
-import { formatMontant, type LigneKit, type Produit } from '@/lib/store';
+import { formatMontant, type LigneKit, type Produit, type VarianteDimension } from '@/lib/store';
+import { getRalInfo } from '@/lib/ralColors';
+import { cn } from '@/lib/utils';
 
 /**
  * Les options de l'article qu'on vient de saisir dans un devis : à cocher.
@@ -17,6 +19,67 @@ import { formatMontant, type LigneKit, type Produit } from '@/lib/store';
  * laissée vide se signale et se reprend sur la ligne du devis.
  */
 export type OptionChoisie = LigneKit & { variantesChoisies?: Record<string, string> };
+
+/**
+ * Choix d'une dimension À PLAT dans la fenêtre : un champ où taper le RAL et
+ * la grille des teintes juste dessous, filtrée à la frappe. Un menu déroulant
+ * s'ouvrait DANS la liste des options, qui défile : il y était coupé et l'on
+ * ne voyait qu'un rang de pastilles. Entrée retient la première teinte
+ * restante.
+ */
+function ChoixDimension({ dimension, valeur, onChoix }: {
+  dimension: VarianteDimension; valeur: string; onChoix: (label: string) => void;
+}) {
+  const [saisie, setSaisie] = useState('');
+  const visibles = useMemo(() => {
+    const q = saisie.trim().toLowerCase().replace(/^ral\s*/, '');
+    if (!q) return dimension.options;
+    return dimension.options.filter(o =>
+      getRalInfo(o.label)?.num.startsWith(q) || o.label.toLowerCase().includes(q));
+  }, [saisie, dimension.options]);
+
+  return (
+    <div className="space-y-1.5">
+      <Input
+        value={saisie}
+        onChange={e => setSaisie(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' && visibles[0]) { e.preventDefault(); onChoix(visibles[0].label); setSaisie(''); }
+        }}
+        placeholder="Tapez le RAL (ex. 7037) ou un nom de teinte…"
+        className="h-8 text-sm"
+      />
+      <div className="grid gap-1 max-h-60 overflow-y-auto rounded border border-border p-1.5"
+        style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))' }}>
+        {visibles.map(o => {
+          const ral = getRalInfo(o.label);
+          const fond = o.couleur || ral?.hex;
+          return (
+            <button
+              key={o.id}
+              type="button"
+              title={o.label}
+              onClick={() => { onChoix(o.label); setSaisie(''); }}
+              className={cn('flex flex-col items-center gap-0.5 rounded p-1 text-center hover:bg-accent',
+                o.label === valeur && 'ring-2 ring-primary bg-accent/60')}
+            >
+              {o.imageUrl
+                ? <img src={o.imageUrl} alt={o.label} className="h-10 w-10 rounded object-cover border border-black/10"
+                    style={fond ? { backgroundColor: fond } : undefined}
+                    onError={e => { (e.target as HTMLImageElement).style.visibility = 'hidden'; }} />
+                : <span className="h-10 w-10 rounded border border-black/10" style={{ backgroundColor: fond ?? 'transparent' }} />}
+              <span className="text-[10px] leading-tight line-clamp-2 w-full">
+                {ral ? `RAL ${ral.num}` : o.label}
+                {o.prixDiff ? <span className="text-muted-foreground"> ({o.prixDiff > 0 ? '+' : ''}{o.prixDiff}€)</span> : null}
+              </span>
+            </button>
+          );
+        })}
+        {visibles.length === 0 && <p className="col-span-full py-2 text-center text-xs text-muted-foreground">Aucune teinte ne correspond</p>}
+      </div>
+    </div>
+  );
+}
 
 interface Props {
   produit: Produit | null;
@@ -47,11 +110,11 @@ export default function OptionsArticleDialog({ produit, trouver, onConfirm, onCa
 
   return (
     <Dialog open={!!produit} onOpenChange={o => { if (!o) onCancel(); }}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Options proposées — {produit?.reference}</DialogTitle>
         </DialogHeader>
-        <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
+        <div className="space-y-1.5 max-h-[75vh] overflow-y-auto">
           {options.map((o, i) => {
             const dims = cochees.has(i) ? dimensionsDe(o) : [];
             return (
@@ -79,14 +142,17 @@ export default function OptionsArticleDialog({ produit, trouver, onConfirm, onCa
                       const valeur = variantes[i]?.[d.id] ?? '';
                       return (
                         <div key={d.id} className="space-y-1">
-                          <div className="text-xs text-muted-foreground">{d.nom || 'Variante'}</div>
-                          <VarianteSelect
+                          <div className="text-xs text-muted-foreground">
+                            {d.nom || 'Variante'} :{' '}
+                            {valeur
+                              ? <span className="font-medium text-foreground">{valeur}</span>
+                              : <span className="text-amber-600">à choisir</span>}
+                          </div>
+                          <ChoixDimension
                             dimension={d}
-                            value={valeur}
-                            vide="— à choisir —"
-                            onChange={label => setVariantes(prev => ({ ...prev, [i]: { ...(prev[i] ?? {}), [d.id]: label } }))}
+                            valeur={valeur}
+                            onChoix={label => setVariantes(prev => ({ ...prev, [i]: { ...(prev[i] ?? {}), [d.id]: label } }))}
                           />
-                          {!valeur && <p className="text-[11px] text-amber-600">À choisir — tapez les premiers chiffres du RAL dans la liste.</p>}
                         </div>
                       );
                     })}
