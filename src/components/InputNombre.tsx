@@ -50,9 +50,15 @@ interface Props extends Omit<React.ComponentProps<typeof Input>, 'value' | 'onCh
   onChange: (v: number) => void;
   /** Chiffres après la virgule à l'affichage. 2 pour un prix, 4 pour un coefficient. */
   decimales?: number;
+  /**
+   * Champ laissé VIDE en le quittant. Sans elle, le champ retrouve sa valeur ;
+   * avec elle, le vide a un sens — la conso d'une ligne vidée reprend celle
+   * de la fiche article.
+   */
+  onVide?: () => void;
 }
 
-export function InputNombre({ value, onChange, decimales = 4, onFocus, onBlur, ...rest }: Props) {
+export function InputNombre({ value, onChange, decimales = 4, onVide, onFocus, onBlur, ...rest }: Props) {
   const [texte, setTexte] = useState(() => afficher(value, decimales));
   const dedans = useRef(false);
 
@@ -72,6 +78,8 @@ export function InputNombre({ value, onChange, decimales = 4, onFocus, onBlur, .
       onFocus={e => { dedans.current = true; onFocus?.(e); }}
       onBlur={e => {
         dedans.current = false;
+        // La nouvelle valeur (celle de la fiche) revient ensuite par `value`.
+        if (onVide && texte.trim() === '') onVide();
         /* En repartant, on remet le champ en forme : « 0170,99 » saisi
            devient « 170,99 », et un champ vidé retrouve sa valeur. */
         setTexte(afficher(value, decimales));

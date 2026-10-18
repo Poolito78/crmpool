@@ -4483,8 +4483,10 @@ export default function Devis() {
                                 /* Les deux consos se modifient sur toute ligne ; celle de l'autre unité est grisée :
                                    gardée, elle ne compte qu'une fois la ligne passée dans son unité. */
                                 consoMl: (
-                                  <Input type="number" step="0.01" value={l.consommationMl ?? prod?.consommationMl ?? ''} onFocus={e => e.target.select()}
-                                    onChange={e => appliquerConso(e.target.value === '' ? undefined : parseFloat(e.target.value), undefined, 'ml')}
+                                  /* Champ texte (InputNombre) : le 0 affiché s'efface pour taper autre chose ;
+                                     vidé puis quitté, la ligne reprend la conso de la fiche. */
+                                  <InputNombre value={l.consommationMl ?? prod?.consommationMl} onFocus={e => e.target.select()}
+                                    onChange={v => appliquerConso(v, undefined, 'ml')} onVide={() => appliquerConso(undefined, undefined, 'ml')}
                                     className={`h-8 text-sm${uniteLigne === 'ml' ? '' : ' text-muted-foreground bg-muted/40'}`}
                                     placeholder={prod?.consommationMl != null ? String(prod.consommationMl) : 'kg/ml'}
                                     title={uniteLigne === 'ml'
@@ -4493,8 +4495,9 @@ export default function Devis() {
                                 ),
                                 conso: (
                                   <div className="flex items-center gap-0.5">
-                                    <Input type="number" step="0.01" value={consoCellM2 ? (l.consommation ?? (couvM2 ? (consoPourSurface(prod, l.consommation, 'm2') ?? undefined) : prod?.consommation) ?? '') : (l.consommationMl ?? prod?.consommationMl ?? '')} onFocus={e => e.target.select()}
-                                      onChange={e => appliquerConso(e.target.value === '' ? undefined : parseFloat(e.target.value), undefined, consoCellM2 ? 'm2' : 'ml')}
+                                    <InputNombre value={consoCellM2 ? (l.consommation ?? (couvM2 ? (consoPourSurface(prod, l.consommation, 'm2') ?? undefined) : prod?.consommation)) : (l.consommationMl ?? prod?.consommationMl)} onFocus={e => e.target.select()}
+                                      onChange={v => appliquerConso(v, undefined, consoCellM2 ? 'm2' : 'ml')}
+                                      onVide={() => appliquerConso(undefined, undefined, consoCellM2 ? 'm2' : 'ml')}
                                       title={consoCellM2 && uniteLigne === 'ml' ? 'Ligne au mètre linéaire : cette conso au m² est gardée, elle comptera si la ligne repasse au m²' : l.consoUsage ? `Usage : ${l.consoUsage}` : undefined}
                                       className={`h-8 text-sm${consoCellM2 && uniteLigne === 'ml' ? ' text-muted-foreground bg-muted/40' : ''}`}
                                       placeholder={consoCellM2 ? (couvM2 ? 'm²/m²' : prod?.consommation != null ? String(prod.consommation) : 'kg/m²') : (prod?.consommationMl != null ? String(prod.consommationMl) : 'kg/ml')} />
