@@ -29,7 +29,8 @@ export default defineConfig(({ mode }) => ({
       registerType: "prompt",
       // Le SW ne s'active qu'en build (pas en dev) pour ne pas gêner le HMR.
       devOptions: { enabled: false },
-      includeAssets: ["favicon.ico", "logo-isofloor.png"],
+      // Icônes 4FLOOR (onglet, raccourci, appli installée), tirées du logo.
+      includeAssets: ["favicon.ico", "apple-touch-icon.png", "icon-4floor-192.png", "icon-4floor-512.png", "icon-4floor-maskable-512.png"],
       manifest: {
         name: "MonCRM - ISOFLOOR",
         short_name: "MonCRM",
@@ -41,9 +42,9 @@ export default defineConfig(({ mode }) => ({
         start_url: "/",
         scope: "/",
         icons: [
-          { src: "/logo-isofloor.png", sizes: "192x192", type: "image/png", purpose: "any" },
-          { src: "/logo-isofloor.png", sizes: "512x512", type: "image/png", purpose: "any" },
-          { src: "/logo-isofloor.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: "/icon-4floor-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/icon-4floor-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "/icon-4floor-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
       workbox: {
