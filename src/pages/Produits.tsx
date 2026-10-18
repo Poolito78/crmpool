@@ -1089,9 +1089,26 @@ export default function Produits() {
       }, 0);
       if (total > 0 || comps.some(c => c.prixAchatManuel != null && !c.forfaitCommande)) prixAchat = Math.round(total * 100) / 100;
     }
-    const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
-    const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', ficheType: p.ficheType, fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, consommationMl: p.consommationMl, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined, dosageEpaisseur: p.dosageEpaisseur ? structuredClone(p.dosageEpaisseur) : undefined });
+    /* ⚠️ **OUVRIR UNE FICHE NE CHANGE PAS SON PRIX.**
+     *
+     * Le public se recalculait ici depuis achat × coefficient, or le
+     * coefficient stocké se périme dès qu'un prix bouge ailleurs (synchro
+     * Odoo, jumeaux Odoo, devis fournisseur) : 1 826 articles sur 17 966
+     * (18/10/2026). QUARTZ0103 (coefficient 1,78) s'ouvrait à 21,33 € au
+     * lieu de 32,66 € ; enregistré, ce prix passait à son jumeau
+     * QUARTZ0.1-0.3, et DEV-2026-155 chiffrait le quartz à 14,93 € au lieu
+     * des 22,86 € revendeur affichés sur la fiche. Les prix enregistrés font
+     * donc foi et le coefficient s'en déduit. Seul un composé dont le coût
+     * vient de bouger suit encore son coefficient. */
+    const prixEnregistres = p.prixHT > 0 && Math.abs(prixAchat - (p.prixAchat || 0)) < 0.005;
+    const prixRevendeur = prixEnregistres
+      ? (p.prixRevendeur > 0 ? p.prixRevendeur : Math.round(p.prixHT * (1 - p.remiseRevendeur / 100) * 100) / 100)
+      : calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
+    const prixHT = prixEnregistres ? p.prixHT : calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
+    const coefficient = prixEnregistres && prixAchat > 0 && prixRevendeur > 0
+      ? Math.round(prixRevendeur / prixAchat * 10000) / 10000
+      : p.coefficient;
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient, prixHT, coeffRevendeur: coefficient, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', ficheType: p.ficheType, fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, consommationMl: p.consommationMl, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined, dosageEpaisseur: p.dosageEpaisseur ? structuredClone(p.dosageEpaisseur) : undefined });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
