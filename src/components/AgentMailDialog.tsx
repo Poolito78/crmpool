@@ -41,8 +41,8 @@ import {
   deconnecterMicrosoft, enregistrerConfigMicrosoft, estConnecte, fichierEml, mailsNonLus, marquerLu, uriRetour,
 } from '@/lib/microsoftGraph';
 import {
-  DOSSIER_MAILS, copieEnMemoire, dossierMails, dossierMailsDisponible, fichiersDuDossier, lireMailFichier,
-  nomDossierMails, rangerTraite,
+  DOSSIER_MAILS, copieEnMemoire, dernierExport, dossierMails, dossierMailsDisponible, fichiersDuDossier,
+  lireMailFichier, nomDossierMails, rangerTraite,
 } from '@/lib/dossierMails';
 import {
   type MailAgent, type TriMail, CATEGORIE_MAIL, clientDuMail, estFichierMail, invitationTri, lireTri, numerosDevisCites,
@@ -80,6 +80,26 @@ function noterId(cle: string, id: string): Record<string, string> {
    relancer le modèle sur les mêmes mails. */
 const memoire: { mails: MailAgent[]; tri: Map<string, TriMail>; compte?: string } = { mails: [], tri: new Map() };
 
+/* …ni au rechargement de la page : la macro exporte aussi les mails lus sans
+   réponse, ceux qui ne sont pas des demandes restent au dossier, et chaque
+   ouverture les renverrait au modèle. Un id de fichier change avec le fichier. */
+const CLE_TRI = 'agent_mail_tri';
+const triGarde: Map<string, TriMail> = (() => {
+  try { return new Map(Object.entries(JSON.parse(localStorage.getItem(CLE_TRI) || '{}')) as [string, TriMail][]); }
+  catch { return new Map(); }
+})();
+function garderTri(id: string, t: TriMail) {
+  triGarde.delete(id);
+  triGarde.set(id, t);
+  const derniers = [...triGarde].slice(-500);
+  try { localStorage.setItem(CLE_TRI, JSON.stringify(Object.fromEntries(derniers))); } catch { /* stockage plein */ }
+}
+/* Mails partis au modèle : une relecture pendant le tri ne les renvoie pas. */
+const enVol = new Set<string>();
+
+/** Au-delà, la macro ne tourne plus (un week-end sans mail en fait 63 h). */
+const EXPORT_PERIME_MS = 72 * 3600 * 1000;
+
 const RANG = { demande_devis: 0, suite_devis: 1, commande: 2, autre: 3 } as const;
 
 function dateCourte(iso: string): string {
@@ -113,7 +133,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   const [nomDossier, setNomDossier] = useState<string | null>(null);
   const [dossierOuvert, setDossierOuvert] = useState<FileSystemDirectoryHandle | null>(null);
   /** Bilan de la dernière lecture du dossier — « Relire » qui ne dit rien semble en panne. */
-  const [bilanDossier, setBilanDossier] = useState<{ n: number; heure: string } | null>(null);
+  const [bilanDossier, setBilanDossier] = useState<{ n: number; heure: string; dernier: string | null } | null>(null);
 
   /* Transfert depuis le mobile */
   const [adresseAgent, setAdresseAgent] = useState<AdresseAgent | null>(null);
@@ -142,23 +162,31 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     const liste = [...garde, ...nouveaux];
     setMails(liste);
     const t = new Map([...memoire.tri].filter(([id]) => liste.some(m => m.id === id)));
+    for (const m of liste) {
+      const g = triGarde.get(m.id);
+      if (g && !t.has(m.id)) t.set(m.id, g);
+    }
     setTri(t);
 
-    const aTrier = liste.filter(m => !t.has(m.id));
+    const aTrier = liste.filter(m => !t.has(m.id) && !enVol.has(m.id));
     if (!aTrier.length) return;
+    aTrier.forEach(m => enVol.add(m.id));
     setTriEnCours(true);
     try {
       for (let i = 0; i < aTrier.length; i += PAR_LOT) {
         const lot = aTrier.slice(i, i + PAR_LOT);
         try {
           const rep = texteGemini(await appelerGemini(invitationTri(lot)));
-          for (const [id, r] of lireTri(rep, lot.map(m => m.id))) memoire.tri.set(id, r);
+          for (const [id, r] of lireTri(rep, lot.map(m => m.id))) { memoire.tri.set(id, r); garderTri(id, r); }
           setTri(memoire.tri);
         } catch (e) {
           setErreur(`Tri IA incomplet : ${(e as Error).message}`);
         }
       }
-    } finally { setTriEnCours(false); }
+    } finally {
+      aTrier.forEach(m => enVol.delete(m.id));
+      setTriEnCours(enVol.size > 0);
+    }
   }, []);
 
   const lireFichiers = useCallback(async (fichiers: File[], duDossier: boolean) => {
@@ -171,19 +199,24 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     return res;
   }, []);
 
-  const lireDossier = useCallback(async (interactif: boolean, changer = false) => {
-    setErreur('');
+  /** `silencieux` : relecture automatique — ni rouet, ni bandeau d'erreur effacé ou posé. */
+  const lireDossier = useCallback(async (interactif: boolean, changer = false, silencieux = false) => {
+    if (!silencieux) setErreur('');
     try {
       const d = await dossierMails(interactif, changer);
       if (!d) return;
       setDossierOuvert(d);
       setNomDossier(d.name);
-      setLecture(true);
+      if (!silencieux) setLecture(true);
       const mailsDossier = await lireFichiers(await fichiersDuDossier(d), true);
-      setBilanDossier({ n: mailsDossier.length, heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) });
+      setBilanDossier({
+        n: mailsDossier.length,
+        heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+        dernier: await dernierExport(d).catch(() => null),
+      });
       setLecture(false);
       await integrer(mailsDossier, m => !!m.duDossier);
-    } catch (e) { echec(e); } finally { setLecture(false); }
+    } catch (e) { if (!silencieux) echec(e); } finally { setLecture(false); }
   }, [echec, integrer, lireFichiers]);
 
   const lireOutlook = useCallback(async () => {
@@ -223,6 +256,16 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     lireDossier(false);
     if (configMicrosoft() && estConnecte()) lireOutlook();
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Outlook exporte chaque mail à son arrivée (ThisOutlookSession) : le dossier
+     se relit toutes les minutes et au retour sur l'onglet, sans clic. */
+  useEffect(() => {
+    if (!open || !dossierOuvert) return;
+    const relire = () => { if (document.visibilityState === 'visible') lireDossier(false, false, true); };
+    const minuterie = window.setInterval(relire, 60_000);
+    window.addEventListener('focus', relire);
+    return () => { window.clearInterval(minuterie); window.removeEventListener('focus', relire); };
+  }, [open, dossierOuvert, lireDossier]);
 
   const enregistrerAdresse = async () => {
     const a = saisieAdresse.trim();
@@ -323,8 +366,13 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   /* ── La liste ─────────────────────────────────────────────────────────── */
 
   const lignes = useMemo(() => {
+    /* Glissé à la main puis exporté par Outlook : un seul, celui du dossier
+       (il se range dans Traites). */
+    const cle = (m: MailAgent) => `${m.deEmail}|${m.sujet.trim().toLowerCase()}`;
+    const duDossier = new Set(mails.filter(m => m.duDossier).map(cle));
     return mails
       .filter(m => !ecartes[m.id])
+      .filter(m => m.duDossier || m.source !== 'fichier' || !duDossier.has(cle(m)))
       .map(m => {
         const t = tri.get(m.id);
         const interne = /@(isofloor|isosign|so-signal|sti-fr)\./i.test(m.deEmail);
@@ -400,6 +448,18 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
             <p className="text-muted-foreground">Dossier « <span className="text-foreground">{nomDossier}</span> »
               {bilanDossier && <> · lu à {bilanDossier.heure} : <span className="text-foreground">{bilanDossier.n} mail{bilanDossier.n > 1 ? 's' : ''}</span></>}
             </p>
+            {bilanDossier?.dernier && (
+              Date.now() - new Date(bilanDossier.dernier).getTime() > EXPORT_PERIME_MS ? (
+                <p className="text-warning">
+                  Outlook n'a rien exporté depuis le mail du {dateCourte(bilanDossier.dernier)}.
+                  « Relire » relit le dossier sans interroger Outlook : relancez la macro
+                  <strong> ExporterMailsNonLus</strong>, ou installez l'export automatique
+                  (<span className="font-mono text-[10px]">outlook_macro\ThisOutlookSession.vba</span>).
+                </p>
+              ) : (
+                <p className="text-muted-foreground">Dernier mail exporté : reçu {dateCourte(bilanDossier.dernier)}</p>
+              )
+            )}
             {bilanDossier?.n === 0 && (
               <p className="text-warning">
                 Aucun .msg dans ce dossier. La macro les enregistre dans

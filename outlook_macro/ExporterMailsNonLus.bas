@@ -1,83 +1,80 @@
 ' ============================================================
 '  MACRO OUTLOOK - Agent mail MonCRM
-'  Enregistre les mails NON LUS de la boite de reception en .msg
+'  Enregistre les mails A TRAITER de la boite de reception en .msg
 '  dans le dossier lu par MonCRM, puis ouvre l'Agent mail.
 '
 '  Installation (une fois) :
 '   1. Outlook : Alt+F11 > Insertion > Module > coller ce code.
 '   2. Fichier > Options > Barre d'outils Acces rapide > Choisir les
 '      commandes : Macros > ExporterMailsNonLus > Ajouter.
-'   3. Dans MonCRM, Agent mail > « Choisir le dossier » : designer
+'   3. Dans MonCRM, Agent mail > "Choisir le dossier" : designer
 '      Documents\MonCRM\Mails a traiter (cree par la macro au 1er lancement).
+'   4. EXPORT AUTOMATIQUE (recommande) : coller aussi ThisOutlookSession.vba
+'      dans ThisOutlookSession. Sans lui, MonCRM ne voit que ce que la macro
+'      a exporte a son dernier lancement : "Relire" relit le dossier, il ne
+'      peut pas interroger Outlook.
 '
-'  Exporte les mails NON LUS des 14 derniers jours, et aussi les mails
-'  DEJA LUS des 2 derniers jours (lus dans le volet de lecture, une demande
-'  de devis n'en reste pas moins a traiter). Reglages : JOURS_MAILS, JOURS_LUS.
+'  Un mail est A TRAITER (MailATraiter) s'il est :
+'   - NON LU, recu dans les 14 derniers jours ;
+'   - LU SANS REPONSE, recu dans les 7 derniers jours : ouvert dans le volet
+'     de lecture, le chiffrage n'en reste pas moins attendu ;
+'   - A SUIVRE (drapeau), recu dans les 30 derniers jours ;
+'   - ou recu dans les 2 derniers jours, quel que soit son etat.
+'  L'IA de MonCRM trie ensuite : ce qui n'est pas une demande reste masque.
 '  Les mails restent NON LUS dans Outlook. Un mail deja exporte (present
 '  dans le dossier ou dans son sous-dossier Traites) n'est pas reexporte.
 ' ============================================================
+
+Private erreurExport As String
 
 Private Function DossierMailsCRM() As String
     DossierMailsCRM = Environ("USERPROFILE") & "\OneDrive - ISOSIGN\Documents\MonCRM\Mails a traiter\"
 End Function
 
 ' ------------------------------------------------------------
+' Le bouton de la barre d'outils : export, puis MonCRM s'ouvre.
 Sub ExporterMailsNonLus()
+    ExporterMailsAgent False
+End Sub
+
+' ------------------------------------------------------------
+' Parcourt la boite de reception et exporte les mails a traiter.
+' silencieux = True : ni fenetre ni navigateur (demarrage d'Outlook).
+Public Sub ExporterMailsAgent(ByVal silencieux As Boolean)
 
     ' Constantes locales : la macro peut etre collee sous JoindreDevisPDF,
     ' dans le meme module, sans erreur de compilation.
     Const URL_AGENT_MAIL As String = "https://crmpool.vercel.app/?agentMail=1"
-    Const JOURS_MAILS As Integer = 14      ' mails non lus des 14 derniers jours
-    Const JOURS_LUS As Integer = 2         ' mails deja lus des 2 derniers jours (0 = jamais)
+    Const JOURS_MAX As Integer = 30        ' le plus long des delais de MailATraiter
 
-    Dim dossier As String
-    Dim boite   As Object
-    Dim liste   As Object
-    Dim it      As Object
-    Dim nom     As String
-    Dim limite  As Date
-    Dim limiteLus As Date
-    Dim plusVieux As Date
-    Dim n       As Long      ' exportes
-    Dim deja    As Long      ' deja presents (dossier ou Traites)
-    Dim echecs  As Long
-    Dim erreur  As String
+    Dim liste      As Object
+    Dim it         As Object
+    Dim maintenant As Date
+    Dim n          As Long      ' exportes
+    Dim deja       As Long      ' deja presents (dossier ou Traites)
+    Dim echecs     As Long
 
-    dossier = DossierMailsCRM()
-    CreerDossierMail dossier
-    CreerDossierMail dossier & "Traites\"
-
-    limite = Now - JOURS_MAILS
-    limiteLus = Date - JOURS_LUS + 1                                   ' minuit, il y a JOURS_LUS jours
-    Set boite = Application.GetNamespace("MAPI").GetDefaultFolder(6)   ' olFolderInbox
-    plusVieux = IIf(limiteLus < limite, limiteLus, limite)
+    maintenant = Now
+    erreurExport = ""
     ' Du plus recent au plus ancien, et l'on s'arrete a la limite. (Pas de
     ' Restrict sur la date : son format depend des reglages regionaux.)
-    Set liste = boite.Items
+    Set liste = Application.GetNamespace("MAPI").GetDefaultFolder(6).Items   ' olFolderInbox
     liste.Sort "[ReceivedTime]", True
 
     For Each it In liste
         If it.Class = 43 Then                                          ' olMail
-            If it.ReceivedTime < plusVieux Then Exit For
-            If (it.UnRead And it.ReceivedTime >= limite) Or (JOURS_LUS > 0 And it.ReceivedTime >= limiteLus) Then
-                nom = Format(it.ReceivedTime, "yyyymmdd-hhnn") & " - " & NomFichierMail(it.Subject) & ".msg"
-                If Dir(dossier & nom) = "" And Dir(dossier & "Traites\" & nom) = "" Then
-                    On Error Resume Next
-                    it.SaveAs dossier & nom, 9                         ' olMSGUnicode
-                    If Err.Number = 0 Then
-                        n = n + 1
-                    Else
-                        echecs = echecs + 1
-                        If erreur = "" Then erreur = it.Subject & " : " & Err.Description
-                    End If
-                    Err.Clear
-                    On Error GoTo 0
-                Else
-                    deja = deja + 1
-                End If
+            If it.ReceivedTime < maintenant - JOURS_MAX Then Exit For
+            If MailATraiter(it, maintenant) Then
+                Select Case ExporterUnMail(it)
+                    Case 1: n = n + 1
+                    Case 0: deja = deja + 1
+                    Case Else: echecs = echecs + 1
+                End Select
             End If
         End If
     Next it
+
+    If silencieux Then Exit Sub
 
     ' Ouvre MonCRM sur l'Agent mail, qui lit le dossier.
     CreateObject("Shell.Application").ShellExecute URL_AGENT_MAIL
@@ -85,13 +82,76 @@ Sub ExporterMailsNonLus()
     ' (Un Explorer Outlook n'a pas de barre d'etat accessible : erreur 438.)
     If echecs > 0 Then
         MsgBox n & " mail(s) exporte(s), " & echecs & " en echec." & vbCrLf & vbCrLf & _
-               "Premier echec : " & erreur, vbExclamation, "Agent mail MonCRM"
+               "Premier echec : " & erreurExport, vbExclamation, "Agent mail MonCRM"
     ElseIf n = 0 Then
         MsgBox "Aucun nouveau mail a exporter" & _
                IIf(deja > 0, " (" & deja & " deja dans MonCRM).", "."), vbInformation, "Agent mail MonCRM"
     End If
 
 End Sub
+
+' ------------------------------------------------------------
+' Enregistre un mail dans le dossier. Rend 1 (exporte), 0 (deja present,
+' dans le dossier ou dans Traites) ou -1 (echec, motif dans erreurExport).
+' Appelee aussi par ThisOutlookSession a l'arrivee de chaque mail.
+Public Function ExporterUnMail(ByVal it As Object) As Integer
+    Dim dossier As String
+    Dim nom     As String
+
+    dossier = DossierMailsCRM()
+    CreerDossierMail dossier
+    CreerDossierMail dossier & "Traites\"
+
+    nom = Format(it.ReceivedTime, "yyyymmdd-hhnn") & " - " & NomFichierMail(it.Subject) & ".msg"
+    If Dir(dossier & nom) <> "" Or Dir(dossier & "Traites\" & nom) <> "" Then
+        ExporterUnMail = 0
+        Exit Function
+    End If
+
+    On Error Resume Next
+    it.SaveAs dossier & nom, 9                                         ' olMSGUnicode
+    If Err.Number = 0 Then
+        ExporterUnMail = 1
+    Else
+        ExporterUnMail = -1
+        If erreurExport = "" Then erreurExport = it.Subject & " : " & Err.Description
+    End If
+    Err.Clear
+    On Error GoTo 0
+End Function
+
+' ------------------------------------------------------------
+' Les regles de l'en-tete. Un mail lu n'est pas un mail traite : tant
+' qu'on n'y a pas repondu, le chiffrage est attendu.
+Private Function MailATraiter(ByVal it As Object, ByVal maintenant As Date) As Boolean
+    Const JOURS_NON_LUS As Integer = 14
+    Const JOURS_SANS_REPONSE As Integer = 7
+    Const JOURS_SUIVI As Integer = 30
+    Const JOURS_TOUS As Integer = 2        ' aujourd'hui et hier : tout
+
+    Dim age As Double
+    age = maintenant - it.ReceivedTime
+
+    If it.ReceivedTime >= Date - JOURS_TOUS + 1 Then
+        MailATraiter = True
+    ElseIf it.FlagStatus = 2 And age <= JOURS_SUIVI Then               ' olFlagMarked
+        MailATraiter = True
+    ElseIf it.UnRead Then
+        MailATraiter = (age <= JOURS_NON_LUS)
+    ElseIf age <= JOURS_SANS_REPONSE Then
+        MailATraiter = SansReponse(it)
+    End If
+End Function
+
+' Ni repondu, ni repondu a tous, ni transfere : PR_LAST_VERB_EXECUTED
+' (102, 103, 104). Propriete absente = jamais repondu.
+Private Function SansReponse(ByVal it As Object) As Boolean
+    Dim verbe As Long
+    On Error Resume Next
+    verbe = it.PropertyAccessor.GetProperty("http://schemas.microsoft.com/mapi/proptag/0x10810003")
+    On Error GoTo 0
+    SansReponse = (verbe < 102 Or verbe > 104)
+End Function
 
 ' ------------------------------------------------------------
 Private Sub CreerDossierMail(ByVal chemin As String)

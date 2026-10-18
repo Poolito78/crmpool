@@ -1,9 +1,12 @@
 /**
  * Le dossier où Outlook dépose les mails à traiter — l'Agent mail sans Azure.
  *
- * La macro `outlook_macro/ExporterMailsNonLus.bas` enregistre les mails non
- * lus de la boîte de réception en .msg dans `DOSSIER_MAILS`, puis ouvre
- * MonCRM sur `?agentMail=1`. Le navigateur ne peut pas ouvrir un dossier
+ * La macro `outlook_macro/ExporterMailsNonLus.bas` enregistre les mails à
+ * traiter de la boîte de réception en .msg dans `DOSSIER_MAILS` — non lus,
+ * mais aussi LUS SANS RÉPONSE et à suivre : ouvrir un mail ne chiffre rien —
+ * puis ouvre MonCRM sur `?agentMail=1`. `ThisOutlookSession.vba` exporte
+ * chaque mail à son arrivée ; sans lui, le dossier n'a que ce que le dernier
+ * lancement de la macro y a mis (`dernierExport` le fait voir). Le navigateur ne peut pas ouvrir un dossier
  * seul : il est choisi une fois, et son autorisation est gardée en IndexedDB
  * (même base que le dossier des fiches système, `fichesSysteme.ts`).
  *
@@ -123,6 +126,24 @@ export async function fichiersDuDossier(dossier: FileSystemDirectoryHandle): Pro
     if (h.kind === 'file' && estFichierMail(h.name)) res.push(await (h as FileSystemFileHandle).getFile());
   }
   return res;
+}
+
+/**
+ * La réception du mail le plus récent jamais exporté (dossier ou `Traites`),
+ * lue dans le nom du fichier. Plusieurs jours sans rien, c'est une macro qui
+ * ne tourne plus : « Relire » relit le dossier, il n'interroge pas Outlook.
+ */
+export async function dernierExport(dossier: FileSystemDirectoryHandle): Promise<string | null> {
+  let max: string | null = null;
+  const parcourir = async (d: FileSystemDirectoryHandle) => {
+    for await (const h of (d as DirHandle).values()) {
+      const date = h.kind === 'file' && estFichierMail(h.name) ? dateDuNom(h.name) : undefined;
+      if (date && (!max || date > max)) max = date;
+    }
+  };
+  await parcourir(dossier);
+  try { await parcourir(await dossier.getDirectoryHandle(SOUS_DOSSIER_TRAITES)); } catch { /* pas encore de Traites */ }
+  return max;
 }
 
 /** Copie détachée du disque : reste lisible une fois l'original rangé. */
