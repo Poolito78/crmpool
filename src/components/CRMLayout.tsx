@@ -18,6 +18,8 @@ const AgentMailDialog = lazy(() => import('@/components/AgentMailDialog'));
 import { PageHeaderSlotTarget } from '@/components/PageHeaderSlot';
 import SocieteSelecteur from '@/components/SocieteSelecteur';
 import { useCRM } from '@/lib/StoreContext';
+import { ordonner, deplacerCle, lireOrdreNav, ecrireOrdreNav, type OrdreNav } from '@/lib/ordreNav';
+import { useReordonnerAppuiLong } from '@/hooks/useReordonnerAppuiLong';
 import { CA_ODOO_URL } from '@/lib/caOdoo';
 import { ouvrirFenetre } from '@/lib/fenetres';
 import { useFenetres } from '@/hooks/useFenetres';
@@ -48,12 +50,15 @@ type NavEntry = NavLink | NavGroup;
    groupe, barre mobile). Maj+clic sur un lien interne l'ouvre dans une
    fenêtre liée (`ouvrirFenetre`) plutôt que de laisser le navigateur en
    ouvrir une qu'on ne saurait plus retrouver. */
+/* `draggable={false}` : l'appui long réordonne le menu, et le glisser natif
+   d'un lien l'interromprait (pointercancel) ; il ferait aussi croire au dépôt
+   de document de la coquille qu'un glisser interne a commencé. */
 function NavItem({ item, className, onClick, title, children }: {
   item: NavLink; className: string; onClick?: () => void; title?: string; children: React.ReactNode;
 }) {
   if (item.external) {
     return (
-      <a href={item.path} target="_blank" rel="noopener noreferrer" onClick={onClick} title={title} className={className}>
+      <a href={item.path} target="_blank" rel="noopener noreferrer" onClick={onClick} title={title} className={className} draggable={false}>
         {children}
       </a>
     );
@@ -61,6 +66,7 @@ function NavItem({ item, className, onClick, title, children }: {
   return (
     <Link
       to={item.path}
+      draggable={false}
       onClick={e => {
         if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); ouvrirFenetre(item.path); return; }
         onClick?.();
@@ -72,6 +78,14 @@ function NavItem({ item, className, onClick, title, children }: {
     </Link>
   );
 }
+
+/** Clé d'une entrée de premier niveau pour l'ordre du menu. */
+const cleEntree = (e: NavEntry) => e.type === 'group' ? `groupe:${e.label}` : e.path;
+const LISTE_RACINE = 'racine';
+/* Rendu de l'entrée en cours de déplacement ; `select-none` + pas de bulle
+   iOS : l'appui long ne doit ni sélectionner le texte ni ouvrir le lien. */
+const CLASSE_DEPLACABLE = 'select-none [-webkit-touch-callout:none]';
+const CLASSE_GLISSEE = 'opacity-70 ring-2 ring-sidebar-primary/70 rounded-lg bg-sidebar-accent/60';
 
 const NAV: NavEntry[] = [
   { type: 'link',  label: 'Tableau de bord', icon: LayoutDashboard, path: '/' },
@@ -325,13 +339,43 @@ export default function CRMLayout() {
 
   // Nav filtrée selon les droits : groupe « Achat » masqué sans droit Achat,
   // lien « CRM » masqué sans droit CRM, onglet « Admin » masqué aux non-admins.
-  const nav = useMemo<NavEntry[]>(() => NAV
+  const navDroits = useMemo<NavEntry[]>(() => NAV
     .filter(e => canAchat || !(e.type === 'group' && e.label === 'Achat'))
     .filter(e => canCrm || !(e.type === 'link' && e.path === '/crm'))
     .map(e => e.type === 'group'
       ? { ...e, items: e.items.filter(i => isAdmin || !['/parametres?tab=administration', '/parametres?tab=entrepots', '/parametres?tab=general', '/parametres?tab=clients', '/parametres?tab=veille'].includes(i.path)) }
       : e),
   [canAchat, canCrm, isAdmin]);
+
+  /* Ordre choisi par l'utilisateur : appui long sur une entrée, puis glisser
+     (`ordreNav.ts`, `useReordonnerAppuiLong`). Les entrées de premier niveau
+     se rangent entre elles, les pages d'un groupe à l'intérieur du groupe. */
+  const [ordreNav, setOrdreNav] = useState<OrdreNav>(lireOrdreNav);
+  useEffect(() => { ecrireOrdreNav(ordreNav); }, [ordreNav]);
+  const nav = useMemo<NavEntry[]>(() => ordonner(navDroits, cleEntree, ordreNav.racine)
+    .map(e => e.type === 'group' ? { ...e, items: ordonner(e.items, i => i.path, ordreNav.groupes?.[e.label]) } : e),
+  [navDroits, ordreNav]);
+  const navDroitsRef = useRef(navDroits);
+  navDroitsRef.current = navDroits;
+  const deplacerNav = useCallback((liste: string, cle: string, vers: string) => {
+    setOrdreNav(o => {
+      const base = navDroitsRef.current;
+      if (liste === LISTE_RACINE) {
+        return { ...o, racine: deplacerCle(ordonner(base, cleEntree, o.racine).map(cleEntree), cle, vers) };
+      }
+      const groupe = base.find((e): e is NavGroup => e.type === 'group' && e.label === liste);
+      if (!groupe) return o;
+      const cles = ordonner(groupe.items, i => i.path, o.groupes?.[liste]).map(i => i.path);
+      return { ...o, groupes: { ...o.groupes, [liste]: deplacerCle(cles, cle, vers) } };
+    });
+  }, []);
+  const { glisse, poignee } = useReordonnerAppuiLong(deplacerNav, aBouge => {
+    if (!aBouge) return;
+    toast('Menu réorganisé', {
+      action: { label: "Ordre d'origine", onClick: () => setOrdreNav({}) },
+    });
+  });
+  const estGlisse = (liste: string, cle: string) => glisse?.liste === liste && glisse.cle === cle;
   const navFlat = useMemo<NavLink[]>(() => nav.flatMap(e => e.type === 'group' ? e.items : [e]), [nav]);
   /** Une page s'ouvre à la voix si le menu la propose à cet utilisateur. */
   const pageAutorisee = (path: string) => {
@@ -397,7 +441,11 @@ export default function CRMLayout() {
       if (entry.type === 'link') {
         const active = isLinkActive(entry.path);
         return (
-          <div key={entry.path} className="relative group/nav">
+          <div
+            key={entry.path}
+            {...poignee(LISTE_RACINE, entry.path)}
+            className={cn('relative group/nav', CLASSE_DEPLACABLE, estGlisse(LISTE_RACINE, entry.path) && CLASSE_GLISSEE)}
+          >
           <NavItem
             item={entry}
             onClick={onLinkClick}
@@ -419,8 +467,13 @@ export default function CRMLayout() {
       // NavGroup
       const isOpen = openGroups.includes(entry.label);
       const hasActive = entry.items.some(i => isSectionActive(i.path));
+      const cleGroupe = cleEntree(entry);
       return (
-        <div key={entry.label}>
+        <div
+          key={entry.label}
+          {...poignee(LISTE_RACINE, cleGroupe)}
+          className={cn(CLASSE_DEPLACABLE, estGlisse(LISTE_RACINE, cleGroupe) && CLASSE_GLISSEE)}
+        >
           <button
             onClick={() => toggleGroup(entry.label)}
             className={cn(
@@ -441,7 +494,11 @@ export default function CRMLayout() {
               {entry.items.map(item => {
                 const active = isLinkActive(item.path);
                 return (
-                  <div key={item.path} className="relative group/nav">
+                  <div
+                    key={item.path}
+                    {...poignee(entry.label, item.path)}
+                    className={cn('relative group/nav', estGlisse(entry.label, item.path) && CLASSE_GLISSEE)}
+                  >
                   <NavItem
                     item={item}
                     onClick={onLinkClick}
