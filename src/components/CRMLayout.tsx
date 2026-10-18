@@ -35,15 +35,11 @@ import type { TypeDocument } from '@/lib/analyseDocument';
    programme : le menu passe par le lien Windows `chiffrage-isosign:`, que
    « Installer le lien MonCRM.bat » (dossier ChiffrageISOSIGN) déclare une fois
    par poste. Le .bat lance le serveur et ouvre la page, ou ouvre seulement la
-   page s'il tourne déjà. Lien non installé : le navigateur ne fait rien, d'où
-   le message qui le rappelle. */
+   page s'il tourne déjà. Lien non installé : le navigateur ne fait rien. */
 const CHIFFRAGE_PROTOCOLE = 'chiffrage-isosign://ouvrir';
 function lancerChiffrage() {
   window.location.href = CHIFFRAGE_PROTOCOLE;
-  toast('Lancement du Chiffrage ISOSIGN…', {
-    description: 'La fenêtre noire puis la page s\'ouvrent. Rien ne se passe ? Lancez une fois « Installer le lien MonCRM.bat » dans le dossier ChiffrageISOSIGN.',
-    duration: 8000,
-  });
+  toast('Lancement du Chiffrage ISOSIGN…');
 }
 /* page de confirmation d'arrêt (serveur local + fenêtre noire), réservée au poste */
 const CHIFFRAGE_ARRET_URL = 'http://127.0.0.1:8765/arret';
