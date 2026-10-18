@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic, MailSearch, Ruler } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic, MailSearch, Ruler, Power } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -31,6 +31,8 @@ import type { TypeDocument } from '@/lib/analyseDocument';
 /* Chiffrage ISOSIGN (métré sur plan) : page servie EN LOCAL par « Chiffrage ISOSIGN.bat »
    (serve.py, port 8765) — le lien ne répond que si le .bat est lancé sur ce poste. */
 const CHIFFRAGE_URL = 'http://127.0.0.1:8765/chiffrage.html';
+/* page de confirmation d'arrêt (serveur local + fenêtre noire), réservée au poste */
+const CHIFFRAGE_ARRET_URL = 'http://127.0.0.1:8765/arret';
 const TYPES_DEPOSABLES: readonly TypeDocument[] = ['demande_devis', 'commande_client', 'devis_fournisseur'];
 
 // `external` : le lien sort de l'application (nouvel onglet) au lieu de router.
@@ -82,6 +84,7 @@ const NAV: NavEntry[] = [
       { type: 'link', label: 'Produits',           icon: Package,     path: '/produits' },
       { type: 'link', label: 'Devis',              icon: FileText,    path: '/devis' },
       { type: 'link', label: 'Chiffrage ISOSIGN',  icon: Ruler,       path: CHIFFRAGE_URL, external: true },
+      { type: 'link', label: 'Arrêter Chiffrage',  icon: Power,       path: CHIFFRAGE_ARRET_URL, external: true },
       { type: 'link', label: 'Commandes Client',   icon: ClipboardList, path: '/commandes-client' },
       { type: 'link', label: 'Factures Client',    icon: Receipt,     path: '/factures-client' },
       { type: 'link', label: 'CA ODOO',            icon: TrendingUp,  path: CA_ODOO_URL, external: true },
