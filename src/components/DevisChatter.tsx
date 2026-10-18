@@ -13,6 +13,7 @@ import {
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import DevisPreview from '@/components/DevisPreview';
+import { preparerPieceJointe } from '@/lib/projetChiffrage';
 import type { Client, Produit, Devis as DevisType } from '@/lib/store';
 
 /* ── Types ── */
@@ -289,6 +290,11 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
     if (!uid) return;
     setUploading(true);
     try {
+      /* Un projet du Chiffrage ISOSIGN part sans les visuels qu'il n'emploie pas (`projetChiffrage.ts`). */
+      const tailleAvant = file.size;
+      file = await preparerPieceJointe(file);
+      const allege = file.size < tailleAvant
+        ? ` (allégé : ${formatTaille(tailleAvant)} → ${formatTaille(file.size)})` : '';
 
       const path = `${uid}/${devisId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
 
@@ -316,7 +322,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
       });
       if (dbErr) throw new Error(dbErr.message);
 
-      toast.success(`${file.name} joint avec succès`);
+      toast.success(`${file.name} joint avec succès${allege}`);
       setMode(null);
       load();
     } catch (e: any) {
