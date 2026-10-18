@@ -5,6 +5,7 @@ import {
   cleSousCompo, resoudreAvecSousVariantes, sousVariantesRetenues, dimensionsDesComposants,
   detailCompo, prixDetailCompo, prixLigneCompo, prixForces, avecPrixForce,
   aPlat, avecComposants, composantsPersonnalises, composantsVisibles,
+  groupesPropresAuxComposants, avecDimensionsSuivies,
 } from './variantesCompo';
 
 const ligne = (p: object) => ({ description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, remise: 0, ...p });
@@ -124,6 +125,23 @@ describe('variantes en cascade (SNLR dans 319R)', () => {
     expect(g).toHaveLength(1);
     expect(g[0].nom).toBe('Teinte');
     expect(g[0].dimensions.map(d => d.id).sort()).toEqual(['d02', 'dkg']);
+  });
+
+  it('une teinte que l’article porte lui-même n’est demandée qu’une fois, et descend sur le sachet', () => {
+    const teinte = (id: string) => ({ id, nom: 'Teinte', options: [{ id: `${id}-1`, label: 'RAL 1015' }, { id: `${id}-2`, label: '222 (RAL 7037)' }] });
+    const SACHET: VarianteCompo = { id: 's1', nom: '(sachet de 1 kg)', composants: [ligne({ produitId: 'pigkg', quantite: 1 })] };
+    const PIGMENT = { variantes: [teinte('dart')] };
+    const t = (id: string) => (id === 'pigkg' ? { id, variantesCompo: undefined, variantes: [teinte('dkg')] } : undefined);
+    const groupes = dimensionsDesComposants(SACHET, t, { [CLE_COMPO]: 's1' });
+    // Le sachet porte « Teinte », l'article aussi : rien à demander à part.
+    expect(groupesPropresAuxComposants(groupes, PIGMENT)).toEqual([]);
+    expect(groupesPropresAuxComposants(groupes, { variantes: [] })).toHaveLength(1);
+    // Le choix de l'article est recopié sur le composant…
+    expect(avecDimensionsSuivies({ [CLE_COMPO]: 's1', dart: '222 (RAL 7037)' }, groupes, PIGMENT))
+      .toEqual({ [CLE_COMPO]: 's1', dart: '222 (RAL 7037)', dkg: '222 (RAL 7037)' });
+    // … et rien ne change quand c'est déjà fait, ou quand l'article n'a rien de choisi.
+    expect(avecDimensionsSuivies({ dart: '222 (RAL 7037)', dkg: '222 (RAL 7037)' }, groupes, PIGMENT)).toBeNull();
+    expect(avecDimensionsSuivies({ [CLE_COMPO]: 's1' }, groupes, PIGMENT)).toBeNull();
   });
 
   it('le détail mis à plat redonne le prix de la cascade, et un prix forcé le change', () => {

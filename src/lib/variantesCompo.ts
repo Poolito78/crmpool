@@ -366,6 +366,53 @@ export function dimensionsDesComposants<P extends AvecDimensions>(
 }
 
 /**
+ * L'ARTICLE PORTE DÉJÀ LA DIMENSION : elle ne se demande qu'une fois.
+ *
+ * PIGMENT a sa propre « Teinte » (220 RAL) ET des variantes composées — un
+ * sachet de 1 kg, c'est PIGMENTKG, qui porte la sienne. La ligne affichait
+ * donc deux sélecteurs « Teinte », l'un choisi, l'autre « à choisir ».
+ * Quand l'article porte une dimension du même nom, c'est elle qui fait foi :
+ * son choix est recopié sur les dimensions des composants (que lisent le
+ * détail et l'impression), et le sélecteur des composants n'est pas affiché.
+ */
+const cleNom = (n?: string) => (n || 'Variante').trim().toLowerCase();
+
+/** Les noms des dimensions de l'article lui-même (« teinte »…), en clé de comparaison. */
+export function nomsDimensionsArticle(article?: Pick<Produit, 'variantes'>): Set<string> {
+  return new Set((article?.variantes ?? []).filter(d => d.options.length > 0).map(d => cleNom(d.nom)));
+}
+
+/** Les groupes que l'article ne porte PAS lui-même : seuls ceux-là se demandent à part. */
+export function groupesPropresAuxComposants<P>(
+  groupes: DimensionDeComposant<P>[], article?: Pick<Produit, 'variantes'>,
+): DimensionDeComposant<P>[] {
+  const noms = nomsDimensionsArticle(article);
+  return groupes.filter(g => !noms.has(cleNom(g.nom)));
+}
+
+/**
+ * `variantesChoisies` où chaque dimension de l'article choisie est recopiée
+ * sur les dimensions des composants du même nom ; `null` si rien ne change.
+ */
+export function avecDimensionsSuivies<P>(
+  vc: Record<string, string> | undefined, groupes: DimensionDeComposant<P>[], article?: Pick<Produit, 'variantes'>,
+): Record<string, string> | null {
+  let out: Record<string, string> | null = null;
+  for (const d of article?.variantes ?? []) {
+    const valeur = vc?.[d.id];
+    if (!valeur) continue;
+    for (const g of groupes) {
+      if (cleNom(g.nom) !== cleNom(d.nom)) continue;
+      for (const gd of g.dimensions) {
+        if ((out ?? vc)?.[gd.id] === valeur) continue;
+        out = { ...(out ?? vc ?? {}), [gd.id]: valeur };
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * Coût d'achat d'un ensemble, ou `undefined` : on ne le calcule que si CHAQUE
  * composant est un article du catalogue AVEC un prix d'achat renseigné — un coût partiel annoncerait une
  * marge fausse, et on n'invente pas une donnée métier. Un composant à

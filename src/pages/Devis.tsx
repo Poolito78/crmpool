@@ -54,6 +54,7 @@ import {
   cleSousCompo, sousVariantesRetenues, prixLigneCompo, detailCompo, prixForces, PREFIXE_PRIX, CLE_COMPOSANTS,
   composantsPersonnalises, composantsVisibles,
   dimensionsDesComposants, type DimensionDeComposant,
+  nomsDimensionsArticle, groupesPropresAuxComposants, avecDimensionsSuivies,
 } from '@/lib/variantesCompo';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
@@ -1429,6 +1430,25 @@ export default function Devis() {
     if (change) setLignes(suivantes);
   }, [lignes, produits, clients, clientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* LA TEINTE DE L'ARTICLE FAIT FOI SUR SES COMPOSANTS (`avecDimensionsSuivies`) :
+     PIGMENT porte sa Teinte, son sachet de 1 kg (PIGMENTKG) aussi. Le choix de la
+     ligne est recopié sur le composant — détail et impression le lisent là —, y
+     compris sur une ligne enregistrée avant cette règle. */
+  useEffect(() => {
+    const trouver = (id: string) => produitParId(produits, id);
+    let change = false;
+    const suivantes = lignes.map(l => {
+      const p = l.produitId && l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte' ? trouver(l.produitId) : undefined;
+      const v = p?.variantes?.length ? varianteDeLigne(p, l.variantesChoisies) : undefined;
+      if (!p || !v) return l;
+      const vc = avecDimensionsSuivies(l.variantesChoisies, dimensionsDesComposants(v, trouver, l.variantesChoisies), p);
+      if (!vc) return l;
+      change = true;
+      return { ...l, variantesChoisies: vc };
+    });
+    if (change) setLignes(suivantes);
+  }, [lignes, produits]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /* L'INTITULÉ D'UNE LIGNE À VARIANTE COMPOSÉE suit sa composition — tant qu'il
      est automatique (`intituleCompo` ne réécrit jamais un intitulé saisi) : un
      pigment modifié qui passe en sous-ligne sort de l'intitulé, et y revient si
@@ -1611,6 +1631,20 @@ export default function Devis() {
     choixSuivant();
   }
 
+  /** Clé de comparaison d'un nom de dimension (« Teinte » = « teinte »). */
+  const cleDimension = (nom?: string) => (nom || 'Variante').trim().toLowerCase();
+  /** Les dimensions que l'article partage avec les composants de ses variantes composées (PIGMENT : « teinte »). */
+  function nomsPartagesAvecComposants(p: Produit): Set<string> {
+    const article = nomsDimensionsArticle(produitParId(produits, p.id) ?? p);
+    const out = new Set<string>();
+    for (const v of p.variantesCompo ?? []) {
+      for (const g of dimensionsDesComposants(v, id => produitParId(produits, id))) {
+        if (article.has(cleDimension(g.nom))) out.add(cleDimension(g.nom));
+      }
+    }
+    return out;
+  }
+
   /* La variante choisie devient UNE ligne : désignation de l'article + nom de la
      variante, prix = somme des composants, coût d'achat = celui des composants. */
   /** Les composants d'une variante qui sont eux-mêmes des articles à variantes composées, pas encore demandés. */
@@ -1738,10 +1772,12 @@ export default function Devis() {
       // Prix forcés et composition propre suivent la composition : une autre variante les efface.
       const anciennes = Object.fromEntries(Object.entries(avant).filter(([k]) =>
         !k.startsWith(`${CLE_COMPO}/`) && !k.startsWith(PREFIXE_PRIX) && k !== CLE_COMPOSANTS));
+      // Une dimension partagée avec les composants (teinte du pigment) se demande : pas de première d'office.
+      const partages = nomsPartagesAvecComposants(racine);
       const vc: Record<string, string> = {
         ...Object.fromEntries(
           (produitParId(produits, racine.id)?.variantes ?? racine.variantes ?? [])
-            .filter(d => d.options.length > 0 && !avant[d.id])
+            .filter(d => d.options.length > 0 && !avant[d.id] && !partages.has(cleDimension(d.nom)))
             .map(d => [d.id, d.options[0].label]),
         ),
         ...anciennes,
@@ -1766,7 +1802,12 @@ export default function Devis() {
     const vc = vcEnCours.current;
     const retenue = vc ? varianteDeLigne(racine, vc) : undefined;
     if (vc && retenue) {
-      const groupes = dimensionsDesComposants(retenue, id => produitParId(produits, id), vc);
+      /* Une teinte que l'article porte DÉJÀ choisie (sachet changé sur une ligne en RAL 7037)
+         n'est pas redemandée : elle descend sur le composant (effet `avecDimensionsSuivies`). */
+      const choisies = new Set((produitParId(produits, racine.id)?.variantes ?? racine.variantes ?? [])
+        .filter(d => vc[d.id]).map(d => cleDimension(d.nom)));
+      const groupes = dimensionsDesComposants(retenue, id => produitParId(produits, id), vc)
+        .filter(g => !choisies.has(cleDimension(g.nom)));
       if (groupes.length) { setTeintesPour({ ligneId: cible.ligneId, racine, groupes, valeurs: vc }); return; }
     }
     ouvrirOptionsDe(cible.ligneId, racine);
@@ -1784,8 +1825,16 @@ export default function Devis() {
     setTeintesPour(null);
     if (!cible) return;
     if (choix && Object.keys(choix).length) {
+      /* La teinte choisie une fois vaut aussi pour l'article quand il porte la même
+         dimension (PIGMENT et son sachet PIGMENTKG) : un seul choix, deux places. */
+      const deLArticle: Record<string, string> = {};
+      for (const d of produitParId(produits, cible.racine.id)?.variantes ?? cible.racine.variantes ?? []) {
+        const g = cible.groupes.find(x => cleDimension(x.nom) === cleDimension(d.nom));
+        const label = g ? g.dimensions.map(x => choix[x.id]).find(Boolean) : undefined;
+        if (label) deLArticle[d.id] = label;
+      }
       setLignes(prev => prev.map(l => l.id !== cible.ligneId ? l
-        : { ...l, variantesChoisies: { ...(l.variantesChoisies ?? {}), ...choix } }));
+        : { ...l, variantesChoisies: { ...(l.variantesChoisies ?? {}), ...choix, ...deLArticle } }));
     }
     ouvrirOptionsDe(cible.ligneId, cible.racine);
   }
@@ -2302,11 +2351,14 @@ export default function Devis() {
         const remiseReprise = prev.find(x => x.id !== ligneId && x.produitId === p.id && (!x.type || x.type === 'ligne') && (x.remise || 0) > 0)?.remise ?? 0;
         const quantite = autoQuantite !== null ? autoQuantite : l.quantite;
         const prix = prixDeBase(p, quantite, client?.estRevendeur);
-        // Initialise les variantes : première option de chaque dimension
+        /* Initialise les variantes : première option de chaque dimension — sauf celle
+           que l'article partage avec ses composants (teinte de PIGMENT), demandée à la
+           suite : on n'impose pas le RAL 1000 d'office. */
         const variantesChoisies: Record<string, string> = {};
+        const partages = nomsPartagesAvecComposants(p);
         if (p.variantes) {
           p.variantes.forEach(dim => {
-            if (dim.options.length > 0) variantesChoisies[dim.id] = dim.options[0].label;
+            if (dim.options.length > 0 && !partages.has(cleDimension(dim.nom))) variantesChoisies[dim.id] = dim.options[0].label;
           });
         }
         return { ...l, produitId: p.id, description: designationProduit(p), prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise: remiseReprise, quantite, surfaceM2: surfaceLigne > 0 ? surfaceLigne : undefined, consommation: undefined, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
@@ -4317,8 +4369,13 @@ export default function Devis() {
                        ligne créée sans teinte (ou « Plus tard ») n'offrait plus aucun moyen d'en
                        choisir une. Affiché même sans choix — « à choisir », jamais la première
                        teinte d'office. Un choix vaut pour toutes les dimensions du même nom. */
+                    /* Une dimension que l'article porte lui-même (PIGMENT : Teinte) n'est pas
+                       redemandée pour ses composants : celle de l'article fait foi. */
+                    const groupesCompo = compoLigne
+                      ? dimensionsDesComposants(compoLigne, id => produitParId(produits, id), l.variantesChoisies) : [];
+                    const nomsPartages = new Set(groupesCompo.map(g => g.nom.trim().toLowerCase()));
                     const teinteCompoEls = compoLigne
-                      ? dimensionsDesComposants(compoLigne, id => produitParId(produits, id), l.variantesChoisies).map(g => {
+                      ? groupesPropresAuxComposants(groupesCompo, prod).map(g => {
                           const valeur = g.dimensions.map(d => l.variantesChoisies?.[d.id]).find(Boolean) ?? '';
                           return (
                             <div key={`teinte-${g.nom}`} className="shrink-0 min-w-[120px] max-w-[180px]">
@@ -4337,12 +4394,17 @@ export default function Devis() {
                           );
                         })
                       : [];
-                    const variantElsArticle = (prod?.variantes && prod.variantes.length > 0) ? prod.variantes.map(dim => (
+                    const variantElsArticle = (prod?.variantes && prod.variantes.length > 0) ? prod.variantes.map(dim => {
+                      // Partagée avec les composants (teinte du pigment) : jamais la première d'office.
+                      const partagee = nomsPartages.has((dim.nom || 'Variante').trim().toLowerCase());
+                      const aChoisir = partagee && !l.variantesChoisies?.[dim.id];
+                      return (
                       <div key={dim.id} className="shrink-0 min-w-[120px] max-w-[180px]">
-                        <span className="text-xs truncate block text-muted-foreground">{dim.nom || 'Variante'}</span>
+                        <span className={`text-xs truncate block ${aChoisir ? 'text-amber-600' : 'text-muted-foreground'}`}>{dim.nom || 'Variante'}{aChoisir ? ' (à choisir)' : ''}</span>
                         <VarianteSelect
                           dimension={dim}
-                          value={l.variantesChoisies?.[dim.id] || (dim.options[0]?.label ?? '')}
+                          vide={partagee ? '— à choisir —' : undefined}
+                          value={l.variantesChoisies?.[dim.id] || (partagee ? '' : (dim.options[0]?.label ?? ''))}
                           onChange={label => {
                             setLignes(prev => prev.map(li => {
                               if (li.id !== l.id) return li;
@@ -4355,7 +4417,10 @@ export default function Devis() {
                                   .flatMap(g => g.dimensions.map(d => d.id)) : []),
                               ]);
                               const cleaned = Object.fromEntries(Object.entries(li.variantesChoisies || {}).filter(([k]) => validIds.has(k) || k.startsWith('__')));
-                              const variantesChoisies = { ...cleaned, [dim.id]: label };
+                              const choisies = { ...cleaned, [dim.id]: label };
+                              // La teinte de l'article descend sur ses composants du même nom.
+                              const variantesChoisies = (compo && avecDimensionsSuivies(choisies,
+                                dimensionsDesComposants(compo, id => produitParId(produits, id), choisies), prod)) || choisies;
                               const client = clients.find(c => c.id === clientId);
                               /* Un seul calcul du prix d'une ligne : il connaît les ajustements de variantes
                                  ET la variante composée (dont le prix suit celui de ses articles, au tarif
@@ -4366,7 +4431,8 @@ export default function Devis() {
                           }}
                         />
                       </div>
-                    )) : [];
+                      );
+                    }) : [];
                     const variantEls = variantElsArticle.length + teinteCompoEls.length > 0
                       ? <>{variantElsArticle}{teinteCompoEls}</> : null;
 
