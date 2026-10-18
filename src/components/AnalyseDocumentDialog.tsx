@@ -236,6 +236,8 @@ interface Props {
   initialFiles?: File[];
   /** Texte pré-chargé (email glissé-déposé) */
   initialText?: string;
+  /** Type de document imposé pour ce texte (le Chiffrage ISOSIGN envoie une demande de devis). */
+  initialType?: TypeDocument;
 }
 
 const today = () => new Date().toISOString().split('T')[0];
@@ -262,7 +264,7 @@ const TYPES_SANS_CLASSEMENT_FOURNISSEUR: ReadonlySet<TypeDocument | undefined> =
   'demande_devis', 'devis_client', 'commande_client', 'facture_client', 'offre_prix', 'devis_concurrent',
 ]);
 
-export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles, initialText }: Props) {
+export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles, initialText, initialType }: Props) {
   const {
     commandesFournisseur, commandesClient, fournisseurs, produits, produitsCharges, clients, devis,
     numerosLiberes, produitFournisseurs,
@@ -1783,6 +1785,8 @@ const [contratOdoo, setContratOdoo] = useState<
   useEffect(() => {
     if (!open || !initialText || !initialText.trim()) return;
     setTexte(initialText);
+    /* type imposé AVANT de lancer : l'analyse lit la référence, pas l'état */
+    if (initialType) { setTypeImpose(initialType); typeImposeRef.current = initialType; }
     lancerAnalyse(null, initialText, []);
   }, [open, initialText]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2574,7 +2578,7 @@ const [contratOdoo, setContratOdoo] = useState<
     const zones = new Map<number, ZoneDemande>();
     lignes.forEach((l, i) => {
       if (systemesDetectes.has(i)) return;
-      const z = zoneDeDemande(texteDemande(l, i), l.quantite);
+      const z = zoneDeDemande(texteDemande(l, i), l.quantite, l.unite);
       if (z) zones.set(i, z);
     });
     return zones.size ? { rap, zones } : null;

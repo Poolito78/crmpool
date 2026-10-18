@@ -218,7 +218,9 @@ try {
   const u = new URL(window.location.href);
   if (u.searchParams.get('analyse') === '1' && u.hash.startsWith('#texte=')) {
     sessionStorage.setItem('crm_analyse_texte', decodeURIComponent(u.hash.slice('#texte='.length)));
-    u.searchParams.delete('analyse'); u.searchParams.delete('t');
+    const type = u.searchParams.get('type');
+    if (type) sessionStorage.setItem('crm_analyse_type', type);   // ex. « demande_devis »
+    u.searchParams.delete('analyse'); u.searchParams.delete('t'); u.searchParams.delete('type');
     window.history.replaceState(null, '', u.pathname + (u.searchParams.toString() ? `?${u.searchParams}` : ''));
   }
 } catch { /* adresse illisible : rien à reprendre */ }

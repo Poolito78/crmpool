@@ -26,6 +26,9 @@ import AssistantVocal from '@/components/AssistantVocal';
 import { AssistantVocalContext, type AssistantVocalCtx, type CaptureDictee, type GestionnaireDictee } from '@/hooks/useAssistantVocal';
 import { terminerConnexionRedirection } from '@/lib/microsoftGraph';
 import { toast } from 'sonner';
+import type { TypeDocument } from '@/lib/analyseDocument';
+/* types acceptés depuis l'adresse (?type=…) — liste locale : importer TYPE_LABELS chargerait tout le module d'analyse */
+const TYPES_DEPOSABLES: readonly TypeDocument[] = ['demande_devis', 'commande_client', 'devis_fournisseur'];
 
 // `external` : le lien sort de l'application (nouvel onglet) au lieu de router.
 // Un <Link> react-router sur une URL absolue produirait /https:/… — il faut un
@@ -202,6 +205,8 @@ export default function CRMLayout() {
    * `dragstart` — et on les laisse tranquilles. */
   const [fichiersDeposes, setFichiersDeposes] = useState<File[]>([]);
   const [texteDepose, setTexteDepose] = useState('');
+  /** Type imposé au texte reçu du Chiffrage ISOSIGN (« demande_devis »). */
+  const [typeDepose, setTypeDepose] = useState<TypeDocument | undefined>(undefined);
   const [survolDepot, setSurvolDepot] = useState(false);
   /** Compteur : les enfants émettent leurs propres dragenter/dragleave. */
   const compteurDepot = useRef(0);
@@ -292,12 +297,15 @@ export default function CRMLayout() {
   /* Récapitulatif envoyé par le Chiffrage ISOSIGN (mis de côté par main.tsx) :
      il part à l'analyse de document comme un texte déposé. */
   useEffect(() => {
-    let texte = '';
+    let texte = '', type = '';
     try {
       texte = sessionStorage.getItem('crm_analyse_texte') ?? '';
+      type = sessionStorage.getItem('crm_analyse_type') ?? '';
       sessionStorage.removeItem('crm_analyse_texte');
+      sessionStorage.removeItem('crm_analyse_type');
     } catch { /* stockage indisponible */ }
     if (!texte.trim()) return;
+    if ((TYPES_DEPOSABLES as readonly string[]).includes(type)) setTypeDepose(type as TypeDocument);
     setFichiersDeposes([]);
     setTexteDepose(texte.trim());
     setAnalyseOpen(true);
@@ -691,10 +699,11 @@ export default function CRMLayout() {
               setAnalyseOpen(v);
               /* Ce qui a été déposé n'a de sens que pour l'analyse en cours :
                  le garder rouvrirait la fenêtre sur le document précédent. */
-              if (!v) { setFichiersDeposes([]); setTexteDepose(''); }
+              if (!v) { setFichiersDeposes([]); setTexteDepose(''); setTypeDepose(undefined); }
             }}
             initialFiles={fichiersDeposes.length ? fichiersDeposes : undefined}
             initialText={texteDepose || undefined}
+            initialType={texteDepose ? typeDepose : undefined}
           />
         </Suspense>
       )}

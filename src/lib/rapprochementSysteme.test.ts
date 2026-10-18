@@ -272,6 +272,20 @@ describe('zones d’un système nommé dans l’en-tête', () => {
     expect(zoneDeDemande('Ligne blanche 0.10m de largeur', 485)?.couleur).toBe('blanc');
   });
 
+  /* Métré sur plan (Chiffrage ISOSIGN) : la surface PEINTE arrive telle quelle. */
+  it('une surface donnée en m² : la zone elle-même, avec sa teinte', () => {
+    expect(zoneDeDemande('Zone — Zébra / hachures teinte jaune (vide + plein, partie peinte seule) : 205 m²', 1))
+      .toMatchObject({ surfaceM2: 205, bande: false, couleur: 'jaune', maximum: false });
+    expect(zoneDeDemande('Îlot / zone piétonne teinte verte', 17.5, 'm²'))
+      .toMatchObject({ surfaceM2: 17.5, couleur: 'vert' });
+    expect(zoneDeDemande('Zébra teinte jaune', 205, 'm2')?.surfaceM2).toBe(205);
+    // quantité en m² avec une largeur écrite : la surface, pas « largeur × quantité »
+    expect(zoneDeDemande('Bande continue blanche 0,10 m de largeur', 91.7, 'm²')?.surfaceM2).toBe(91.7);
+    // la longueur en ml reste chiffrée en bande
+    expect(zoneDeDemande('Zone — Bande continue teinte blanche 0,10 m de largeur', 917, 'ml'))
+      .toMatchObject({ surfaceM2: 91.7, bande: true, couleur: 'blanc' });
+  });
+
   it('le tracé complet, la quantité ne compte qu’une fois', () => {
     expect(zoneDeDemande('Ligne jaune 0,10 m de largeur x 965ml', 965)?.surfaceM2).toBe(96.5);
     expect(zoneDeDemande('Ligne jaune 0,10 m de largeur x 965ml', 1)?.surfaceM2).toBe(96.5);

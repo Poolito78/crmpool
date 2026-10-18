@@ -198,7 +198,7 @@ export function couleurDansTexte(texte: string): string | undefined {
 }
 
 /** Les mots d'un tracé : ce qui distingue une zone d'un article. */
-const MOTS_TRACE = /\b(lignes?|bandes?|fleches?|logos?|pictogrammes?|pictos?|marquages?|passages?|zones?|damiers?|chevrons?|bordures?|allees?|cheminements?)\b/;
+const MOTS_TRACE = /\b(lignes?|bandes?|fleches?|logos?|pictogrammes?|pictos?|marquages?|passages?|zones?|damiers?|chevrons?|bordures?|allees?|cheminements?|zebras?|hachures?|ilots?|aplats?)\b/;
 
 /**
  * La flèche de référence : 0,123 m² peints pour 1 400 mm de long.
@@ -263,8 +263,13 @@ export interface ZoneDemande {
  *
  * Rien n'est rendu pour une ligne qui ne parle pas d'un tracé : un « seau de
  * primaire » ne devient pas une zone.
+ *
+ * Une SURFACE donnée telle quelle — « Zébra teinte jaune : 205 m² », ou la
+ * quantité lue en m² (`unite`) — est la zone elle-même : le métré sur plan du
+ * Chiffrage ISOSIGN envoie ainsi zébras, îlots et aplats, surface PEINTE déjà
+ * calculée (un zébra « vide + plein » n'en peint que la moitié).
  */
-export function zoneDeDemande(texte: string, quantite?: number | null): ZoneDemande | undefined {
+export function zoneDeDemande(texte: string, quantite?: number | null, unite?: string | null): ZoneDemande | undefined {
   const t = normaliser(texte);
   if (!MOTS_TRACE.test(t)) return undefined;
   const q = quantite && quantite > 0 ? quantite : 1;
@@ -275,6 +280,7 @@ export function zoneDeDemande(texte: string, quantite?: number | null): ZoneDema
   });
 
   const trace = traceDansTexte(t);
+  const uniteM2 = /^m\s*(2|²)$/i.test(String(unite ?? '').trim());
 
   /* UNE FLÈCHE SE CHIFFRE À SA SURFACE, PAS À SON RECTANGLE : 16 flèches de
      3 m × 1,40 m comptaient 67,2 m², pour moins de 9 m² peints. */
@@ -305,6 +311,14 @@ export function zoneDeDemande(texte: string, quantite?: number | null): ZoneDema
       `${enFrancais(trace.longueurMl)} ml × ${enFrancais(trace.largeurM)} m`
         + (nombre > 1 ? ` × ${nombre}` : '') + ` = ${enFrancais(surface)} m²`,
       !trace.bande);
+  }
+
+  /* Une surface écrite, ou une quantité lue en m² : la zone elle-même. AVANT la
+     « largeur seule » : « 0,10 m de largeur », 91,7 m² ne font pas 9,17 m². */
+  const ecrite = t.match(/(\d+(?:[.,]\d+)?)\s*m2\b/);
+  if (ecrite || (uniteM2 && quantite != null && quantite > 0)) {
+    const surface = ecrite ? enNombre(ecrite[1]) : q;
+    if (surface > 0) return fin(surface, false, `${enFrancais(surface)} m²`, false);
   }
 
   /* Largeur seule : la longueur est dans la quantité. */
