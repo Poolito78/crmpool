@@ -31,8 +31,20 @@ import { toast } from 'sonner';
 import type { TypeDocument } from '@/lib/analyseDocument';
 /* types acceptés depuis l'adresse (?type=…) — liste locale : importer TYPE_LABELS chargerait tout le module d'analyse */
 /* Chiffrage ISOSIGN (métré sur plan) : page servie EN LOCAL par « Chiffrage ISOSIGN.bat »
-   (serve.py, port 8765) — le lien ne répond que si le .bat est lancé sur ce poste. */
-const CHIFFRAGE_URL = 'http://127.0.0.1:8765/chiffrage.html';
+   (serve.py, port 8765, fenêtre noire). Une page web ne peut pas lancer un
+   programme : le menu passe par le lien Windows `chiffrage-isosign:`, que
+   « Installer le lien MonCRM.bat » (dossier ChiffrageISOSIGN) déclare une fois
+   par poste. Le .bat lance le serveur et ouvre la page, ou ouvre seulement la
+   page s'il tourne déjà. Lien non installé : le navigateur ne fait rien, d'où
+   le message qui le rappelle. */
+const CHIFFRAGE_PROTOCOLE = 'chiffrage-isosign://ouvrir';
+function lancerChiffrage() {
+  window.location.href = CHIFFRAGE_PROTOCOLE;
+  toast('Lancement du Chiffrage ISOSIGN…', {
+    description: 'La fenêtre noire puis la page s\'ouvrent. Rien ne se passe ? Lancez une fois « Installer le lien MonCRM.bat » dans le dossier ChiffrageISOSIGN.',
+    duration: 8000,
+  });
+}
 /* page de confirmation d'arrêt (serveur local + fenêtre noire), réservée au poste */
 const CHIFFRAGE_ARRET_URL = 'http://127.0.0.1:8765/arret';
 const TYPES_DEPOSABLES: readonly TypeDocument[] = ['demande_devis', 'commande_client', 'devis_fournisseur'];
@@ -40,7 +52,8 @@ const TYPES_DEPOSABLES: readonly TypeDocument[] = ['demande_devis', 'commande_cl
 // `external` : le lien sort de l'application (nouvel onglet) au lieu de router.
 // Un <Link> react-router sur une URL absolue produirait /https:/… — il faut un
 // vrai <a>, et l'entrée ne peut jamais être « active ».
-type NavLink = { type: 'link'; label: string; icon: any; path: string; shortLabel?: string; external?: boolean };
+// `action` : l'entrée lance quelque chose au lieu d'ouvrir une page (`path` n'est alors qu'une clé).
+type NavLink = { type: 'link'; label: string; icon: any; path: string; shortLabel?: string; external?: boolean; action?: () => void };
 type NavGroup = { type: 'group'; label: string; icon: any; items: NavLink[] };
 type NavEntry = NavLink | NavGroup;
 
@@ -56,6 +69,19 @@ type NavEntry = NavLink | NavGroup;
 function NavItem({ item, className, onClick, title, children }: {
   item: NavLink; className: string; onClick?: () => void; title?: string; children: React.ReactNode;
 }) {
+  if (item.action) {
+    return (
+      <a
+        href={item.path}
+        onClick={e => { e.preventDefault(); item.action!(); onClick?.(); }}
+        title={title}
+        className={className}
+        draggable={false}
+      >
+        {children}
+      </a>
+    );
+  }
   if (item.external) {
     return (
       <a href={item.path} target="_blank" rel="noopener noreferrer" onClick={onClick} title={title} className={className} draggable={false}>
@@ -97,7 +123,7 @@ const NAV: NavEntry[] = [
       { type: 'link', label: 'Clients',           icon: Users,       path: '/clients' },
       { type: 'link', label: 'Produits',           icon: Package,     path: '/produits' },
       { type: 'link', label: 'Devis',              icon: FileText,    path: '/devis' },
-      { type: 'link', label: 'Chiffrage ISOSIGN',  icon: Ruler,       path: CHIFFRAGE_URL, external: true },
+      { type: 'link', label: 'Chiffrage ISOSIGN',  icon: Ruler,       path: CHIFFRAGE_PROTOCOLE, external: true, action: lancerChiffrage },
       { type: 'link', label: 'Arrêter Chiffrage',  icon: Power,       path: CHIFFRAGE_ARRET_URL, external: true },
       { type: 'link', label: 'Commandes Client',   icon: ClipboardList, path: '/commandes-client' },
       { type: 'link', label: 'Factures Client',    icon: Receipt,     path: '/factures-client' },
