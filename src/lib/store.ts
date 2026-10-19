@@ -822,14 +822,19 @@ export const STATUT_CRM_ACTION: Record<StatutCrmAction, { label: string; color: 
 
 // ---- DB <-> App mapping ----
 
-function normalizeDelaiReglement(v: string): string {
-  const map: Record<string, string> = {
-    '30j NET': '30J', '30j net': '30J', '30J NET': '30J',
-    '30j FDM': '30J FDM', '30j fdm': '30J FDM', '30j Fin de mois': '30J FDM',
-    '45j': '45J', '45j net': '45J',
-    '45j FDM': '45J FDM', '45j fdm': '45J FDM',
-  };
-  return map[v] ?? v;
+/**
+ * Forme canonique d'un délai de règlement : « Comptant », « 30J », « 45J FDM »…
+ * La base garde des saisies anciennes (« 45j FDM », « 30j net ») : relues telles
+ * quelles, elles ne correspondaient à aucune option du sélecteur de la fiche
+ * fournisseur, qui affichait alors « Comptant » — et l'enregistrait si l'on
+ * validait. Toute écriture comme toute lecture passe donc par cette forme.
+ */
+export function normalizeDelaiReglement(v: string): string {
+  const t = (v || '').trim();
+  if (/^comptant$/i.test(t)) return 'Comptant';
+  const m = t.match(/^(\d+)\s*j(?:ours?)?\s*(fdm|fin de mois|net)?$/i);
+  if (!m) return t;
+  return `${m[1]}J${m[2] && !/^net$/i.test(m[2]) ? ' FDM' : ''}`;
 }
 
 function dbToClient(r: any): Client {
@@ -941,7 +946,7 @@ function fournisseurToDb(f: Fournisseur, userId: string) {
     franco_port: f.francoPort,
     cout_transport: f.coutTransport,
     ...(f.paliersPortPoids !== undefined ? { paliers_port_poids: f.paliersPortPoids } : {}),
-    delai_reglement: f.delaiReglement,
+    delai_reglement: normalizeDelaiReglement(f.delaiReglement || '45J FDM'),
     date_creation: f.dateCreation,
     ...(f.estStockiste !== undefined ? { est_stockiste: f.estStockiste } : {}),
     ...(f.delaiExpedition !== undefined ? { delai_expedition: f.delaiExpedition } : {}),

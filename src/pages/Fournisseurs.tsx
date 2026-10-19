@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, Fragment } from 'react';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, formatMontant, calculerDateEcheance, type Fournisseur } from '@/lib/store';
+import { generateId, formatMontant, calculerDateEcheance, normalizeDelaiReglement, type Fournisseur } from '@/lib/store';
 import { Plus, Search, Edit2, Trash2, Upload, Mail, FolderOpen, Filter, X, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import DocumentsFournisseurDialog, { DocumentsFournisseurPanel } from '@/components/DocumentsFournisseurDialog';
 import { useNombreDocumentsFournisseur } from '@/lib/gedFournisseur';
@@ -41,6 +42,16 @@ const ENCOURS_OPTIONS = [
   { value: 'aucun', label: 'Sans encours' },
 ];
 const cleDelai = (d?: string) => (d || '').trim().toUpperCase();
+// Valeurs canoniques (normalizeDelaiReglement, store.ts) : ce que la fiche relit.
+const DELAIS_FOURNISSEUR = [
+  { value: 'Comptant', label: 'Comptant' },
+  { value: '30J', label: '30j net' },
+  { value: '30J FDM', label: '30j FDM' },
+  { value: '45J', label: '45j net' },
+  { value: '45J FDM', label: '45j FDM' },
+  { value: '60J', label: '60j net' },
+  { value: '60J FDM', label: '60j FDM' },
+];
 
 function texteColonne(f: Fournisseur, key: Exclude<FournColKey, 'encours' | 'delai'>): string {
   switch (key) {
@@ -53,7 +64,7 @@ function texteColonne(f: Fournisseur, key: Exclude<FournColKey, 'encours' | 'del
 }
 
 const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
-  nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM', estStockiste: false, delaiExpedition: 0,
+  nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45J FDM', estStockiste: false, delaiExpedition: 0,
 };
 
 const importFields: { key: string; label: string; aliases: string[]; type: 'text' | 'number'; default?: any }[] = [
@@ -265,7 +276,7 @@ export default function Fournisseurs() {
       notes: contact.notes,
       francoPort: 0,
       coutTransport: 0,
-      delaiReglement: '45j FDM',
+      delaiReglement: '45J FDM',
       estStockiste: false,
       delaiExpedition: 0,
     });
@@ -274,7 +285,7 @@ export default function Fournisseurs() {
   function openEdit(f: Fournisseur) {
     setEditing(f);
     setOngletFiche('infos');
-    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, telephoneMobile: f.telephoneMobile || '', adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, paliersPortPoids: f.paliersPortPoids ?? [], delaiReglement: f.delaiReglement || '45j FDM', estStockiste: f.estStockiste ?? false, delaiExpedition: f.delaiExpedition ?? 0 });
+    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, telephoneMobile: f.telephoneMobile || '', adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, paliersPortPoids: f.paliersPortPoids ?? [], delaiReglement: normalizeDelaiReglement(f.delaiReglement || '45J FDM'), estStockiste: f.estStockiste ?? false, delaiExpedition: f.delaiExpedition ?? 0 });
     setDialogOpen(true);
   }
 
@@ -385,7 +396,7 @@ export default function Fournisseurs() {
         notes: getMappedValue(row, 'notes'),
         francoPort: getMappedNum(row, 'francoPort'),
         coutTransport: getMappedNum(row, 'coutTransport'),
-        delaiReglement: getMappedValue(row, 'delaiReglement') || '45j FDM',
+        delaiReglement: normalizeDelaiReglement(getMappedValue(row, 'delaiReglement') || '45J FDM'),
         encoursMax: getMappedNum(row, 'encoursMax'),
         dateCreation: new Date().toISOString().split('T')[0],
       })).filter(f => f.nom || f.societe);
@@ -629,19 +640,22 @@ export default function Fournisseurs() {
                 <p className="text-sm font-semibold text-foreground">Conditions de paiement</p>
                 <div>
                   <Label className="text-xs">Délai de règlement</Label>
-                  <select
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  {/* Select du projet, jamais un <select> natif dans un dialogue Radix ;
+                      valeurs sous la forme de normalizeDelaiReglement, sinon la fiche
+                      relue n'en reconnaît aucune et affiche « Comptant ». */}
+                  <Select
                     value={form.delaiReglement}
-                    onChange={e => setForm(prev => ({ ...prev, delaiReglement: e.target.value }))}
+                    onValueChange={v => setForm(prev => ({ ...prev, delaiReglement: v }))}
                   >
-                    <option value="Comptant">Comptant</option>
-                    <option value="30j net">30j net</option>
-                    <option value="30j FDM">30j FDM</option>
-                    <option value="45j net">45j net</option>
-                    <option value="45j FDM">45j FDM</option>
-                    <option value="60j net">60j net</option>
-                    <option value="60j FDM">60j FDM</option>
-                  </select>
+                    <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[
+                        ...(DELAIS_FOURNISSEUR.some(d => d.value === form.delaiReglement) || !form.delaiReglement
+                          ? [] : [{ value: form.delaiReglement, label: form.delaiReglement }]),
+                        ...DELAIS_FOURNISSEUR,
+                      ].map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
