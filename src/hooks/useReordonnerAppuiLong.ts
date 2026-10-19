@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 
-/* Réordonner une liste par APPUI LONG puis glisser — souris comme doigt.
+/* Réordonner par APPUI LONG puis glisser — souris comme doigt.
  *
  * L'appui long est ce qui sépare le déplacement du clic : une entrée du menu
  * est un lien, un appui bref doit toujours naviguer, et un glisser immédiat
@@ -10,71 +10,91 @@ import { flushSync } from 'react-dom';
  * cliquer, et l'appui tombe.
  *
  * Les éléments déplaçables portent `data-reordre-liste` et `data-reordre-cle`.
- * La cible se lit sous le pointeur (`elementFromPoint`), en remontant jusqu'à
- * un élément de la MÊME liste : une entrée ne passe jamais d'une liste à
- * l'autre (d'un groupe du menu à un autre).
+ * La cible se lit sous le pointeur (`elementFromPoint`) : l'élément le plus
+ * profond dont la liste est ACCEPTÉE pour l'entrée déplacée (`accepte` ; par
+ * défaut sa propre liste seulement). Une page passe ainsi d'un groupe à
+ * l'autre ou au premier niveau ; un groupe, lui, ne quitte pas le premier.
  *
- * L'échange n'a lieu qu'une fois passé le MILIEU de la cible, dans le sens du
- * mouvement : sans cette hystérésis, un groupe déplié plus haut qu'un lien
- * reviendrait sous le pointeur dès l'échange fait, et les deux entrées
- * s'échangeraient sans fin. `flushSync` rend l'échange avant le mouvement
- * suivant, qui mesure donc le DOM à jour.
+ * La moitié de la cible où se trouve le pointeur dit où poser : avant (haut)
+ * ou après (bas). `deplacer` doit ne rien changer quand l'entrée y est déjà —
+ * c'est ce qui empêche deux entrées de hauteurs différentes de s'échanger
+ * sans fin. `flushSync` rend chaque déplacement avant le mouvement suivant,
+ * qui mesure donc le DOM à jour.
+ *
+ * S'ATTARDER sur un en-tête `data-reordre-conteneur` (un groupe du menu)
+ * pendant DELAI_ENTREE_MS appelle `entrer` : le groupe s'ouvre et l'entrée y
+ * passe — seul moyen d'atteindre un groupe replié.
  *
  * Le clic qui suit le lâcher est avalé : sans cela, lâcher sur un lien
  * naviguerait, lâcher sur un groupe le replierait. */
 
 const DELAI_MS = 450;
 const TOLERANCE_PX = 8;
+const DELAI_ENTREE_MS = 600;
 
 export type Glisse = { liste: string; cle: string };
 
+type Options = {
+  /** Pose `cle` dans `liste`, avant ou après `vers`. */
+  deplacer: (cle: string, liste: string, vers: string, apres: boolean) => void;
+  /** L'entrée s'est attardée sur l'en-tête de `conteneur`. */
+  entrer?: (cle: string, conteneur: string) => void;
+  /** `glisse` peut-elle être posée dans `liste` ? */
+  accepte?: (glisse: Glisse, liste: string) => boolean;
+  terminer: () => void;
+};
+
 const dejaPris = new WeakSet<Event>();
 
-export function useReordonnerAppuiLong(
-  deplacer: (liste: string, cle: string, vers: string) => void,
-  terminer: (aBouge: boolean) => void,
-) {
+export function useReordonnerAppuiLong(options: Options) {
   const [glisse, setGlisse] = useState<Glisse | null>(null);
-  const deplacerRef = useRef(deplacer);
-  deplacerRef.current = deplacer;
-  const terminerRef = useRef(terminer);
-  terminerRef.current = terminer;
+  const opts = useRef(options);
+  opts.current = options;
   /** Appui armé, pas encore long : de quoi l'annuler. */
   const appui = useRef<(() => void) | null>(null);
-  const aBouge = useRef(false);
 
   useEffect(() => () => appui.current?.(), []);
 
   useEffect(() => {
     if (!glisse) return;
-    const { liste, cle } = glisse;
+    const { cle } = glisse;
+    const accepte = (liste: string | undefined) =>
+      liste !== undefined && (opts.current.accepte ? opts.current.accepte(glisse, liste) : liste === glisse.liste);
+    let attente: { conteneur: string; timer: number } | null = null;
+    const finAttente = () => { if (attente) window.clearTimeout(attente.timer); attente = null; };
 
     const bouger = (e: PointerEvent) => {
-      let cible = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)
-        ?.closest<HTMLElement>('[data-reordre-cle]') ?? null;
-      while (cible && cible.dataset.reordreListe !== liste) {
+      const sous = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+
+      const conteneur = sous?.closest<HTMLElement>('[data-reordre-conteneur]')?.dataset.reordreConteneur;
+      if (conteneur && opts.current.entrer && accepte(conteneur)) {
+        if (attente?.conteneur !== conteneur) {
+          finAttente();
+          attente = {
+            conteneur,
+            timer: window.setTimeout(() => flushSync(() => opts.current.entrer!(cle, conteneur)), DELAI_ENTREE_MS),
+          };
+        }
+      } else finAttente();
+
+      let cible = sous?.closest<HTMLElement>('[data-reordre-cle]') ?? null;
+      while (cible && !accepte(cible.dataset.reordreListe)) {
         cible = cible.parentElement?.closest<HTMLElement>('[data-reordre-cle]') ?? null;
       }
       const vers = cible?.dataset.reordreCle;
       if (!cible || !vers || vers === cle) return;
-      // L'élément déplacé, cherché dans le même menu (le menu mobile, caché, a les mêmes clés).
-      const source = Array.from(cible.closest('nav')?.querySelectorAll<HTMLElement>('[data-reordre-cle]') ?? [])
-        .find(el => el.dataset.reordreListe === liste && el.dataset.reordreCle === cle);
-      if (!source) return;
       const r = cible.getBoundingClientRect();
-      const milieu = r.top + r.height / 2;
-      const descend = source.getBoundingClientRect().top < r.top;
-      if (descend ? e.clientY < milieu : e.clientY > milieu) return;
-      aBouge.current = true;
-      flushSync(() => deplacerRef.current(liste, cle, vers));
+      const apres = e.clientY > r.top + r.height / 2;
+      flushSync(() => opts.current.deplacer(cle, cible!.dataset.reordreListe!, vers, apres));
     };
 
     const lacher = () => {
+      finAttente();
       setGlisse(null);
       const avaler = (ev: MouseEvent) => { ev.preventDefault(); ev.stopPropagation(); };
       window.addEventListener('click', avaler, { capture: true, once: true });
       window.setTimeout(() => window.removeEventListener('click', avaler, true), 300);
-      terminerRef.current(aBouge.current);
+      opts.current.terminer();
     };
 
     // Au doigt, le glisser ferait défiler le menu (et annulerait le pointeur).
@@ -86,6 +106,7 @@ export function useReordonnerAppuiLong(
     window.addEventListener('touchmove', bloquerDefilement, { passive: false });
     document.body.style.cursor = 'grabbing';
     return () => {
+      finAttente();
       window.removeEventListener('pointermove', bouger);
       window.removeEventListener('pointerup', lacher);
       window.removeEventListener('pointercancel', lacher);
@@ -110,7 +131,6 @@ export function useReordonnerAppuiLong(
       };
       const timer = window.setTimeout(() => {
         annuler();
-        aBouge.current = false;
         navigator.vibrate?.(30);
         setGlisse({ liste, cle });
       }, DELAI_MS);

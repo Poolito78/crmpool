@@ -10,10 +10,86 @@
  * par un droit) garde sa place d'origine au lieu d'être rejetée en fin de
  * liste. Une clé enregistrée qui ne correspond plus à rien est ignorée.
  *
+ * Une PAGE peut aussi changer de place dans l'arbre : sortir d'un groupe vers
+ * le premier niveau (entre Stock et Calcul Transport), ou passer dans un autre
+ * groupe. Sa place se lit dans la liste qui la nomme (`groupes[libellé]` ou
+ * `racine`) ; une page qu'aucune liste ne nomme reste dans son groupe
+ * d'origine. Un GROUPE ne se range qu'au premier niveau.
+ *
  * Préférence de confort, propre à ce navigateur : rangée en localStorage,
  * jamais en base. */
 
 export type OrdreNav = { racine?: string[]; groupes?: Record<string, string[]> };
+/** Ordre complet tel qu'affiché : toute clé y figure, dans une seule liste. */
+export type StructureNav = { racine: string[]; groupes: Record<string, string[]> };
+
+export const LISTE_RACINE = 'racine';
+
+type LienBase = { type: 'link'; path: string };
+type GroupeBase<L extends LienBase> = { type: 'group'; label: string; items: L[] };
+
+/** Clé d'une entrée de premier niveau : le chemin d'un lien, `groupe:<libellé>`. */
+export const cleEntree = (e: LienBase | { type: 'group'; label: string }) =>
+  e.type === 'group' ? `groupe:${e.label}` : e.path;
+
+/** Le menu (déjà filtré par les droits) rangé selon `ordre`. */
+export function appliquerOrdre<L extends LienBase, G extends GroupeBase<L>>(base: Array<L | G>, ordre: OrdreNav): Array<L | G> {
+  const liens = new Map<string, L>();
+  const origine = new Map<string, string>();
+  const groupes = base.filter((e): e is G => e.type === 'group');
+  for (const e of base) {
+    if (e.type === 'group') for (const i of (e as G).items) { liens.set(i.path, i); origine.set(i.path, (e as G).label); }
+    else { liens.set(e.path, e as L); origine.set(e.path, LISTE_RACINE); }
+  }
+  const libelles = new Set(groupes.map(g => g.label));
+  const place = new Map<string, string>();
+  for (const [libelle, cles] of Object.entries(ordre.groupes ?? {})) {
+    if (!libelles.has(libelle)) continue;
+    for (const c of cles) if (liens.has(c) && !place.has(c)) place.set(c, libelle);
+  }
+  for (const c of ordre.racine ?? []) if (liens.has(c) && !place.has(c)) place.set(c, LISTE_RACINE);
+  const ou = (c: string) => place.get(c) ?? origine.get(c)!;
+  /** Les liens d'une liste : ceux d'origine restés là, puis ceux venus d'ailleurs. */
+  const venus = (liste: string) => [...liens.values()].filter(i => ou(i.path) === liste && origine.get(i.path) !== liste);
+
+  const ranges = new Map(groupes.map(g => [g.label, {
+    ...g,
+    items: ordonner([...g.items.filter(i => ou(i.path) === g.label), ...venus(g.label)], i => i.path, ordre.groupes?.[g.label]),
+  } as G]));
+  const racine: Array<L | G> = [
+    ...base
+      .filter(e => e.type === 'group' || ou(e.path) === LISTE_RACINE)
+      .map(e => e.type === 'group' ? ranges.get((e as G).label)! : e),
+    ...venus(LISTE_RACINE),
+  ];
+  return ordonner<L | G>(racine, cleEntree, ordre.racine);
+}
+
+export function structureDe(nav: Array<LienBase | GroupeBase<LienBase>>): StructureNav {
+  return {
+    racine: nav.map(cleEntree),
+    groupes: Object.fromEntries(nav.filter((e): e is GroupeBase<LienBase> => e.type === 'group').map(g => [g.label, g.items.map(i => i.path)])),
+  };
+}
+
+/** Place `cle` dans `liste`, avant ou après `vers` (au début si `vers` est nul).
+ *  Rend `s` lui-même quand rien ne change : l'appelant n'a rien à rendre. */
+export function placer(s: StructureNav, cle: string, liste: string, vers: string | null, apres: boolean): StructureNav {
+  const sans = (l: string[]) => l.filter(c => c !== cle);
+  const n: StructureNav = {
+    racine: sans(s.racine),
+    groupes: Object.fromEntries(Object.entries(s.groupes).map(([g, l]) => [g, sans(l)])),
+  };
+  const cible = liste === LISTE_RACINE ? n.racine : n.groupes[liste];
+  if (!cible) return s;
+  if (vers === null) cible.unshift(cle);
+  else {
+    const i = cible.indexOf(vers);
+    if (i < 0) return s;
+    cible.splice(i + (apres ? 1 : 0), 0, cle);
+  }
+  return JSON.stringify(n) === JSON.stringify(s) ? s : n;
+}
 
 const CLE_STOCKAGE = 'crm_nav_ordre';
 
@@ -27,17 +103,6 @@ export function ordonner<T>(liste: T[], cle: (t: T) => string, ordre?: string[])
   liste.forEach((t, i) => {
     if (!rang.has(cle(t))) res.splice(Math.min(i, res.length), 0, t);
   });
-  return res;
-}
-
-/** Déplace `cle` à la place de `vers` : après lui en descendant, avant en montant. */
-export function deplacerCle(cles: string[], cle: string, vers: string): string[] {
-  const de = cles.indexOf(cle);
-  const a = cles.indexOf(vers);
-  if (de < 0 || a < 0 || de === a) return cles;
-  const res = cles.slice();
-  res.splice(de, 1);
-  res.splice(a, 0, cle);
   return res;
 }
 

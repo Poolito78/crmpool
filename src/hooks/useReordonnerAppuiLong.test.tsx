@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import { render, act } from '@testing-library/react';
 import { useState } from 'react';
 import { useReordonnerAppuiLong } from './useReordonnerAppuiLong';
-import { deplacerCle } from '@/lib/ordreNav';
+import { placer, LISTE_RACINE, type StructureNav } from '@/lib/ordreNav';
 
-/* jsdom 20 n'a ni PointerEvent ni elementFromPoint : on les simule, chaque
-   entrée mesurant 40 px de haut, empilées dans l'ordre du DOM. */
+/* jsdom 20 n'a ni PointerEvent ni elementFromPoint : on les simule. Chaque
+   ligne affichée (lien, en-tête de groupe, page d'un groupe) mesure 40 px,
+   empilée dans l'ordre du DOM ; un groupe couvre son en-tête et ses pages. */
 class FauxPointerEvent extends MouseEvent {
   isPrimary = true;
   pointerId = 1;
@@ -15,71 +16,126 @@ beforeAll(() => {
   Object.assign(window, { PointerEvent: FauxPointerEvent });
 });
 
-const HAUTEUR = 40;
-function entrees() { return Array.from(document.querySelectorAll<HTMLElement>('[data-reordre-cle]')); }
+const H = 40;
+const lignes = () => Array.from(document.querySelectorAll<HTMLElement>('[data-ligne]'));
 function poser() {
-  entrees().forEach((el, i) => {
-    el.getBoundingClientRect = () => ({ top: i * HAUTEUR, height: HAUTEUR, bottom: (i + 1) * HAUTEUR, left: 0, right: 200, width: 200, x: 0, y: i * HAUTEUR, toJSON() {} });
+  const ls = lignes();
+  const rect = (top: number, height: number) => ({ top, height, bottom: top + height, left: 0, right: 200, width: 200, x: 0, y: top, toJSON() {} });
+  ls.forEach((el, i) => {
+    const bloc = el.closest<HTMLElement>('[data-reordre-cle]')!;
+    if (bloc === el) el.getBoundingClientRect = () => rect(i * H, H);
   });
-  document.elementFromPoint = (_x: number, y: number) => entrees()[Math.floor(y / HAUTEUR)] ?? null;
+  // Un groupe : de son en-tête à sa dernière page.
+  document.querySelectorAll<HTMLElement>('[data-groupe]').forEach(g => {
+    const mes = ls.filter(l => g.contains(l));
+    const i0 = ls.indexOf(mes[0]);
+    g.getBoundingClientRect = () => rect(i0 * H, mes.length * H);
+  });
+  document.elementFromPoint = (_x: number, y: number) => lignes()[Math.floor(y / H)] ?? null;
 }
 
 const clics: string[] = [];
 function Menu() {
-  const [cles, setCles] = useState(['a', 'b', 'c']);
-  const { poignee } = useReordonnerAppuiLong((_l, cle, vers) => setCles(c => deplacerCle(c, cle, vers)), () => {});
+  const [s, setS] = useState<StructureNav>({ racine: ['a', 'groupe:G', 'b'], groupes: { G: ['g1', 'g2'] } });
+  const { poignee } = useReordonnerAppuiLong({
+    deplacer: (cle, liste, vers, apres) => setS(x => placer(x, cle, liste, vers, apres)),
+    entrer: (cle, g) => setS(x => x.groupes[g].includes(cle) ? x : placer(x, cle, g, null, false)),
+    accepte: (gl, liste) => liste === LISTE_RACINE || !gl.cle.startsWith('groupe:'),
+    terminer: () => {},
+  });
   return (
     <nav>
-      {cles.map(c => (
-        <div key={c} {...poignee('racine', c)} onClick={() => clics.push(c)}>{c}</div>
-      ))}
+      {s.racine.map(c => c.startsWith('groupe:')
+        ? (
+          <div key={c} data-groupe {...poignee(LISTE_RACINE, c)}>
+            <div data-ligne data-reordre-conteneur="G">G</div>
+            {s.groupes.G.map(p => <div key={p} data-ligne {...poignee('G', p)}>{p}</div>)}
+          </div>
+        )
+        : <div key={c} data-ligne {...poignee(LISTE_RACINE, c)} onClick={() => clics.push(c)}>{c}</div>)}
     </nav>
   );
 }
 
 const ev = (type: string, y: number) => new FauxPointerEvent(type, { bubbles: true, clientX: 10, clientY: y, button: 0 });
-const ordre = () => entrees().map(e => e.dataset.reordreCle).join('');
+/** Le menu à plat : « G[…] » pour le groupe. */
+const vue = () => Array.from(document.querySelector('nav')!.children).map(el =>
+  (el as HTMLElement).dataset.groupe !== undefined
+    ? `G[${Array.from(el.children).slice(1).map(p => p.textContent).join(' ')}]`
+    : el.textContent).join(' ');
+
+function appuyer(y: number) {
+  const el = lignes()[Math.floor(y / H)];
+  act(() => { el.dispatchEvent(ev('pointerdown', y)); });
+  act(() => { vi.advanceTimersByTime(500); });
+}
+function glisser(y: number) {
+  act(() => { window.dispatchEvent(ev('pointermove', y)); poser(); });
+}
 
 afterEach(() => { vi.useRealTimers(); clics.length = 0; });
 
 describe('useReordonnerAppuiLong', () => {
-  it('appui long puis glisser : l\'entrée change de place, le clic qui suit est avalé', () => {
+  it('appui long puis glisser au premier niveau ; le clic qui suit est avalé', () => {
     vi.useFakeTimers();
     render(<Menu />);
     poser();
-    act(() => { entrees()[0].dispatchEvent(ev('pointerdown', 20)); });
-    act(() => { vi.advanceTimersByTime(500); });
-    // Au-delà du milieu de « b » (60) : a passe sous b.
-    act(() => { window.dispatchEvent(ev('pointermove', 65)); poser(); });
-    expect(ordre()).toBe('bac');
-    act(() => { window.dispatchEvent(ev('pointermove', 105)); poser(); });
-    expect(ordre()).toBe('bca');
-    act(() => { window.dispatchEvent(ev('pointerup', 105)); });
-    act(() => { entrees()[2].click(); });
+    expect(vue()).toBe('a G[g1 g2] b');
+    appuyer(180); // b
+    glisser(5);   // haut de « a »
+    expect(vue()).toBe('b a G[g1 g2]');
+    act(() => { window.dispatchEvent(ev('pointerup', 5)); });
+    act(() => { lignes()[0].click(); });
     expect(clics).toEqual([]);
   });
 
-  it('pas de va-et-vient : rester sur la cible ne la rééchange pas', () => {
+  it('une page sort de son groupe vers le premier niveau', () => {
     vi.useFakeTimers();
     render(<Menu />);
     poser();
-    act(() => { entrees()[0].dispatchEvent(ev('pointerdown', 20)); });
-    act(() => { vi.advanceTimersByTime(500); });
-    act(() => { window.dispatchEvent(ev('pointermove', 65)); poser(); });
-    act(() => { window.dispatchEvent(ev('pointermove', 70)); poser(); });
-    act(() => { window.dispatchEvent(ev('pointermove', 75)); poser(); });
-    expect(ordre()).toBe('bac');
+    appuyer(85);  // g1
+    glisser(185); // bas de « b »
+    expect(vue()).toBe('a G[g2] b g1');
+  });
+
+  it('une entrée du premier niveau entre dans un groupe', () => {
+    vi.useFakeTimers();
+    render(<Menu />);
+    poser();
+    appuyer(180); // b
+    glisser(145); // bas de g2
+    expect(vue()).toBe('a G[g1 g2 b]');
+  });
+
+  it('s\'attarder sur l\'en-tête d\'un groupe y fait entrer', () => {
+    vi.useFakeTimers();
+    render(<Menu />);
+    poser();
+    appuyer(5);   // a
+    glisser(45);  // en-tête G, moitié haute du groupe : a reste avant G
+    expect(vue()).toBe('a G[g1 g2] b');
+    act(() => { vi.advanceTimersByTime(700); poser(); });
+    expect(vue()).toBe('G[a g1 g2] b');
+  });
+
+  it('un groupe ne se pose pas dans un groupe', () => {
+    vi.useFakeTimers();
+    render(<Menu />);
+    poser();
+    appuyer(45);  // en-tête G
+    glisser(105); // sur g2 : la cible remonte au groupe lui-même
+    expect(vue()).toBe('a G[g1 g2] b');
   });
 
   it('appui bref : rien ne bouge et le clic passe', () => {
     vi.useFakeTimers();
     render(<Menu />);
     poser();
-    act(() => { entrees()[0].dispatchEvent(ev('pointerdown', 20)); });
-    act(() => { vi.advanceTimersByTime(200); window.dispatchEvent(ev('pointerup', 20)); });
-    act(() => { window.dispatchEvent(ev('pointermove', 105)); });
-    act(() => { entrees()[0].click(); });
-    expect(ordre()).toBe('abc');
+    act(() => { lignes()[0].dispatchEvent(ev('pointerdown', 5)); });
+    act(() => { vi.advanceTimersByTime(200); window.dispatchEvent(ev('pointerup', 5)); });
+    glisser(185);
+    act(() => { lignes()[0].click(); });
+    expect(vue()).toBe('a G[g1 g2] b');
     expect(clics).toEqual(['a']);
   });
 
@@ -87,10 +143,10 @@ describe('useReordonnerAppuiLong', () => {
     vi.useFakeTimers();
     render(<Menu />);
     poser();
-    act(() => { entrees()[0].dispatchEvent(ev('pointerdown', 20)); });
+    act(() => { lignes()[0].dispatchEvent(ev('pointerdown', 5)); });
     act(() => { window.dispatchEvent(ev('pointermove', 60)); });
     act(() => { vi.advanceTimersByTime(500); });
-    act(() => { window.dispatchEvent(ev('pointermove', 105)); poser(); });
-    expect(ordre()).toBe('abc');
+    glisser(185);
+    expect(vue()).toBe('a G[g1 g2] b');
   });
 });
