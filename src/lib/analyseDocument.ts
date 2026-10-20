@@ -287,6 +287,49 @@ export function sansFauxConseille(l: LigneAnalysee): LigneAnalysee {
   return l;
 }
 
+/**
+ * ⚠️ **UN MONTANT À MILLIERS ESPACÉS PERD SON PREMIER GROUPE.**
+ *
+ * Les tarifs FLOWFAST de TREMCO (20/10/2026) écrivent « 1 160,57 € » : le
+ * modèle a rendu 160,57, et le prix d'achat d'un fût de 180 kg tombait à
+ * 0,89 €/kg — la colonne « Prix au kg » du même document disait 6,45 €.
+ *
+ * On relit le texte source : un prix lu qui n'y figure QUE comme fin d'un
+ * montant à milliers (« 1 160,57 », jamais seul) reprend le montant entier.
+ * Un montant qui figure aussi seul dans le texte est laissé tel quel. Rend le
+ * nombre de corrections.
+ */
+export function redresserMilliers(a: DocumentAnalysis, texte: string): number {
+  const t = (texte || '').normalize('NFKC');
+  const grands = [...t.matchAll(/(?<![\d,.])(\d{1,3}(?:[ .]\d{3})+,\d{2})(?!\d)/g)].map(m => m[1]);
+  if (!grands.length) return 0;
+  const echappe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const valeur = (s: string) => Number(s.replace(/[ .]/g, '').replace(',', '.'));
+  /* Fin de montant → montant entier, si la fin n'apparaît jamais seule. */
+  const entiers = new Map<number, number>();
+  for (const g of grands) {
+    const groupes = g.split(/[ .](?=\d{3})/);
+    for (let k = 1; k < groupes.length; k++) {
+      const fin = groupes.slice(k).join(' ');
+      const seule = new RegExp(`(?<!\\d[ .]?)(?<!\\d)${echappe(fin).replace(/ /g, '[ .]')}(?!\\d)`).test(t);
+      if (!seule) entiers.set(valeur(fin), valeur(g));
+    }
+  }
+  let corrections = 0;
+  const redresse = (v?: number) => {
+    if (v == null) return v;
+    for (const [fin, entier] of entiers) {
+      if (Math.abs(v - fin) < 0.005) { corrections++; return entier; }
+    }
+    return v;
+  };
+  for (const l of a.lignes) {
+    l.prixUnitaireHT = redresse(l.prixUnitaireHT);
+    l.prixConseille = redresse(l.prixConseille);
+  }
+  return corrections;
+}
+
 /** Un montant lu, nombre ou texte à la française ; `undefined` sinon. */
 export function nombreLu(v: unknown): number | undefined {
   if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;

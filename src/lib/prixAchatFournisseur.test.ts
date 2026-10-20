@@ -4,7 +4,7 @@ import {
   appliquerPrix, articleDepuisLigne, referencePrise, referenceLibre,
   remiseRevendeurCategorie, prixVenteArticle, categorieDuFournisseur, estFraisAnnexe, uniteArticle,
   coefficientsDeVente, venteDepuisCoefficients, noteAchat,
-  prixVenteParCoef, prixAuKg, COEF_REVENDEUR_DEFAUT,
+  prixVenteParCoef, prixAuKg, COEF_REVENDEUR_DEFAUT, publicDepuisRevendeur, categorieParGamme,
 } from './prixAchatFournisseur';
 import type { Produit, ProduitFournisseur, Fournisseur } from './store';
 
@@ -367,6 +367,45 @@ describe('prixVenteParCoef — le revendeur posé par un coefficient sur l’ach
     });
     expect(p.prixRevendeur).toBe(1971.55);
     expect(p.prixHT).toBe(2818.71);
+  });
+});
+
+describe('achat × coef → revendeur → public ÷ (1 − remise)', () => {
+  it('FLOWFAST 101 : 1 160,57 × 1,67 = 1 938,15 ; public à 30 % = 2 768,79', () => {
+    const rev = prixVenteParCoef({ prixAchat: 1160.57, prixHT: 0, coeffRevendeur: 1.67 }).prixRevendeur;
+    expect(rev).toBe(1938.15);
+    const pub = publicDepuisRevendeur(rev, 30);
+    expect(pub).toBe(2768.79);
+    const v = prixVenteParCoef({ prixAchat: 1160.57, prixHT: pub, coeffRevendeur: 1.67, remiseRevendeur: 30 });
+    expect(v.remiseRevendeur).toBe(30);
+    expect(v.prixRevendeur).toBe(1938.15);
+  });
+  it('rien sans revendeur', () => {
+    expect(publicDepuisRevendeur(0, 30)).toBe(0);
+  });
+});
+
+describe('categorieParGamme — FLOWFAST va où sont les FLOWFAST', () => {
+  const art = (reference: string, description: string, categorie: string) =>
+    ({ reference, description, categorie }) as Produit;
+  const produits = [
+    art('FLOWFAST107', 'FLOWFAST 107 CERAMIC PRIMER (20KG)', 'ISOMARK / FLOORING / MMA'),
+    art('FLOWFASTF107', 'FLOWFAST 107 CERAMIC PRIMER (180KG)', 'ISOMARK / FLOORING / MMA'),
+    art('FLOWFAST319', 'FLOWFAST 319', 'ISOMARK / FLOORING / MMA'),
+    art('FLOWFASTF1', 'FLOWFAST F1 MORTAR', 'MMA'),
+    art('EPX1', 'PRIMER EPOXY', 'ISOMARK / FLOORING / EPOXY'),
+    art('EPX2', 'PRIMER EPOXY 2', 'ISOMARK / FLOORING / EPOXY'),
+    art('EPX3', 'PRIMER EPOXY 3', 'ISOMARK / FLOORING / EPOXY'),
+    art('EPX4', 'PRIMER EPOXY 4', 'ISOMARK / FLOORING / EPOXY'),
+  ];
+
+  it('la gamme nommée l’emporte sur les mots génériques', () => {
+    expect(categorieParGamme('MA101 FLOWFAST 101 STAND PRIMER 180KG', produits))
+      .toEqual({ categorie: 'ISOMARK / FLOORING / MMA', gamme: 'FLOWFAST', effectif: 3 });
+  });
+
+  it('rien quand aucun mot n’est une gamme connue', () => {
+    expect(categorieParGamme('Thermocollant Alerte SNCF', produits)).toBeUndefined();
   });
 });
 

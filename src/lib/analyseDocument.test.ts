@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('pdfjs-dist', () => ({ GlobalWorkerOptions: {}, getDocument: vi.fn() }));
 vi.mock('./modelesIA', () => ({ appelerGemini: vi.fn(), texteGemini: vi.fn() }));
 
-import { verifierTotaux, nombreLu, sansFauxConseille, type DocumentAnalysis } from './analyseDocument';
+import { verifierTotaux, nombreLu, sansFauxConseille, redresserMilliers, type DocumentAnalysis } from './analyseDocument';
 
 const doc = (a: Partial<DocumentAnalysis>): DocumentAnalysis =>
   ({ typeDocument: 'devis_fournisseur', lignes: [], ...a });
@@ -62,5 +62,41 @@ describe('sansFauxConseille — un brut égal au net n’est pas un prix conseil
     const l = sansFauxConseille({ reference: '0015339', description: 'PPRF', quantite: 1,
       prixUnitaireHT: 777, prixConseille: 1295, remise: 40 });
     expect(l.prixConseille).toBe(1295);
+  });
+});
+
+describe('redresserMilliers — « 1 160,57 » n’est pas 160,57', () => {
+  const TREMCO = `FL107611526
+MA107 FLOWFAST CRAMIC-METAL PRIMER 180KG
+1 180,57 €
+6,56 €
+FL101611517
+MA101 FLOWFAST 101 STAND PRIMER 180KG
+1 160,57 €
+6,45 €
+FL101611516
+MA101 FLOWFAST 101 STAND PRIMER 20 KG
+148,08 €`;
+  const doc = (prix: number[]): DocumentAnalysis => ({
+    typeDocument: 'devis_fournisseur',
+    lignes: prix.map(p => ({ reference: '', description: '', quantite: 1, prixUnitaireHT: p })),
+  });
+
+  it('rend le millier perdu par la lecture', () => {
+    const a = doc([1180.57, 160.57, 148.08]);
+    expect(redresserMilliers(a, TREMCO)).toBe(1);
+    expect(a.lignes.map(l => l.prixUnitaireHT)).toEqual([1180.57, 1160.57, 148.08]);
+  });
+
+  it('laisse un montant qui figure aussi seul dans le texte', () => {
+    const a = doc([160.57]);
+    expect(redresserMilliers(a, TREMCO + '\nRemise 160,57 €')).toBe(0);
+    expect(a.lignes[0].prixUnitaireHT).toBe(160.57);
+  });
+
+  it('lit l’espace insécable comme séparateur de milliers', () => {
+    const a = doc([160.57]);
+    redresserMilliers(a, 'Prix net 1\u202f160,57 €');
+    expect(a.lignes[0].prixUnitaireHT).toBe(1160.57);
   });
 });

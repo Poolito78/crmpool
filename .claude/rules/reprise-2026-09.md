@@ -478,6 +478,25 @@ devis relancés sortiraient de tous les comptes de devis en cours.
   « Prix de vente précédent : aucun (création) ». **Prix au kg**
   (`prixAuKg`) partout où le poids d'une unité est connu (fiche, ou
   conditionnement écrit dans l'intitulé « PRIMER 180KG » — `poidsDepuisLibelle`).
+- ⚠️ **Ordre des prix de la fiche de création** (règle du 20/10) : 1. achat ×
+  coef. = **revendeur** ; 2. **remise** de la catégorie
+  (`remiseRevendeurCategorie`, 30 % à défaut) ; 3. **public = revendeur ÷
+  (1 − remise)** (`publicDepuisRevendeur`). Un public ÉCRIT par le
+  fournisseur (conseillé, palier « client final ») passe avant ; le
+  coefficient public mesuré sur la catégorie n'est plus employé.
+- **La gamme commande la catégorie** (`categorieParGamme`) : FLOWFAST →
+  « ISOMARK / FLOORING / MMA » (23 articles, contre 15 en « MMA » et 4 en
+  EPOXY) — mot rare (3 à 300 articles) dont les porteurs s'accordent à plus
+  de la moitié ; sinon catégorie habituelle du fournisseur.
+- ⚠️ **« 1 160,57 € » lu 160,57** (tarifs FLOWFAST TREMCO du 20/10) :
+  `redresserMilliers` (`analyseDocument.ts`) relit le texte source — un prix
+  qui n'y figure QUE comme fin d'un montant à milliers reprend le montant
+  entier. Appelé après chaque analyse.
+- **Revendeur Odoo en face de l'article** : la fiche Odoo retenue a souvent
+  son jumeau MonCRM (même `reference` / `reference_odoo`, `origine = 'odoo'`
+  prioritaire) ; son revendeur, son public et son achat s'affichent (au kg
+  si poids), avec « Retenir … au lieu de créer un article ». FLOWFASTF107
+  existe : achat 1 693,19 €, revendeur 2 861,97 €, public 4 088,53 €.
 - Groq rendait 400 `json_validate_failed` vide sur un devis long : repli
   sur Gemini (budget 8192) au lieu d'une erreur.
 - **Déployé** (odoo-achat, 15/10). Si la fonction ne répond pas, l'écran dit

@@ -447,7 +447,7 @@ export function articleDepuisLigne(args: {
    */
   vente?: { prixHT: number; remiseRevendeur: number }
     /* Ou le prix revendeur posé par un coefficient sur l'achat (× 1,67). */
-    | { prixHT: number; coeffRevendeur: number };
+    | { prixHT: number; coeffRevendeur: number; remiseRevendeur?: number };
   /** Référence de la même fiche chez Odoo, quand elle y existe ou y est créée. */
   referenceOdoo?: string;
   /** Unité de vente saisie à la création (« u » à défaut). */
@@ -466,7 +466,7 @@ export function articleDepuisLigne(args: {
   const coefficient = categorie ? coefficientVente(args.produits, categorie) : null;
   const v = args.vente;
   const vente = v && 'coeffRevendeur' in v
-    ? prixVenteParCoef({ prixAchat: args.prixAchat, prixHT: v.prixHT, coeffRevendeur: v.coeffRevendeur })
+    ? prixVenteParCoef({ prixAchat: args.prixAchat, prixHT: v.prixHT, coeffRevendeur: v.coeffRevendeur, remiseRevendeur: v.remiseRevendeur })
     : v && 'remiseRevendeur' in v
     ? prixVenteArticle({ prixAchat: args.prixAchat, prixHT: v.prixHT, remiseRevendeur: v.remiseRevendeur })
     : {
@@ -710,14 +710,73 @@ export function prixVenteParCoef(args: {
   prixAchat: number;
   prixHT: number;
   coeffRevendeur: number;
+  /** Remise qui a SERVI à poser le public (public = revendeur ÷ (1 − remise)) :
+      gardée telle quelle plutôt que recalculée, à l'arrondi près. */
+  remiseRevendeur?: number;
 }): { prixHT: number; prixRevendeur: number; coefficient: number; coeffRevendeur: number; remiseRevendeur: number } {
   const prixHT = Math.round((args.prixHT || 0) * 100) / 100;
   const coef = args.coeffRevendeur > 0 ? args.coeffRevendeur : 1;
   const prixRevendeur = args.prixAchat > 0 ? Math.round(args.prixAchat * coef * 100) / 100 : 0;
-  const remise = prixHT > 0 && prixRevendeur > 0 && prixRevendeur < prixHT
+  const remise = args.remiseRevendeur != null && args.remiseRevendeur >= 0 && args.remiseRevendeur < 100
+    ? args.remiseRevendeur
+    : prixHT > 0 && prixRevendeur > 0 && prixRevendeur < prixHT
     ? Math.round((1 - prixRevendeur / prixHT) * 10000) / 100
     : 0;
   return { prixHT, prixRevendeur, coefficient: coef, coeffRevendeur: coef, remiseRevendeur: remise };
+}
+
+/**
+ * Le prix PUBLIC qui, remisé de la remise revendeur de la catégorie, redonne
+ * le prix revendeur (règle du 20/10) : 30 % de remise → revendeur ÷ 0,7.
+ */
+export function publicDepuisRevendeur(prixRevendeur: number, remise: number): number {
+  if (!(prixRevendeur > 0) || !(remise >= 0) || remise >= 100) return 0;
+  return Math.round(prixRevendeur / (1 - remise / 100) * 100) / 100;
+}
+
+/* Mots de désignation qui disent ce qu'est le produit, jamais sa gamme. */
+const MOTS_GENERIQUES = new Set([
+  'PRIMER', 'BINDER', 'FLEXIBLE', 'STAND', 'STANDARD', 'MORTAR', 'MORTIER', 'LIQUID', 'LIQUIDE',
+  'POWDER', 'POUDRE', 'CERAMIC', 'METAL', 'RESINE', 'RESIN', 'SEAL', 'COLLE', 'VERNIS', 'PEINTURE',
+  'BLANC', 'NOIR', 'GRIS', 'ROUGE', 'JAUNE', 'BLEU', 'VERT', 'SABLE', 'QUARTZ', 'PIGMENT', 'PIGMENTS',
+  'ASPHALT', 'BETON', 'CONCRETE', 'FILLER', 'DURCISSEUR', 'CATALYST', 'SEAU', 'BIDON',
+]);
+
+/**
+ * LA GAMME COMMANDE LA CATÉGORIE (règle du 20/10) : un article FLOWFAST va
+ * où sont déjà les FLOWFAST — « ISOMARK / FLOORING / MMA » (23 articles,
+ * contre 15 dans l'ancienne « MMA » et 4 en EPOXY), et non dans la catégorie
+ * habituelle du fournisseur (EPOXY chez TREMCO).
+ *
+ * Un mot est une gamme s'il est rare au catalogue (entre 3 et 300 articles
+ * qui le portent) et que ces articles s'accordent sur une catégorie (plus de
+ * la moitié). Le premier mot de la désignation qui l'est l'emporte. Sinon
+ * rien : la catégorie reste à choisir.
+ */
+export function categorieParGamme(
+  designation: string,
+  produits: Pick<Produit, 'reference' | 'description' | 'descriptionVariante' | 'categorie'>[],
+): { categorie: string; gamme: string; effectif: number } | undefined {
+  const sans = (s: string) => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+  const mots = [...new Set(sans(designation).split(/[^A-Z0-9]+/)
+    .filter(m => m.length >= 5 && /^[A-Z]+$/.test(m) && !MOTS_GENERIQUES.has(m)))];
+  for (const mot of mots) {
+    const re = new RegExp(`(^|[^A-Z])${mot}([^A-Z]|$)`);
+    const parCat = new Map<string, number>();
+    let porteurs = 0;
+    for (const p of produits) {
+      const t = sans(`${p.reference} ${p.description} ${p.descriptionVariante ?? ''}`);
+      if (!re.test(t)) continue;
+      porteurs++;
+      const c = (p.categorie || '').trim();
+      if (c) parCat.set(c, (parCat.get(c) ?? 0) + 1);
+    }
+    if (porteurs < 3 || porteurs > 300) continue;
+    const [categorie, n] = [...parCat.entries()].sort((a, b) => b[1] - a[1])[0] ?? ['', 0];
+    const total = [...parCat.values()].reduce((s, v) => s + v, 0);
+    if (categorie && n * 2 > total) return { categorie, gamme: mot, effectif: n };
+  }
+  return undefined;
 }
 
 /**

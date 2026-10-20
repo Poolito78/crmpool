@@ -13,7 +13,7 @@ import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, Pl
 import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
 import { lireBonsPourExecution, pagesEnImages, ensemblesBpe, estTasmanPal, type BonPourExecution } from '@/lib/bonPourExecution';
-import { analyserDocument, extrairePagesPDF, type DocumentAnalysis, type LigneAnalysee, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
+import { analyserDocument, extrairePagesPDF, redresserMilliers, type DocumentAnalysis, type LigneAnalysee, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import {
   estPlanKadri, lirePlanDirectionnel, aLireSurImage, avecPanneauxLus, lignesDuPlan, bilanPlan, titreEnsemble, codificationPal,
   TAUX_PAL_REFERENCE,
@@ -78,10 +78,11 @@ import { prixApplicateur, prixRevendeur, prixGamme, publicPourQuantite, niveauGa
 import { prixAuNiveau, prixDansGrille, estNiveauTarif, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
 import { chargerGrille } from '@/lib/grilleTarif.charger';
 import {
-  rapprocherFournisseur, proposerPrix, prixVenteDepuisAchat, articleDepuisLigne, referenceLibre,
-  appliquerPrix, coefficientVente, prixVenteArticle, categorieDuFournisseur, referencePrise,
+  rapprocherFournisseur, proposerPrix, articleDepuisLigne, referenceLibre,
+  appliquerPrix, prixVenteArticle, categorieDuFournisseur, referencePrise,
   estFraisAnnexe, uniteArticle, coefficientsDeVente, venteDepuisCoefficients, noteAchat,
   prixVenteParCoef, prixAuKg, COEF_REVENDEUR_DEFAUT, prixConditionnement,
+  publicDepuisRevendeur, categorieParGamme, remiseRevendeurCategorie,
   type PropositionPrix, type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
 import { choisirPdfPrincipal } from '@/lib/pdfPrincipal';
@@ -961,6 +962,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     reference?: string; designation?: string; categorie?: string; prixHT?: string;
     /** Coefficient revendeur sur l'achat (× 1,67 par défaut). */
     coefRevendeur?: string;
+    /** Remise revendeur qui pose le public (celle de la catégorie par défaut). */
+    remise?: string;
     referenceFournisseur?: string; unite?: string; tva?: string; poids?: string;
     /** Intitulé d'ACHAT (celui du fournisseur) ; `designation` est celui de VENTE. */
     designationAchat?: string;
@@ -1766,6 +1769,9 @@ const [contratOdoo, setContratOdoo] = useState<
         toast.error('Glissez un PDF ou collez du texte'); return;
       }
       analysis = redresserAnalyse(analysis, impose);
+      /* « 1 160,57 € » lu 160,57 : le texte source rend le millier perdu. */
+      const milliers = redresserMilliers(analysis, texteSourceRef.current || texteCtx);
+      if (milliers) toast.info(`${milliers} prix relu${milliers > 1 ? 's' : ''} sur le document : millier oublié par la lecture.`);
       setResult(analysis);
       if (isFournisseurDoc(analysis.typeDocument) && analysis.numeroDocument) {
         const match = commandesFournisseur.find(cf =>
@@ -2254,7 +2260,7 @@ const [contratOdoo, setContratOdoo] = useState<
             date: new Date().toLocaleDateString('fr-FR'),
           }),
           categorie: fiche.categorie, fournisseurId: dfFournisseurId,
-          vente: { prixHT: fiche.vente.prixHT, coeffRevendeur: fiche.coefRevendeur },
+          vente: { prixHT: fiche.vente.prixHT, coeffRevendeur: fiche.coefRevendeur, remiseRevendeur: fiche.vente.remiseRevendeur },
           referenceOdoo: (() => {
             const o = odooPourCreation(i);
             return o?.reference && o.reference !== reference ? o.reference : undefined;
@@ -3300,6 +3306,32 @@ const [contratOdoo, setContratOdoo] = useState<
     return duTexte.length ? duTexte : coefficientsDeVente(result.notes || '');
   }, [result]);
 
+  /* Les articles MonCRM par code, référence comme référence Odoo : la fiche
+     Odoo retenue y a souvent déjà son jumeau, prix Odoo compris. */
+  const produitParCodeOdoo = useMemo(() => {
+    const m = new Map<string, Produit>();
+    for (const p of produits) {
+      for (const c of [p.referenceOdoo, p.reference]) {
+        const k = (c || '').trim().toUpperCase();
+        /* Le jumeau importé d'Odoo l'emporte sur une copie CRM. */
+        if (k && (!m.has(k) || p.origine === 'odoo')) m.set(k, p);
+      }
+    }
+    return m;
+  }, [produits]);
+  const jumeauOdoo = useCallback((ref?: string) =>
+    ref ? produitParCodeOdoo.get(ref.trim().toUpperCase()) : undefined,
+  [produitParCodeOdoo]);
+
+  /* La catégorie que désigne la gamme de chaque ligne (FLOWFAST → MMA),
+     calculée une fois par analyse : elle balaie tout le catalogue. */
+  const gammeDeLigne = useMemo(() => {
+    const m = new Map<number, ReturnType<typeof categorieParGamme>>();
+    if (!result || !isDevisFourn(result.typeDocument)) return m;
+    result.lignes.forEach((l, i) => m.set(i, categorieParGamme(l.description || '', produits)));
+    return m;
+  }, [result, produits]);
+
   /** Coefficient revendeur d'un article existant : saisi, sinon celui de
       l'applicateur conseillé par le fournisseur, sinon × 1,67. */
   const coefRevDeLigne = useCallback((i: number) => {
@@ -3405,33 +3437,53 @@ const [contratOdoo, setContratOdoo] = useState<
     const referenceProposee = odoo?.reference || referenceLibre(refF || (l?.description || '').slice(0, 40), produits);
     const reference = saisie.reference?.trim() || referenceProposee;
     const designation = saisie.designation ?? (odoo?.designation || l?.description || '');
-    const categorie = saisie.categorie ?? (categorieFournisseur || '');
+    /* LA GAMME COMMANDE LA CATÉGORIE (règle du 20/10) : un FLOWFAST va où
+       sont déjà les FLOWFAST ; à défaut, la catégorie habituelle du
+       fournisseur. */
+    const gamme = gammeDeLigne.get(i);
+    const categorie = saisie.categorie ?? (gamme?.categorie || categorieFournisseur || '');
+    const origineCategorie = saisie.categorie !== undefined ? 'saisie à la main'
+      : gamme ? `gamme ${gamme.gamme}, comme ${gamme.effectif} articles du catalogue`
+      : categorieFournisseur ? 'catégorie habituelle du fournisseur' : '';
     const prixAchat = dfPrixDeLigne(i) ?? 0;
-    const coef = categorie.trim() ? coefficientVente(produits, categorie) : null;
-    /* Le prix CONSEILLÉ du fournisseur (P.U. brut avant remise) passe avant le
-       coefficient mesuré : c'est un prix public écrit, pas déduit. */
-    /* Un conseillé égal à l'achat, sans remise, n'est que le PU répété
-       (`sansFauxConseille`) : on ne vend pas au prix d'achat. */
-    const conseille = l?.prixConseille != null && l.prixConseille > 0
-      && !(Math.abs(l.prixConseille - prixAchat) < 0.005 && !(l.remise && l.remise > 0))
-      ? l.prixConseille : undefined;
-    /* Puis le tarif de revente conseillé du pied de devis : public = achat ×
-       coefficient « client final », remise = ce qu'en retire l'applicateur. */
-    const parCoefs = venteDepuisCoefficients(prixAchat, coefsDoc);
-    const prixPropose = conseille ?? parCoefs?.prixHT ?? prixVenteDepuisAchat(prixAchat, coef);
     const nombre = (v: string) => parseFloat(v.replace(',', '.'));
-    const prixHT = saisie.prixHT !== undefined ? (nombre(saisie.prixHT) || 0) : (prixPropose ?? 0);
-    /* LE PRIX REVENDEUR SE POSE PAR UN COEFFICIENT SUR L'ACHAT (règle du
-       20/10) : × 1,67 par défaut, celui de l'applicateur quand le
-       fournisseur en conseille un, et toujours modifiable. La remise
-       revendeur s'en déduit. */
+    /* 1. ACHAT × COEFFICIENT = PRIX REVENDEUR (règle du 20/10) : × 1,67 par
+       défaut, celui de l'applicateur quand le fournisseur en conseille un,
+       toujours modifiable. */
     const revConseille = coefsDoc.find(c => c.role === 'revendeur');
     const coefSaisi = saisie.coefRevendeur !== undefined ? nombre(saisie.coefRevendeur) : NaN;
     const coefRevendeur = coefSaisi > 0 ? coefSaisi : revConseille?.coef ?? COEF_REVENDEUR_DEFAUT;
     const origineCoef = coefSaisi > 0 ? 'saisi à la main'
       : revConseille ? `« ${revConseille.libelle} » conseillé par le fournisseur`
       : 'défaut × 1,67';
-    const vente = prixVenteParCoef({ prixAchat, prixHT, coeffRevendeur: coefRevendeur });
+    const prixRevendeur = prixVenteParCoef({ prixAchat, prixHT: 0, coeffRevendeur: coefRevendeur }).prixRevendeur;
+    /* 2. PUBLIC = REVENDEUR ÷ (1 − REMISE DE LA CATÉGORIE) : 30 % → ÷ 0,7.
+       Un prix public ÉCRIT par le fournisseur (conseillé, palier « client
+       final ») passe avant ; la remise s'en déduit alors. */
+    /* Un conseillé égal à l'achat, sans remise, n'est que le PU répété
+       (`sansFauxConseille`) : on ne vend pas au prix d'achat. */
+    const conseille = l?.prixConseille != null && l.prixConseille > 0
+      && !(Math.abs(l.prixConseille - prixAchat) < 0.005 && !(l.remise && l.remise > 0))
+      ? l.prixConseille : undefined;
+    const parCoefs = venteDepuisCoefficients(prixAchat, coefsDoc);
+    const regleRemise = remiseRevendeurCategorie(produits, categorie);
+    const remiseSaisie = saisie.remise !== undefined ? nombre(saisie.remise) : NaN;
+    const remiseCategorie = remiseSaisie >= 0 && remiseSaisie < 100 ? remiseSaisie : regleRemise?.remise ?? 30;
+    const origineRemise = remiseSaisie >= 0 && remiseSaisie < 100 ? 'saisie à la main'
+      : regleRemise?.origine ?? 'défaut 30 %';
+    const publicEcrit = conseille ?? parCoefs?.prixHT;
+    const prixPropose = publicEcrit ?? publicDepuisRevendeur(prixRevendeur, remiseCategorie);
+    const publicSaisi = saisie.prixHT !== undefined;
+    const prixHT = publicSaisi ? (nombre(saisie.prixHT!) || 0) : prixPropose;
+    const originePublic = publicSaisi ? 'saisi à la main'
+      : conseille != null ? 'prix conseillé du fournisseur'
+      : parCoefs ? 'palier « client final » conseillé par le fournisseur'
+      : `revendeur ÷ (1 − ${String(remiseCategorie).replace('.', ',')} %)`;
+    const vente = prixVenteParCoef({
+      prixAchat, prixHT, coeffRevendeur: coefRevendeur,
+      /* La remise qui a fait le public est gardée telle quelle. */
+      remiseRevendeur: !publicSaisi && publicEcrit == null ? remiseCategorie : undefined,
+    });
     const remise = vente.remiseRevendeur;
     /* Deux intitulés : celui d'ACHAT est la désignation du fournisseur (elle
        reste sur son devis et dans les notes de la fiche) ; celui de VENTE
@@ -3445,10 +3497,11 @@ const [contratOdoo, setContratOdoo] = useState<
     const tva = saisie.tva !== undefined ? (nombre(saisie.tva) || 0) : (l?.tva ?? 20);
     const poidsLu = poidsDepuisLibelle(designationAchat) ?? poidsDepuisLibelle(designation) ?? undefined;
     const poids = saisie.poids !== undefined ? nombre(saisie.poids) : poidsLu;
-    return { reference, referenceProposee, designation, designationAchat, categorie, prixAchat, coef, conseille, prixPropose, vente, remise,
-             coefRevendeur, origineCoef, parCoefs, referenceFournisseur, unite, tva,
+    return { reference, referenceProposee, designation, designationAchat, categorie, origineCategorie, prixAchat, conseille, prixPropose, vente, remise,
+             prixRevendeur, coefRevendeur, origineCoef, remiseCategorie, origineRemise, originePublic, publicSaisi, parCoefs,
+             referenceFournisseur, unite, tva,
              poids: poids != null && poids > 0 ? poids : undefined, poidsLu, saisie };
-  }, [result, dfFiche, odooPourCreation, produits, categorieFournisseur, dfPrixDeLigne, coefsDoc]);
+  }, [result, dfFiche, odooPourCreation, produits, categorieFournisseur, dfPrixDeLigne, coefsDoc, gammeDeLigne]);
 
   /* Ce qu'Odoo connaît des lignes, relu quand le fournisseur ou l'article
      MonCRM d'une ligne change — en LECTURE seule. */
@@ -3496,7 +3549,7 @@ const [contratOdoo, setContratOdoo] = useState<
   const ficheArticleAchat = (i: number) => {
     const f = ficheProposee(i);
     const prixAchat = dfPrixDeLigne(i);
-    const maj = (champ: 'reference' | 'designation' | 'categorie' | 'prixHT' | 'coefRevendeur'
+    const maj = (champ: 'reference' | 'designation' | 'categorie' | 'prixHT' | 'coefRevendeur' | 'remise'
       | 'referenceFournisseur' | 'unite' | 'tva' | 'poids' | 'designationAchat', v: string) => {
       dfTouche.current = true;
       setDfFiche(prev => ({ ...prev, [i]: { ...prev[i], [champ]: v } }));
@@ -3586,38 +3639,49 @@ const [contratOdoo, setContratOdoo] = useState<
                 ? <span className="text-[10px] text-muted-foreground">lu dans l'intitulé</span> : null}
             </label>
           </div>
-          <label className="space-y-0.5">
-            <span className="text-[10px] text-muted-foreground">Prix public HT</span>
-            <Input
-              className="h-7 text-xs text-right tabular-nums" inputMode="decimal"
-              placeholder={f.prixPropose != null ? String(f.prixPropose) : 'à saisir'}
-              value={f.saisie.prixHT ?? (f.prixPropose != null ? String(f.prixPropose) : '')}
-              onChange={e => maj('prixHT', e.target.value)}
-            />
-            {auKg(f.vente.prixHT)}
-          </label>
-          <div className="space-y-0.5">
-            <span className="text-[10px] text-muted-foreground">Prix revendeur HT = achat × coef.</span>
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-muted-foreground">×</span>
+          {/* L'ordre du chargé d'affaires : achat × coef. = REVENDEUR, puis
+              revendeur ÷ (1 − remise de la catégorie) = PUBLIC. */}
+          <div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-1.5 rounded border border-border p-1.5">
+            <div className="space-y-0.5">
+              <span className="text-[10px] text-muted-foreground"><strong className="text-foreground">1. Revendeur</strong> = achat × coef.</span>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground">×</span>
+                <Input
+                  className="h-7 w-16 text-xs text-right tabular-nums" inputMode="decimal"
+                  title="Coefficient revendeur sur le prix d'achat"
+                  value={f.saisie.coefRevendeur ?? String(f.coefRevendeur).replace('.', ',')}
+                  onChange={e => maj('coefRevendeur', e.target.value)}
+                />
+                <span className="flex-1 text-right text-xs font-medium tabular-nums">
+                  {f.vente.prixRevendeur > 0 ? formatMontant(f.vente.prixRevendeur) : '—'}
+                </span>
+              </div>
+              {auKg(f.vente.prixRevendeur)}
+            </div>
+            <label className="space-y-0.5">
+              <span className="text-[10px] text-muted-foreground"><strong className="text-foreground">2. Remise</strong> revendeur %</span>
               <Input
-                className="h-7 w-16 text-xs text-right tabular-nums" inputMode="decimal"
-                title="Coefficient revendeur sur le prix d'achat"
-                value={f.saisie.coefRevendeur ?? String(f.coefRevendeur).replace('.', ',')}
-                onChange={e => maj('coefRevendeur', e.target.value)}
+                className="h-7 text-xs text-right tabular-nums" inputMode="decimal"
+                disabled={f.publicSaisi || f.conseille != null || !!f.parCoefs}
+                title="Remise de la catégorie : le public = revendeur ÷ (1 − remise)"
+                value={f.saisie.remise ?? String(f.remise).replace('.', ',')}
+                onChange={e => maj('remise', e.target.value)}
               />
-              <span className="flex-1 text-right text-xs font-medium tabular-nums">
-                {f.vente.prixRevendeur > 0 ? formatMontant(f.vente.prixRevendeur) : '—'}
-              </span>
-            </div>
-            <div className="flex justify-between gap-2">
-              {auKg(f.vente.prixRevendeur) ?? <span />}
-              {f.vente.prixHT > 0 && (
-                f.vente.prixRevendeur >= f.vente.prixHT
-                  ? <span className="text-[10px] text-warning">au-dessus du public</span>
-                  : <span className="text-[10px] text-muted-foreground">remise {String(f.vente.remiseRevendeur).replace('.', ',')} % sur le public</span>
-              )}
-            </div>
+              <span className="text-[10px] text-muted-foreground">{f.origineRemise}</span>
+            </label>
+            <label className="space-y-0.5">
+              <span className="text-[10px] text-muted-foreground"><strong className="text-foreground">3. Public</strong> HT</span>
+              <Input
+                className="h-7 text-xs text-right tabular-nums" inputMode="decimal"
+                placeholder="à saisir"
+                value={f.saisie.prixHT ?? (f.prixPropose > 0 ? String(f.prixPropose) : '')}
+                onChange={e => maj('prixHT', e.target.value)}
+              />
+              {auKg(f.vente.prixHT)}
+            </label>
+            {f.vente.prixHT > 0 && f.vente.prixRevendeur >= f.vente.prixHT && (
+              <p className="sm:col-span-3 text-[10px] text-warning">Revendeur au-dessus du public : à revoir.</p>
+            )}
           </div>
         </div>
         {/* Le tarif de revente du pied de devis, palier par palier : prix net
@@ -3646,18 +3710,10 @@ const [contratOdoo, setContratOdoo] = useState<
         )}
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           {f.vente.prixHT > 0
-            ? null
+            ? <>Public : {f.originePublic}. </>
             : <span className="text-warning">Prix public à saisir : l'article serait créé sans prix public. </span>}
-          {f.conseille != null && f.saisie.prixHT === undefined
-            ? <>Prix public = prix conseillé du fournisseur ({formatMontant(f.conseille)}). </>
-            : f.parCoefs && f.saisie.prixHT === undefined
-            ? <>Prix public = achat × coefficient « client final » conseillé ({formatMontant(f.parCoefs.prixHT)}). </>
-            : f.coef
-            ? f.coef.fiable
-              ? <>Coef. public {f.coef.coef.toFixed(2)} mesuré sur {f.coef.effectif} articles « {f.coef.categorie} ». </>
-              : <>Coef. public {f.coef.coef.toFixed(2)} de « {f.coef.categorie} » trop dispersé : non appliqué. </>
-            : f.categorie.trim() ? <>Aucun coefficient mesurable sur « {f.categorie} ». </> : null}
           Coef. revendeur : {f.origineCoef}.
+          {f.origineCategorie ? <> Catégorie : {f.origineCategorie}.</> : null}
         </p>
       </div>
     );
@@ -3699,19 +3755,61 @@ const [contratOdoo, setContratOdoo] = useState<
           </div>
         ) : (
           <>
-            {propositions.map(t => (
-              <button
-                key={t.id} type="button" title="Retenir cet article Odoo"
-                onClick={() => setDfOdooChoix(prev => ({ ...prev, [i]: t }))}
-                className="flex w-full items-baseline gap-2 text-[11px] rounded px-1 py-0.5 text-left hover:bg-primary/10"
-              >
-                <span className="font-mono text-[10px]">{t.reference || `#${t.id}`}</span>
-                <span className="truncate flex-1" title={t.designation}>{t.designation}</span>
-              </button>
-            ))}
+            {propositions.map(t => {
+              const j = jumeauOdoo(t.reference);
+              return (
+                <button
+                  key={t.id} type="button" title="Retenir cet article Odoo"
+                  onClick={() => setDfOdooChoix(prev => ({ ...prev, [i]: t }))}
+                  className="flex w-full items-baseline gap-2 text-[11px] rounded px-1 py-0.5 text-left hover:bg-primary/10"
+                >
+                  <span className="font-mono text-[10px]">{t.reference || `#${t.id}`}</span>
+                  <span className="truncate flex-1" title={t.designation}>{t.designation}</span>
+                  {j && j.prixRevendeur > 0 && (
+                    <span className="shrink-0 text-muted-foreground tabular-nums">rev. {formatMontant(j.prixRevendeur)}</span>
+                  )}
+                </button>
+              );
+            })}
             {!propositions.length && <p className="text-[11px] text-muted-foreground">Aucun article Odoo ne correspond.</p>}
           </>
         )}
+        {/* LE PRIX REVENDEUR D'ODOO EN FACE DE L'ARTICLE (règle du 20/10) :
+            la fiche Odoo retenue a souvent son jumeau au catalogue MonCRM
+            (FLOWFASTF107, 180 kg : revendeur 2 861,97 €). On le montre, et on
+            propose de le reprendre plutôt que de créer un doublon. */}
+        {retenu && (() => {
+          const j = jumeauOdoo(retenu.reference);
+          if (!j) return <p className="text-[10px] text-muted-foreground">Pas de fiche MonCRM pour cet article Odoo.</p>;
+          const poids = poidsUnitaireDe(j);
+          const kg = (v: number) => {
+            const k = prixAuKg(v, poids);
+            return k != null ? <span className="text-muted-foreground"> ({formatMontant(k)}/kg)</span> : null;
+          };
+          const dejaRetenu = propositionsFournisseur.get(i)?.produit?.id === j.id && !dfCreer[i];
+          return (
+            <div className="text-[11px] tabular-nums flex flex-wrap items-baseline gap-x-3 gap-y-0.5 pl-5">
+              <span><span className="text-muted-foreground">Revendeur Odoo </span>
+                <strong>{j.prixRevendeur > 0 ? formatMontant(j.prixRevendeur) : 'aucun'}</strong>{j.prixRevendeur > 0 && kg(j.prixRevendeur)}</span>
+              <span><span className="text-muted-foreground">public </span>
+                {j.prixHT > 0 ? <>{formatMontant(j.prixHT)}{kg(j.prixHT)}</> : 'aucun'}</span>
+              <span><span className="text-muted-foreground">achat </span>
+                {j.prixAchat > 0 ? <>{formatMontant(j.prixAchat)}{kg(j.prixAchat)}</> : 'aucun'}</span>
+              {!dejaRetenu && (
+                <button
+                  type="button"
+                  className="text-primary underline underline-offset-2"
+                  onClick={() => {
+                    dfTouche.current = true;
+                    setChoixProduit(prev => ({ ...prev, [i]: j.id }));
+                    setDfCreer(prev => ({ ...prev, [i]: false }));
+                    setDfVersLien(prev => ({ ...prev, [i]: true }));
+                  }}
+                >Retenir {j.reference} au lieu de créer un article</button>
+              )}
+            </div>
+          );
+        })()}
       </div>
     );
   };
