@@ -4,7 +4,7 @@ import {
   appliquerPrix, articleDepuisLigne, referencePrise, referenceLibre,
   remiseRevendeurCategorie, prixVenteArticle, categorieDuFournisseur, estFraisAnnexe, uniteArticle,
   coefficientsDeVente, venteDepuisCoefficients, noteAchat,
-  prixVenteParCoef, prixAuKg, COEF_REVENDEUR_DEFAUT, publicDepuisRevendeur, categorieParGamme,
+  prixVenteParCoef, prixAuKg, COEF_REVENDEUR_DEFAUT, publicDepuisRevendeur, categorieParGamme, articlesComparables,
 } from './prixAchatFournisseur';
 import type { Produit, ProduitFournisseur, Fournisseur } from './store';
 
@@ -406,6 +406,28 @@ describe('categorieParGamme — FLOWFAST va où sont les FLOWFAST', () => {
 
   it('rien quand aucun mot n’est une gamme connue', () => {
     expect(categorieParGamme('Thermocollant Alerte SNCF', produits)).toBeUndefined();
+  });
+});
+
+describe('articlesComparables — ce qui existe avant de créer', () => {
+  const art = (reference: string, description: string) => ({ reference, description }) as Produit;
+  const produits = [
+    art('FLOWFASTF107', 'FLOWFAST 107 CERAMIC PRIMER (180KG)'),
+    art('FLOWFAST107', 'FLOWFAST 107 CERAMIC PRIMER (20KG)'),
+    art('FLOWFASTF101', 'FLOWFAST 101 STANDARD PRIMER (180KG)'),
+    art('EPX1', 'PRIMER EPOXY 180KG'),
+    ...Array.from({ length: 40 }, (_, k) => art(`P${k}`, `PRIMER DIVERS ${k}`)),
+  ];
+
+  it('retrouve le fût de 180 kg malgré « CRAMIC »', () => {
+    const r = articlesComparables('MA107 FLOWFAST CRAMIC-METAL PRIMER 180KG', produits);
+    expect(r[0].produit.reference).toBe('FLOWFASTF107');
+    expect(r.map(x => x.produit.reference)).toContain('FLOWFAST107');
+  });
+
+  it('un mot générique seul ne suffit pas', () => {
+    const r = articlesComparables('PRIMER 12', produits);
+    expect(r).toEqual([]);
   });
 });
 

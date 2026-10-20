@@ -779,6 +779,74 @@ export function categorieParGamme(
   return undefined;
 }
 
+/* ── Les articles du catalogue à mettre en regard d'une ligne ────────────── */
+
+const MOTS_VIDES = new Set(['KG', 'KGS', 'DE', 'DU', 'LA', 'LE', 'LES', 'ET', 'EN', 'POUR', 'AVEC', 'SUR', 'UN', 'UNE', 'IS', 'SO']);
+
+/** Les mots d'un libellé, plus les chiffres et lettres d'un code collé (« MA107 » → 107). */
+function motsDe(texte: string): Set<string> {
+  const s = new Set<string>();
+  const brut = (texte || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+  for (const m of brut.split(/[^A-Z0-9]+/)) {
+    if (m.length < 2 || MOTS_VIDES.has(m)) continue;
+    s.add(m);
+    if (/\d/.test(m) && /[A-Z]/.test(m)) {
+      for (const p of m.match(/\d+|[A-Z]{3,}/g) ?? []) if (!MOTS_VIDES.has(p)) s.add(p);
+    }
+  }
+  return s;
+}
+const motsArticle = new WeakMap<object, Set<string>>();
+
+/**
+ * LES ARTICLES DÉJÀ AU CATALOGUE, À COMPARER (règle du 20/10).
+ *
+ * « MA107 FLOWFAST CRAMIC-METAL PRIMER 180KG » chez TREMCO ne se rapprochait
+ * de rien — « CRAMIC » est une faute — alors que FLOWFASTF107 « FLOWFAST 107
+ * CERAMIC PRIMER (180KG) » est au catalogue, prix Odoo compris. Avant de créer,
+ * on montre ce qui existe.
+ *
+ * Score : somme des mots communs, chacun pesé par sa rareté au catalogue
+ * (log N / fréquence) — « FLOWFAST » et « 107 » comptent, « PRIMER » peu.
+ * Il faut deux mots communs dont un vrai mot (4 lettres ou plus).
+ */
+export function articlesComparables<P extends Pick<Produit, 'reference' | 'description' | 'descriptionVariante'>>(
+  designation: string,
+  produits: P[],
+  max = 5,
+): { produit: P; score: number; communs: string[] }[] {
+  const q = motsDe(designation);
+  if (!q.size || !produits.length) return [];
+  const mots = (p: P) => {
+    let m = motsArticle.get(p);
+    if (!m) {
+      m = motsDe(`${p.reference} ${p.descriptionVariante ?? ''} ${p.description}`);
+      motsArticle.set(p, m);
+    }
+    return m;
+  };
+  const freq = new Map<string, number>();
+  const porteurs: { p: P; communs: string[] }[] = [];
+  for (const p of produits) {
+    const m = mots(p);
+    const communs = [...q].filter(t => m.has(t));
+    if (!communs.length) continue;
+    for (const t of communs) freq.set(t, (freq.get(t) ?? 0) + 1);
+    if (communs.length >= 2 && communs.some(t => /^[A-Z]{4,}$/.test(t))) porteurs.push({ p, communs });
+  }
+  const n = produits.length;
+  const poids = (t: string) => Math.log(n / (1 + (freq.get(t) ?? 0)));
+  /* Un mot RARE au moins (5 % du catalogue au plus) : « PRIMER » partagé par
+     cent articles ne désigne rien. */
+  const rare = (t: string) => /^[A-Z]{4,}$/.test(t) && (freq.get(t) ?? 0) <= Math.max(5, n * 0.05);
+  return porteurs
+    .filter(({ communs }) => communs.some(rare))
+    .map(({ p, communs }) => ({ produit: p, communs, score: communs.reduce((s, t) => s + poids(t), 0) }))
+    .sort((a, b) => b.score - a.score
+      || (a.produit.descriptionVariante ?? a.produit.description).length - (b.produit.descriptionVariante ?? b.produit.description).length)
+    .slice(0, max);
+}
+
 /**
  * Le prix ramené au kilo, quand on connaît le poids d'une unité : un fût de
  * 180 kg à 1 180,57 € revient à 6,56 €/kg. Rien sans poids : on ne devine pas.

@@ -82,7 +82,7 @@ import {
   appliquerPrix, prixVenteArticle, categorieDuFournisseur, referencePrise,
   estFraisAnnexe, uniteArticle, coefficientsDeVente, venteDepuisCoefficients, noteAchat,
   prixVenteParCoef, prixAuKg, COEF_REVENDEUR_DEFAUT, prixConditionnement,
-  publicDepuisRevendeur, categorieParGamme, remiseRevendeurCategorie,
+  publicDepuisRevendeur, categorieParGamme, remiseRevendeurCategorie, articlesComparables,
   type PropositionPrix, type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
 import { choisirPdfPrincipal } from '@/lib/pdfPrincipal';
@@ -150,15 +150,18 @@ function LienFiche({ produit }: { produit: Produit }) {
  * qu'en quittant le champ : chaque frappe relancerait le rapprochement sur
  * tout le catalogue.
  */
-function ChampLigne({ valeur, onValider, className, placeholder, nombre }: {
+function ChampLigne({ valeur, onValider, className, placeholder, nombre, ajuste }: {
   valeur: string; onValider: (v: string) => void;
   className?: string; placeholder?: string; nombre?: boolean;
+  /** La largeur suit le contenu : « 1180,57 » ne doit pas s'afficher « 1180,5 ». */
+  ajuste?: boolean;
 }) {
   const [brouillon, setBrouillon] = useState(valeur);
   useEffect(() => { setBrouillon(valeur); }, [valeur]);
   const valider = () => { if (brouillon !== valeur) onValider(brouillon); };
   return (
     <Input
+      style={ajuste ? { width: `${Math.max(6, brouillon.length + 3)}ch` } : undefined}
       className={`h-7 text-xs ${className ?? ''}`}
       placeholder={placeholder}
       inputMode={nombre ? 'decimal' : undefined}
@@ -3332,6 +3335,17 @@ const [contratOdoo, setContratOdoo] = useState<
     return m;
   }, [result, produits]);
 
+  /* Les articles MonCRM proches de chaque ligne, à mettre en regard avant de
+     créer (« CRAMIC » ne rapprochait rien, FLOWFASTF107 existait). Une fois
+     par analyse : la recherche balaie le catalogue. */
+  const comparablesDeLigne = useMemo(() => {
+    const m = new Map<number, Produit[]>();
+    if (!result || !isDevisFourn(result.typeDocument)) return m;
+    result.lignes.forEach((l, i) => m.set(i,
+      articlesComparables([l.reference, l.description].filter(Boolean).join(' '), produits).map(x => x.produit)));
+    return m;
+  }, [result, produits]);
+
   /** Coefficient revendeur d'un article existant : saisi, sinon celui de
       l'applicateur conseillé par le fournisseur, sinon × 1,67. */
   const coefRevDeLigne = useCallback((i: number) => {
@@ -3715,6 +3729,77 @@ const [contratOdoo, setContratOdoo] = useState<
           Coef. revendeur : {f.origineCoef}.
           {f.origineCategorie ? <> Catégorie : {f.origineCategorie}.</> : null}
         </p>
+      </div>
+    );
+  };
+
+  /**
+   * Les articles MonCRM proches de la ligne, prix en regard : achat,
+   * revendeur et public, au kilo quand le poids est connu, et le prix lu sur
+   * le devis pour comparer. Un clic retient l'article au lieu d'en créer un.
+   */
+  const comparablesAchat = (i: number) => {
+    const retenu = propositionsFournisseur.get(i)?.produit;
+    const liste = (comparablesDeLigne.get(i) ?? []).filter(p => !retenu || dfCreer[i] || p.id !== retenu.id);
+    if (!liste.length) return null;
+    const prixLu = dfPrixDeLigne(i);
+    const cellule = (v: number, poids: number | null) => {
+      if (!(v > 0)) return <span className="text-muted-foreground">—</span>;
+      const k = prixAuKg(v, poids);
+      return <>{formatMontant(v)}{k != null && <div className="text-[10px] text-muted-foreground">{formatMontant(k)}/kg</div>}</>;
+    };
+    return (
+      <div className="mt-1 rounded border border-border bg-background/60 p-1">
+        <p className="text-[10px] font-medium text-muted-foreground px-1">Articles déjà dans MonCRM — à comparer avant de créer</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px] tabular-nums">
+            <thead>
+              <tr className="text-[10px] text-muted-foreground">
+                <th className="text-left font-normal px-1">Article</th>
+                <th className="text-right font-normal px-1">Achat</th>
+                <th className="text-right font-normal px-1">Revendeur</th>
+                <th className="text-right font-normal px-1">Public</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {liste.map(p => {
+                const poids = poidsUnitaireDe(p);
+                const ecart = prixLu != null && p.prixAchat > 0 ? (prixLu - p.prixAchat) / p.prixAchat * 100 : undefined;
+                return (
+                  <tr key={p.id} className="border-t border-border/50 align-top">
+                    <td className="px-1 py-0.5">
+                      <span className="font-mono text-[10px]">{p.reference}</span>
+                      <div className="truncate max-w-[260px]" title={designationProduit(p)}>{designationProduit(p)}</div>
+                    </td>
+                    <td className="px-1 py-0.5 text-right">
+                      {cellule(p.prixAchat, poids)}
+                      {ecart != null && Math.abs(ecart) >= 0.5 && (
+                        <div className={`text-[10px] ${ecart > 0 ? 'text-destructive' : 'text-success'}`}>
+                          devis {ecart > 0 ? '+' : ''}{ecart.toFixed(1)} %
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-1 py-0.5 text-right">{cellule(p.prixRevendeur, poids)}</td>
+                    <td className="px-1 py-0.5 text-right">{cellule(p.prixHT, poids)}</td>
+                    <td className="px-1 py-0.5 text-right">
+                      <button
+                        type="button"
+                        className="text-primary underline underline-offset-2 whitespace-nowrap"
+                        onClick={() => {
+                          dfTouche.current = true;
+                          setChoixProduit(prev => ({ ...prev, [i]: p.id }));
+                          setDfCreer(prev => ({ ...prev, [i]: false }));
+                          setDfVersLien(prev => ({ ...prev, [i]: true }));
+                        }}
+                      >Retenir</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   };
@@ -8454,8 +8539,8 @@ const [contratOdoo, setContratOdoo] = useState<
                           <thead>
                             <tr className="text-muted-foreground border-b">
                               <th className="text-left font-medium py-1.5 px-1">Ligne du document</th>
-                              <th className="text-right font-medium py-1.5 px-1 w-24" title="Prix conseillé (brut avant remise) et remise lus sur le document">Conseillé</th>
-                              <th className="text-right font-medium py-1.5 px-1 w-24" title="Prix unitaire NET : le prix d'achat">Prix net</th>
+                              <th className="text-right font-medium py-1.5 px-1 whitespace-nowrap" title="Prix conseillé (brut avant remise) et remise lus sur le document">Conseillé</th>
+                              <th className="text-right font-medium py-1.5 px-1 whitespace-nowrap" title="Prix unitaire NET : le prix d'achat">Prix net</th>
                               <th className="text-right font-medium py-1.5 px-1 w-28 hidden sm:table-cell">Aujourd'hui</th>
                               <th className="text-center font-medium py-1.5 px-1 w-20">Fiche fourn.</th>
                               <th className="text-center font-medium py-1.5 px-1 w-20" title="Le prix net devient le prix d'achat de l'article">Prix achat</th>
@@ -8549,6 +8634,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                           />
                                           <span>Ce n'est pas cet article : créer un nouvel article dans MonCRM</span>
                                         </label>
+                                        {dfCreer[i] && comparablesAchat(i)}
                                         {dfCreer[i] && ficheArticleAchat(i)}
                                         {blocOdooAchat(i)}
                                       </div>
@@ -8568,6 +8654,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                             setDfVersLien(prev => ({ ...prev, [i]: true }));
                                           }}
                                         />
+                                        {comparablesAchat(i)}
                                         <label className="flex items-center gap-1.5 cursor-pointer">
                                           <input
                                             type="checkbox"
@@ -8592,7 +8679,7 @@ const [contratOdoo, setContratOdoo] = useState<
 
                                   <td className="py-1.5 px-1 text-right tabular-nums space-y-1">
                                     <ChampLigne
-                                      className="text-right tabular-nums" placeholder="—" nombre
+                                      className="ml-auto text-right tabular-nums" placeholder="—" nombre ajuste
                                       valeur={l.prixConseille != null ? String(l.prixConseille) : ''}
                                       onValider={v => {
                                         const p = parseFloat(v.replace(',', '.'));
@@ -8603,10 +8690,12 @@ const [contratOdoo, setContratOdoo] = useState<
                                   </td>
 
                                   <td className="py-1.5 px-1 text-right">
+                                    {/* La cellule suit le chiffre : « 1180,57 » se lisait « 1180,5 ». */}
                                     <Input
                                       type="number"
                                       step="0.01"
-                                      className="h-7 text-xs text-right tabular-nums"
+                                      style={{ width: `${Math.max(8, String(prix ?? '').length + 5)}ch` }}
+                                      className="ml-auto h-7 text-xs text-right tabular-nums"
                                       value={prix ?? ''}
                                       onChange={e => {
                                         dfTouche.current = true;

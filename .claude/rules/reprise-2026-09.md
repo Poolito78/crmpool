@@ -497,6 +497,12 @@ devis relancés sortiraient de tous les comptes de devis en cours.
   prioritaire) ; son revendeur, son public et son achat s'affichent (au kg
   si poids), avec « Retenir … au lieu de créer un article ». FLOWFASTF107
   existe : achat 1 693,19 €, revendeur 2 861,97 €, public 4 088,53 €.
+- **Articles MonCRM à comparer avant de créer** (`articlesComparables`) :
+  sous une ligne absente du catalogue (ou « ce n'est pas cet article »),
+  5 articles proches — mots communs pesés par leur rareté, un mot rare
+  (≤ 5 % du catalogue) exigé — avec achat (écart au devis), revendeur et
+  public, au kg, et « Retenir ». « CRAMIC » ne rapprochait pas FLOWFASTF107.
+  Cellules Conseillé / Prix net à la largeur du chiffre.
 - Groq rendait 400 `json_validate_failed` vide sur un devis long : repli
   sur Gemini (budget 8192) au lieu d'une erreur.
 - **Déployé** (odoo-achat, 15/10). Si la fonction ne répond pas, l'écran dit
