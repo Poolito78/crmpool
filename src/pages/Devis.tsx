@@ -915,7 +915,50 @@ export default function Devis() {
 
 
 
+  /**
+   * ⚠️ **UN DEVIS ENREGISTRÉ GARDE LES PRIX DE SA CONCEPTION** (règle du
+   * 21/10/2026). Un nouveau prix vaut pour les devis faits après lui, jamais
+   * pour ceux d'avant.
+   *
+   * DEV-2026-039, réalisé le 11/06 pour 10 493,12 € (tarif revendeur du
+   * jour), s'est retrouvé à 11 277,20 € puis affiché bien au-delà : les prix
+   * FLOWFAST remis à jour les 19 et 20/10 ont été réappliqués à ses lignes,
+   * sans que personne l'ait demandé, puis enregistrés en silence.
+   *
+   * Les lignes présentes à l'ouverture d'un devis enregistré sont donc
+   * FIGÉES : un recalcul de quantité (surface, conso, catalyseur, granulats,
+   * paliers) change la quantité, jamais le prix unitaire. Seuls la re-
+   * tarification demandée (bouton, niveau, confirmées) et le choix d'un autre
+   * article ou d'une autre variante posent le prix du jour. Une ligne AJOUTÉE
+   * aujourd'hui prend, elle, le prix d'aujourd'hui.
+   */
+  const lignesFigeesRef = useRef<Set<string>>(new Set());
+  const prixConserve = (l: Pick<LigneDevis, 'id' | 'prixUnitaireHT'>, prixDuJour: number): number =>
+    lignesFigeesRef.current.has(l.id) ? l.prixUnitaireHT : prixDuJour;
+  /* Les quantités CALCULÉES (catalyseur, granulats d'un mortier) ne bougent
+     pas non plus à la seule ouverture : DEV-2026-039 passait de 7 à 5 sacs de
+     Catalyst sans qu'on y touche. Elles suivent dès qu'on modifie ce qui les
+     commande — résine, mortier, épaisseur, température. */
+  const signatureOuvertureRef = useRef('');
+  const signatureCalculs = (ls: LigneDevis[]) => JSON.stringify(ls
+    .filter(l => l.produitId && !l.granulatDe && l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte')
+    /* Le catalyseur est le RÉSULTAT : seule sa température compte, pas sa quantité. */
+    .map(l => estCatalyseur(produitParId(produits, l.produitId))
+      ? [l.id, 'catalyseur', l.temperatureCatalyse ?? null]
+      : [l.id, l.produitId, l.quantite, l.epaisseurMm ?? null]));
+  const calculsAOuverture = (ls: LigneDevis[]) =>
+    lignesFigeesRef.current.size > 0 && signatureCalculs(ls) === signatureOuvertureRef.current;
+  /** Re-tarifer un devis enregistré aux prix du jour se demande, et se confirme. */
+  const accepteRetarif = (): boolean => lignesFigeesRef.current.size === 0
+    || window.confirm(`Ce devis a été établi le ${new Date(dateCreation).toLocaleDateString('fr-FR')} : ses prix sont ceux de ce jour-là.\n\nLe re-tarifer aux prix d'aujourd'hui ?`);
+
   function populateForm(d: DevisType) {
+    /* Un devis déjà enregistré (il est dans la liste) fige ses lignes ; une
+       version restaurée aussi — c'est le même devis. */
+    lignesFigeesRef.current = devis.some(x => x.id === d.id)
+      ? new Set(d.lignes.map(l => l.id))
+      : new Set();
+    signatureOuvertureRef.current = signatureCalculs(d.lignes);
     setClientId(d.clientId);
     setContactId(d.contactId || '');
     setDateCreation(d.dateCreation);
@@ -955,15 +998,10 @@ export default function Devis() {
         }
       }
 
-      // Recalculer le prix des lignes dont la variante choisie a un prixDiff
-      // (corrige les valeurs sauvées avant l'implémentation du +prixDiff)
-      if (prod && l.variantesChoisies) {
-        const diff = getVarianteDiff(prod, l.variantesChoisies);
-        if (diff !== 0) {
-          const cl = clients.find(c => c.id === d.clientId);
-          maj = { ...maj, prixUnitaireHT: getPrixLigne(prod, l.quantite, l.variantesChoisies, cl?.estRevendeur, d.niveauTarif ?? null) };
-        }
-      }
+      /* ⚠️ Plus de re-tarification à l'ouverture. Les lignes à variante
+         (prixDiff) étaient recalculées ici « pour corriger les valeurs sauvées
+         avant le +prixDiff » — au prix du JOUR : ouvrir un devis de juin le
+         re-tarifait aux prix d'octobre. Le prix enregistré fait foi. */
 
       return { ...l, ...maj, id: l.id };
     }));
@@ -994,6 +1032,7 @@ export default function Devis() {
   }
 
   function openNew() {
+    lignesFigeesRef.current = new Set();   // devis neuf : prix du jour
     openedViaUrlRef.current = false;
     returnToRef.current = null;
     setEditingId(null);
@@ -1248,6 +1287,7 @@ export default function Devis() {
      main (`catalyseManuelle`). Rien n'est réécrit quand aucune résine n'a pu
      être comptée : un 0 « calculé » sur un devis à vérifier serait faux. */
   useEffect(() => {
+    if (calculsAOuverture(lignes)) return;   // devis rouvert, rien touché : il reste tel quel
     const r = repartitionCatalyse(lignes);
     if (!r) return;
     let change = false;
@@ -1264,6 +1304,7 @@ export default function Devis() {
      kits de la ligne du mortier × kg par kit du mélange de son épaisseur. Une
      quantité forcée à la main (`qteMode: 'manuel'`) n'est plus réécrite. */
   useEffect(() => {
+    if (calculsAOuverture(lignes)) return;   // devis rouvert, rien touché : il reste tel quel
     let change = false;
     const estRev = clients.find(c => c.id === clientId)?.estRevendeur;
     const suivantes = lignes.map(l => {
@@ -1275,7 +1316,7 @@ export default function Devis() {
       const q = quantiteGranulat(parent.quantite, a, art?.poids);
       if (q === l.quantite) return l;
       change = true;
-      return { ...l, quantite: q, ...(art && q > 0 ? { prixUnitaireHT: getPrixLigne(art, q, l.variantesChoisies, estRev) } : {}) };
+      return { ...l, quantite: q, ...(art && q > 0 ? { prixUnitaireHT: prixConserve(l, getPrixLigne(art, q, l.variantesChoisies, estRev)) } : {}) };
     });
     if (change) setLignes(suivantes);
   }, [lignes, produits]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1329,7 +1370,7 @@ export default function Devis() {
         // La conso est au m² : une ligne au ml la garde, sans recalcul (comme `appliquerConso`).
         if (uniteL(l) === 'm2' && surface > 0) {
           const quantite = calcQuantiteSurface(mortier, surface, calc.consoKitKgM2, l.unite, 'm2');
-          parent = { ...parent, quantite, prixUnitaireHT: getPrixLigne(mortier, quantite, l.variantesChoisies, estRev), ...(l.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}) };
+          parent = { ...parent, quantite, prixUnitaireHT: prixConserve(l, getPrixLigne(mortier, quantite, l.variantesChoisies, estRev)), ...(l.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}) };
         }
       }
       const ajouts = calc?.ajouts ?? [];
@@ -1950,7 +1991,7 @@ export default function Devis() {
         const p = produitParId(produits, l.produitId);
         if (p && p.paliersPrix && p.paliersPrix.length > 0 && !varianteDeLigne(p, l.variantesChoisies)) {
           const client = clients.find(c => c.id === clientId);
-          updated.prixUnitaireHT = prixDeBase(p, value as number, client?.estRevendeur);
+          updated.prixUnitaireHT = prixConserve(l, prixDeBase(p, value as number, client?.estRevendeur));
         }
       }
       return updated;
@@ -2085,7 +2126,7 @@ export default function Devis() {
       const q = qtes.get(l.id);
       if (q == null || q === l.quantite) return l;
       const p = l.produitId ? produitParId(produits, l.produitId) : null;
-      return { ...l, quantite: q, ...(p && q > 0 ? { prixUnitaireHT: getPrixLigne(p, q, l.variantesChoisies, client?.estRevendeur) } : {}) };
+      return { ...l, quantite: q, ...(p && q > 0 ? { prixUnitaireHT: prixConserve(l, getPrixLigne(p, q, l.variantesChoisies, client?.estRevendeur)) } : {}) };
     });
   }
 
@@ -2107,7 +2148,7 @@ export default function Devis() {
         const surface = surfaceL(l);
         if (!(surface > 0 && consoPourSurface(p, consoDeLigne(l, uniteL(l)), uniteL(l)) != null)) return { ...l, qteMode: 'surface' as const };
         const quantite = calcQuantiteSurface(p, surface, consoDeLigne(l, uniteL(l)), l.unite, uniteL(l));
-        return { ...l, qteMode: 'surface' as const, quantite, prixUnitaireHT: getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur) };
+        return { ...l, qteMode: 'surface' as const, quantite, prixUnitaireHT: prixConserve(l, getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur)) };
       }));
     });
   }
@@ -2313,7 +2354,7 @@ export default function Devis() {
       const surface = surfaceL(l);
       // Le préréglage est en kg/m² : une ligne au ml garde sa quantité.
       const quantite = surface > 0 && uniteL(l) === 'm2' ? calcQuantiteSurface(prod, surface, conso, l.unite, 'm2') : l.quantite;
-      const prixUnitaireHT = getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur);
+      const prixUnitaireHT = prixConserve(l, getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur));
       return { ...l, consommation: conso, consoUsage: preset.label, quantite, ...(l.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), prixUnitaireHT };
     })));
     toast.success(`${preset.label} : ${lignesMoquette.length} ligne(s) Flowbind / marbre recalculée(s)`);
@@ -2389,22 +2430,39 @@ export default function Devis() {
   // Recalculer les prix quand le client change (revendeur / remises par catégorie)
   const prevClientIdRef = useRef(clientId);
   const prevDialogOpenRef = useRef(dialogOpen);
+  const prevEditingIdRef = useRef(editingId);
   useEffect(() => {
     /* ⚠️ L'OUVERTURE d'un devis charge son client d'un coup (populateForm) : ce
        n'est pas un changement de client. Sans cette garde, la réouverture
-       re-tarifait les lignes et remettait toutes les remises à 0. */
+       re-tarifait les lignes et remettait toutes les remises à 0. Passer d'un
+       devis à un autre, dialogue ouvert (retour de fiche produit, lien du
+       CRM), n'en est pas un non plus. */
     const venaitDOuvrir = dialogOpen && !prevDialogOpenRef.current;
+    const autreDevis = editingId !== prevEditingIdRef.current;
     prevDialogOpenRef.current = dialogOpen;
-    if (!dialogOpen || venaitDOuvrir || clientId === prevClientIdRef.current) {
+    prevEditingIdRef.current = editingId;
+    if (!dialogOpen || venaitDOuvrir || autreDevis || clientId === prevClientIdRef.current) {
       prevClientIdRef.current = clientId;
       return;
     }
     prevClientIdRef.current = clientId;
     const client = clients.find(c => c.id === clientId);
+    /* UN DEVIS ENREGISTRÉ GARDE SES PRIX (règle du 21/10) : changer son client
+       ne le re-tarifie plus d'office — on le propose, un clic l'applique. */
+    if (lignesFigeesRef.current.size > 0) {
+      toast.info('Client changé : les prix du devis sont conservés.', {
+        duration: 10000,
+        action: {
+          label: 'Re-tarifer pour ce client',
+          onClick: () => { saveSnapshot(); void appliquerNiveauTarif(client?.niveauTarif || '', client?.estRevendeur, { remiseAZero: true }); },
+        },
+      });
+      return;
+    }
     /* Le niveau de la fiche client pré-remplit celui du devis ; le sélecteur
        de l'en-tête permet ensuite de le changer pour ce devis seulement. */
     void appliquerNiveauTarif(client?.niveauTarif || '', client?.estRevendeur, { remiseAZero: true });
-  }, [clientId, dialogOpen, clients, produits]);
+  }, [clientId, dialogOpen, editingId, clients, produits]);
 
   function save(silent = false): string | null {
     if (!clientId && statut !== 'système') { if (!silent) toast.error('Sélectionnez un client'); return null; }
@@ -2673,6 +2731,8 @@ export default function Devis() {
    */
   function changerUniteApercu(d: DevisType, u: UniteSurface, garder: boolean) {
     const client = clients.find(c => c.id === d.clientId);
+    /* Devis enregistré : ses prix sont ceux de sa conception, seules les quantités suivent. */
+    const enregistre = devis.some(x => x.id === d.id);
     let d2 = changerUniteDevis(d, u, garder, id => produitParId(produits, id));
     if (!garder) {
       d2 = { ...d2, lignes: d2.lignes.map(l => {
@@ -2681,7 +2741,7 @@ export default function Devis() {
         const surface = surfaceDeLigne(l, d2.surfaceGlobaleM2 || 0, u);
         if (!p || !(surface > 0) || consoPourSurface(p, consoDeLigne(l, u), u) == null) return l;
         const quantite = calcQuantiteSurface(p, surface, consoDeLigne(l, u), l.unite, u);
-        return { ...l, quantite, prixUnitaireHT: getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur, d.niveauTarif ?? null) };
+        return { ...l, quantite, prixUnitaireHT: enregistre ? l.prixUnitaireHT : getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur, d.niveauTarif ?? null) };
       }) };
     }
     setPreviewDevis(d2);
@@ -2713,7 +2773,7 @@ export default function Devis() {
       const surface = surfaceDeLigne(base, surfaceGlobaleM2, uniteSurface);
       if (!p || !(surface > 0) || consoPourSurface(p, consoDeLigne(l, u), u) == null) return base;
       const quantite = calcQuantiteSurface(p, surface, consoDeLigne(l, u), l.unite, u);
-      return { ...base, quantite, prixUnitaireHT: getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur) };
+      return { ...base, quantite, prixUnitaireHT: prixConserve(l, getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur)) };
     })));
   }
 
@@ -2735,7 +2795,7 @@ export default function Devis() {
       const sansManuel = l.qteMode === 'manuel' ? { qteMode: undefined } : {};
       if (!p || consoPourSurface(p, consoDeLigne(l, uniteSurface) || undefined, uniteSurface) == null) return { ...l, ...sansManuel, surfaceM2: surfaceGlobaleM2 };
       const quantite = calcQuantiteSurface(p, surfaceGlobaleM2, consoDeLigne(l, uniteSurface), l.unite);
-      const prixUnitaireHT = getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur);
+      const prixUnitaireHT = prixConserve(l, getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur));
       return { ...l, ...sansManuel, quantite, surfaceM2: surfaceGlobaleM2, prixUnitaireHT };
     })));
   }
@@ -3983,7 +4043,7 @@ export default function Devis() {
                         <Label className="text-xs">Niveau de tarif</Label>
                         <Select
                           value={niveauTarif || 'aucun'}
-                          onValueChange={v => void appliquerNiveauTarif(estNiveauTarif(v) ? v : '', clientCourant?.estRevendeur)}
+                          onValueChange={v => { if (!accepteRetarif()) return; saveSnapshot(); void appliquerNiveauTarif(estNiveauTarif(v) ? v : '', clientCourant?.estRevendeur); }}
                         >
                           <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                           <SelectContent>
@@ -3996,7 +4056,7 @@ export default function Devis() {
                             gardaient le prix public du modèle. */}
                         <button type="button" className="mt-0.5 text-[11px] text-primary hover:underline"
                           title="Recalcule le prix de toutes les lignes d'article au niveau choisi et aux remises client (ISOFLOOR, ACCESSOIRES…). Les prix saisis à la main sont remplacés."
-                          onClick={() => { saveSnapshot(); void appliquerNiveauTarif(niveauTarif, clientCourant?.estRevendeur); toast.success('Lignes re-tarifées'); }}>
+                          onClick={() => { if (!accepteRetarif()) return; saveSnapshot(); void appliquerNiveauTarif(niveauTarif, clientCourant?.estRevendeur); toast.success('Lignes re-tarifées aux prix du jour'); }}>
                           ↻ Re-tarifer les lignes
                         </button>
                         {clientCourant && niveauFiche !== niveauTarif && (
@@ -4499,7 +4559,7 @@ export default function Devis() {
                                 const surface = surfaceL(l);
                                 const quantite = prod && surface > 0 && consoPourSurface(prod, conso, u) != null ? calcQuantiteSurface(prod, surface, conso, l.unite, u) : l.quantite;
                                 const client = clients.find(c => c.id === clientId);
-                                const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
+                                const prixUnitaireHT = prod ? prixConserve(l, getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur)) : undefined;
                                 setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, ...champ, quantite, ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li)));
                               };
                               const colLineaire = visibleLigneCols.has('lineaire');
@@ -4510,7 +4570,7 @@ export default function Devis() {
                                 const conso = consoDeLigne(l, u);
                                 const quantite = prod && surface > 0 && consoPourSurface(prod, conso, u) != null ? calcQuantiteSurface(prod, surface, conso, l.unite, u) : l.quantite;
                                 const client = clients.find(c => c.id === clientId);
-                                const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
+                                const prixUnitaireHT = prod ? prixConserve(l, getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur)) : undefined;
                                 setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? {
                                   ...li, uniteSurface: u === uniteSurface ? undefined : u, surfaceM2: surface, quantite,
                                   ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}),

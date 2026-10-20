@@ -509,6 +509,30 @@ devis relancés sortiraient de tous les comptes de devis en cours.
   « Odoo n'a pas répondu » et seul MonCRM est rapproché. Redéployée le 15/10
   sans le mode `creer` : la fonction ne fait plus que lire.
 
+## Un devis garde les prix de sa conception (21 oct.)
+
+⚠️ **Règle** : un nouveau prix vaut pour les devis faits après lui, jamais
+pour ceux d'avant. DEV-2026-039 (11/06, 10 493,12 € au revendeur) était à
+11 277,20 € le 20/10 — les FLOWFAST remis à jour les 19-20/10 réappliqués à
+ses lignes, et le Catalyst passé de 7 à 5 — sans entrée « modification » à
+l'historique : écrit par un enregistrement silencieux (`save(true)`).
+
+- **Lignes figées** (`lignesFigeesRef`, `prixConserve`, `Devis.tsx`) : celles
+  d'un devis enregistré, à l'ouverture. Un recalcul de quantité (surface,
+  conso, unité, épaisseur, paliers, granulats) garde leur prix unitaire. Une
+  ligne ajoutée aujourd'hui, ou un autre article / une autre variante choisi,
+  prend le prix du jour.
+- **Plus de re-tarif à l'ouverture** : `populateForm` recalculait les lignes
+  à variante (prixDiff) au prix du jour — retiré.
+- **Changement de client sur un devis enregistré** : aucun re-tarif d'office,
+  une notification propose « Re-tarifer pour ce client ». Changer de devis
+  dialogue ouvert n'est plus pris pour un changement de client.
+- **Re-tarif explicite** (bouton, sélecteur de niveau) : confirmation « Ce
+  devis a été établi le … » sur un devis enregistré.
+- **Catalyseur et granulats** ne bougent plus à la seule ouverture
+  (`calculsAOuverture`) : ils suivent dès que résine, mortier, épaisseur ou
+  température changent.
+
 ## Envoi Odoo : contact et chantier (15 oct.)
 
 Le devis arrivait chez Odoo sans contact ni chantier. `buildOdooPayload`
