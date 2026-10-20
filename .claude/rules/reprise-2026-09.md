@@ -469,6 +469,15 @@ devis relancés sortiraient de tous les comptes de devis en cours.
   l'article) ≠ **intitulé d'ACHAT** (celui du fournisseur, gardé au devis
   fournisseur et dans `produits.notes` avec les paliers — `noteAchat`).
   Pas de colonne dédiée à l'intitulé d'achat sur `produit_fournisseurs`.
+- **Prix revendeur = achat × coefficient** (règle du 20/10,
+  `prixVenteParCoef`, `COEF_REVENDEUR_DEFAUT` = **1,67**, modifiable ;
+  celui de l'applicateur conseillé par le fournisseur s'il y en a un) : la
+  remise revendeur s'en DÉDUIT du public, elle n'est plus saisie. Article
+  existant : ligne « Vente » sous la ligne (achat, public et revendeur
+  actuels, case « Nouveau revendeur = achat × [1,67] ») ; article créé :
+  « Prix de vente précédent : aucun (création) ». **Prix au kg**
+  (`prixAuKg`) partout où le poids d'une unité est connu (fiche, ou
+  conditionnement écrit dans l'intitulé « PRIMER 180KG » — `poidsDepuisLibelle`).
 - Groq rendait 400 `json_validate_failed` vide sur un devis long : repli
   sur Gemini (budget 8192) au lieu d'une erreur.
 - **Déployé** (odoo-achat, 15/10). Si la fonction ne répond pas, l'écran dit

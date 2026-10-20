@@ -445,7 +445,9 @@ export function articleDepuisLigne(args: {
    * catégorie, retouchées à la main). Absent : le prix public suit le
    * coefficient mesuré, s'il est fiable, et rien n'est remisé.
    */
-  vente?: { prixHT: number; remiseRevendeur: number };
+  vente?: { prixHT: number; remiseRevendeur: number }
+    /* Ou le prix revendeur posé par un coefficient sur l'achat (× 1,67). */
+    | { prixHT: number; coeffRevendeur: number };
   /** Référence de la même fiche chez Odoo, quand elle y existe ou y est créée. */
   referenceOdoo?: string;
   /** Unité de vente saisie à la création (« u » à défaut). */
@@ -462,8 +464,11 @@ export function articleDepuisLigne(args: {
     || 'NOUVEAU';
   const categorie = (args.categorie || '').trim() || undefined;
   const coefficient = categorie ? coefficientVente(args.produits, categorie) : null;
-  const vente = args.vente
-    ? prixVenteArticle({ prixAchat: args.prixAchat, ...args.vente })
+  const v = args.vente;
+  const vente = v && 'coeffRevendeur' in v
+    ? prixVenteParCoef({ prixAchat: args.prixAchat, prixHT: v.prixHT, coeffRevendeur: v.coeffRevendeur })
+    : v && 'remiseRevendeur' in v
+    ? prixVenteArticle({ prixAchat: args.prixAchat, prixHT: v.prixHT, remiseRevendeur: v.remiseRevendeur })
     : {
         prixHT: prixVenteDepuisAchat(args.prixAchat, coefficient) ?? 0,
         coefficient: 1, coeffRevendeur: 1, remiseRevendeur: 0, prixRevendeur: 0,
@@ -685,6 +690,43 @@ export function prixVenteArticle(args: {
     ? Math.round(prixRevendeur / args.prixAchat * 10000) / 10000
     : 1;
   return { prixHT, prixRevendeur, coefficient, coeffRevendeur: coefficient, remiseRevendeur: remise };
+}
+
+/**
+ * Coefficient revendeur proposé par défaut sur le prix d'ACHAT (règle du
+ * 20/10/2026) : × 1,67, soit 40 % de marge sur le prix revendeur.
+ * Modifiable ligne par ligne à l'import.
+ */
+export const COEF_REVENDEUR_DEFAUT = 1.67;
+
+/**
+ * Les prix de vente quand le prix REVENDEUR se pose par un coefficient sur
+ * l'achat (FLOWFAST 107 : 1 180,57 € × 1,67 = 1 971,55 €), le prix public
+ * restant celui retenu à côté. La remise revendeur s'en DÉDUIT — elle n'est
+ * plus saisie. Un revendeur au-dessus du public ne donne aucune remise
+ * (l'écran le signale) plutôt qu'une remise négative.
+ */
+export function prixVenteParCoef(args: {
+  prixAchat: number;
+  prixHT: number;
+  coeffRevendeur: number;
+}): { prixHT: number; prixRevendeur: number; coefficient: number; coeffRevendeur: number; remiseRevendeur: number } {
+  const prixHT = Math.round((args.prixHT || 0) * 100) / 100;
+  const coef = args.coeffRevendeur > 0 ? args.coeffRevendeur : 1;
+  const prixRevendeur = args.prixAchat > 0 ? Math.round(args.prixAchat * coef * 100) / 100 : 0;
+  const remise = prixHT > 0 && prixRevendeur > 0 && prixRevendeur < prixHT
+    ? Math.round((1 - prixRevendeur / prixHT) * 10000) / 100
+    : 0;
+  return { prixHT, prixRevendeur, coefficient: coef, coeffRevendeur: coef, remiseRevendeur: remise };
+}
+
+/**
+ * Le prix ramené au kilo, quand on connaît le poids d'une unité : un fût de
+ * 180 kg à 1 180,57 € revient à 6,56 €/kg. Rien sans poids : on ne devine pas.
+ */
+export function prixAuKg(prix: number | undefined, poidsKg: number | null | undefined): number | undefined {
+  if (prix == null || !(prix > 0) || !poidsKg || !(poidsKg > 0)) return undefined;
+  return Math.round(prix / poidsKg * 100) / 100;
 }
 
 /**

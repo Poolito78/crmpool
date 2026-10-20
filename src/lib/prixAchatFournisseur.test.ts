@@ -4,6 +4,7 @@ import {
   appliquerPrix, articleDepuisLigne, referencePrise, referenceLibre,
   remiseRevendeurCategorie, prixVenteArticle, categorieDuFournisseur, estFraisAnnexe, uniteArticle,
   coefficientsDeVente, venteDepuisCoefficients, noteAchat,
+  prixVenteParCoef, prixAuKg, COEF_REVENDEUR_DEFAUT,
 } from './prixAchatFournisseur';
 import type { Produit, ProduitFournisseur, Fournisseur } from './store';
 
@@ -341,6 +342,41 @@ Qté
     expect(note).toContain("Intitulé d'achat chez COM'ROAD (réf. IMP/MESURE) : Support imprimé Govel Dia 80");
     expect(note).toContain('- grand compte × 1,25 = 62,50 €');
     expect(note).toContain('- client final × 2 = 100,00 €');
+  });
+});
+
+describe('prixVenteParCoef — le revendeur posé par un coefficient sur l’achat', () => {
+  it('FLOWFAST 107 : 1 180,57 € × 1,67, public 2 818,71 €', () => {
+    const v = prixVenteParCoef({ prixAchat: 1180.57, prixHT: 2818.71, coeffRevendeur: 1.67 });
+    expect(v.prixRevendeur).toBe(1971.55);
+    expect(v.coeffRevendeur).toBe(1.67);
+    expect(v.remiseRevendeur).toBe(30.05);
+  });
+
+  it('sans prix public, le revendeur est posé et aucune remise inventée', () => {
+    const v = prixVenteParCoef({ prixAchat: 50, prixHT: 0, coeffRevendeur: 1.6 });
+    expect(v.prixRevendeur).toBe(80);
+    expect(v.remiseRevendeur).toBe(0);
+  });
+
+  it('articleDepuisLigne accepte le coefficient revendeur', () => {
+    const p = articleDepuisLigne({
+      id: 'n', designation: 'FLOWFAST 107', prixAchat: 1180.57, produits: [],
+      horodate: '2026-10-20T10:00:00Z', aujourdhui: '2026-10-20',
+      vente: { prixHT: 2818.71, coeffRevendeur: COEF_REVENDEUR_DEFAUT },
+    });
+    expect(p.prixRevendeur).toBe(1971.55);
+    expect(p.prixHT).toBe(2818.71);
+  });
+});
+
+describe('prixAuKg', () => {
+  it('ramène un fût de 180 kg au kilo', () => {
+    expect(prixAuKg(1180.57, 180)).toBe(6.56);
+  });
+  it('rien sans poids', () => {
+    expect(prixAuKg(1180.57, undefined)).toBeUndefined();
+    expect(prixAuKg(1180.57, 0)).toBeUndefined();
   });
 });
 

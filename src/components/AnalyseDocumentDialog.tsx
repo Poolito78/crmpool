@@ -1,6 +1,6 @@
 import { prochainNumero, prochainNumeroDevis } from '@/lib/numeroDevis';
 import { useSocietes } from '@/hooks/useSocietes';
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -79,8 +79,9 @@ import { prixAuNiveau, prixDansGrille, estNiveauTarif, type NiveauTarif, type Gr
 import { chargerGrille } from '@/lib/grilleTarif.charger';
 import {
   rapprocherFournisseur, proposerPrix, prixVenteDepuisAchat, articleDepuisLigne, referenceLibre,
-  appliquerPrix, coefficientVente, remiseRevendeurCategorie, prixVenteArticle, categorieDuFournisseur, referencePrise,
+  appliquerPrix, coefficientVente, prixVenteArticle, categorieDuFournisseur, referencePrise,
   estFraisAnnexe, uniteArticle, coefficientsDeVente, venteDepuisCoefficients, noteAchat,
+  prixVenteParCoef, prixAuKg, COEF_REVENDEUR_DEFAUT, prixConditionnement,
   type PropositionPrix, type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
 import { choisirPdfPrincipal } from '@/lib/pdfPrincipal';
@@ -944,6 +945,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
    * prix que voient les clients. Un article créé le prend, lui, par sa fiche.
    */
   const [dfVersPublic, setDfVersPublic] = useState<Record<number, boolean>>({});
+  /** Article EXISTANT : coefficient revendeur saisi (× 1,67 par défaut)… */
+  const [dfCoefRev, setDfCoefRev] = useState<Record<number, string>>({});
+  /** …et lignes dont le prix revendeur = achat × ce coefficient est appliqué. */
+  const [dfVersRevendeur, setDfVersRevendeur] = useState<Record<number, boolean>>({});
   /** Lignes hors catalogue dont on veut créer l'article. */
   const [dfCreer, setDfCreer] = useState<Record<number, boolean>>({});
   const [dfEnCours, setDfEnCours] = useState(false);
@@ -953,7 +958,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
    * `ficheProposee`). Les nombres restent en texte pendant la saisie.
    */
   const [dfFiche, setDfFiche] = useState<Record<number, {
-    reference?: string; designation?: string; categorie?: string; prixHT?: string; remise?: string;
+    reference?: string; designation?: string; categorie?: string; prixHT?: string;
+    /** Coefficient revendeur sur l'achat (× 1,67 par défaut). */
+    coefRevendeur?: string;
     referenceFournisseur?: string; unite?: string; tva?: string; poids?: string;
     /** Intitulé d'ACHAT (celui du fournisseur) ; `designation` est celui de VENTE. */
     designationAchat?: string;
@@ -1640,6 +1647,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setClientsProposes([]);
     setDfFournisseurId(''); setDfPrix({});
     setDfVersLien({}); setDfVersArticle({}); setDfCreer({}); setDfVersPublic({});
+    setDfCoefRev({}); setDfVersRevendeur({});
     setDfFiche({}); setDfOdoo(null); setDfOdooEtat(''); setDfOdooChoix({}); setDfOdooPartenaire(undefined);
     dfTouche.current = false;
     chercheFaitePour.current = null;
@@ -2173,6 +2181,8 @@ const [contratOdoo, setContratOdoo] = useState<
     const creesParCode = new Map<string, Produit>();
     /* Prix conseillé à poser en prix PUBLIC d'un article existant. */
     const publics = new Map<string, number>();
+    /* Prix REVENDEUR d'un article existant : achat × coefficient. */
+    const revendeurs = new Map<string, { achat: number; coef: number }>();
     /* Cocher « créer » sur une occurrence vaut pour toutes celles du même code. */
     const codeDe = (l: { reference?: string }) => (l.reference || '').trim().toUpperCase();
     const codesACreer = new Set((result.lignes || []).filter((l, j) => dfCreer[j] && codeDe(l)).map(codeDe));
@@ -2244,7 +2254,7 @@ const [contratOdoo, setContratOdoo] = useState<
             date: new Date().toLocaleDateString('fr-FR'),
           }),
           categorie: fiche.categorie, fournisseurId: dfFournisseurId,
-          vente: { prixHT: fiche.vente.prixHT, remiseRevendeur: fiche.remise },
+          vente: { prixHT: fiche.vente.prixHT, coeffRevendeur: fiche.coefRevendeur },
           referenceOdoo: (() => {
             const o = odooPourCreation(i);
             return o?.reference && o.reference !== reference ? o.reference : undefined;
@@ -2261,6 +2271,14 @@ const [contratOdoo, setContratOdoo] = useState<
         }
         if (dfVersPublic[i] && l.prixConseille != null && l.prixConseille > 0) {
           publics.set(article.id, l.prixConseille);
+        }
+        /* Prix revendeur = achat × coefficient, sur le prix du CONDITIONNEMENT
+           (un prix lu au kilo est d'abord ramené au fût, comme l'achat). */
+        if (dfVersRevendeur[i] && prix != null) {
+          revendeurs.set(article.id, {
+            achat: prixConditionnement(prix, article, { designation: l.description, quantite: l.quantite, unite: l.unite }),
+            coef: coefRevDeLigne(i),
+          });
         }
       }
 
@@ -2327,6 +2345,22 @@ const [contratOdoo, setContratOdoo] = useState<
       }));
     }
 
+    /* Après le public : le revendeur posé au coefficient l'emporte sur celui
+       que le public recalculé vient de déduire de la remise. */
+    if (revendeurs.size) {
+      updateProduits(prev => prev.map(p => {
+        const r = revendeurs.get(p.id);
+        if (!r) return p;
+        const v = prixVenteParCoef({ prixAchat: r.achat, prixHT: p.prixHT, coeffRevendeur: r.coef });
+        return {
+          ...p,
+          prixRevendeur: v.prixRevendeur, coeffRevendeur: v.coeffRevendeur, coefficient: v.coefficient,
+          ...(p.prixHT > 0 ? { remiseRevendeur: v.remiseRevendeur } : {}),
+          prixVenteMaj: horodate,
+        };
+      }));
+    }
+
     if (liaisonsOdoo.size) {
       updateProduits(prev => prev.map(p =>
         liaisonsOdoo.has(p.id) ? { ...p, referenceOdoo: liaisonsOdoo.get(p.id) } : p));
@@ -2372,6 +2406,7 @@ const [contratOdoo, setContratOdoo] = useState<
     const quoi = [
       appliquees ? `${appliquees} prix appliqué${appliquees > 1 ? 's' : ''}` : null,
       publics.size ? `${publics.size} prix public${publics.size > 1 ? 's' : ''} repris du prix conseillé` : null,
+      revendeurs.size ? `${revendeurs.size} prix revendeur${revendeurs.size > 1 ? 's' : ''} posé${revendeurs.size > 1 ? 's' : ''} au coefficient` : null,
       nouveauxArticles.length ? `${nouveauxArticles.length} article${nouveauxArticles.length > 1 ? 's' : ''} créé${nouveauxArticles.length > 1 ? 's' : ''}` : null,
     ].filter(Boolean).join(', ');
     toast.success(quoi ? `Devis fournisseur enregistré — ${quoi}` : 'Devis fournisseur enregistré');
@@ -3265,6 +3300,13 @@ const [contratOdoo, setContratOdoo] = useState<
     return duTexte.length ? duTexte : coefficientsDeVente(result.notes || '');
   }, [result]);
 
+  /** Coefficient revendeur d'un article existant : saisi, sinon celui de
+      l'applicateur conseillé par le fournisseur, sinon × 1,67. */
+  const coefRevDeLigne = useCallback((i: number) => {
+    const saisi = parseFloat((dfCoefRev[i] ?? '').replace(',', '.'));
+    return saisi > 0 ? saisi : coefsDoc.find(c => c.role === 'revendeur')?.coef ?? COEF_REVENDEUR_DEFAUT;
+  }, [dfCoefRev, coefsDoc]);
+
   /** Ce qu'il faut faire de chaque ligne, en l'état des choix de l'écran. */
   const propositionsFournisseur = useMemo<Map<number, PropositionPrix>>(() => {
     const m = new Map<number, PropositionPrix>();
@@ -3366,7 +3408,6 @@ const [contratOdoo, setContratOdoo] = useState<
     const categorie = saisie.categorie ?? (categorieFournisseur || '');
     const prixAchat = dfPrixDeLigne(i) ?? 0;
     const coef = categorie.trim() ? coefficientVente(produits, categorie) : null;
-    const regleRemise = remiseRevendeurCategorie(produits, categorie);
     /* Le prix CONSEILLÉ du fournisseur (P.U. brut avant remise) passe avant le
        coefficient mesuré : c'est un prix public écrit, pas déduit. */
     /* Un conseillé égal à l'achat, sans remise, n'est que le PU répété
@@ -3380,24 +3421,33 @@ const [contratOdoo, setContratOdoo] = useState<
     const prixPropose = conseille ?? parCoefs?.prixHT ?? prixVenteDepuisAchat(prixAchat, coef);
     const nombre = (v: string) => parseFloat(v.replace(',', '.'));
     const prixHT = saisie.prixHT !== undefined ? (nombre(saisie.prixHT) || 0) : (prixPropose ?? 0);
-    const remiseProposee = (conseille == null ? parCoefs?.remiseRevendeur : undefined) ?? regleRemise?.remise ?? 30;
-    const remise = saisie.remise !== undefined ? (nombre(saisie.remise) || 0) : remiseProposee;
-    const origineRemise = saisie.remise !== undefined ? 'saisie à la main'
-      : conseille == null && parCoefs?.remiseRevendeur != null ? 'coefficient revendeur conseillé par le fournisseur'
-      : regleRemise?.origine ?? 'défaut de la fiche article';
-    const vente = prixVenteArticle({ prixAchat, prixHT, remiseRevendeur: remise });
-    /* Le reste de la fiche : lu sur le document, corrigeable. Le poids ne
-       se lit pas sur un devis — vide tant qu'on ne le saisit pas. */
-    const referenceFournisseur = saisie.referenceFournisseur ?? refF;
-    const unite = saisie.unite ?? (uniteArticle(l?.unite) || 'u');
-    const tva = saisie.tva !== undefined ? (nombre(saisie.tva) || 0) : (l?.tva ?? 20);
-    const poids = saisie.poids !== undefined ? nombre(saisie.poids) : undefined;
+    /* LE PRIX REVENDEUR SE POSE PAR UN COEFFICIENT SUR L'ACHAT (règle du
+       20/10) : × 1,67 par défaut, celui de l'applicateur quand le
+       fournisseur en conseille un, et toujours modifiable. La remise
+       revendeur s'en déduit. */
+    const revConseille = coefsDoc.find(c => c.role === 'revendeur');
+    const coefSaisi = saisie.coefRevendeur !== undefined ? nombre(saisie.coefRevendeur) : NaN;
+    const coefRevendeur = coefSaisi > 0 ? coefSaisi : revConseille?.coef ?? COEF_REVENDEUR_DEFAUT;
+    const origineCoef = coefSaisi > 0 ? 'saisi à la main'
+      : revConseille ? `« ${revConseille.libelle} » conseillé par le fournisseur`
+      : 'défaut × 1,67';
+    const vente = prixVenteParCoef({ prixAchat, prixHT, coeffRevendeur: coefRevendeur });
+    const remise = vente.remiseRevendeur;
     /* Deux intitulés : celui d'ACHAT est la désignation du fournisseur (elle
        reste sur son devis et dans les notes de la fiche) ; celui de VENTE
        nomme l'article dans nos devis clients. */
     const designationAchat = saisie.designationAchat ?? (l?.description || '');
-    return { reference, referenceProposee, designation, designationAchat, categorie, prixAchat, coef, conseille, regleRemise, prixPropose, vente, remise,
-             origineRemise, parCoefs, referenceFournisseur, unite, tva, poids: poids != null && poids > 0 ? poids : undefined, saisie };
+    /* Le reste de la fiche : lu sur le document, corrigeable. Le poids vient
+       du conditionnement ÉCRIT dans un intitulé (« PRIMER 180KG »), sinon
+       il reste vide — jamais deviné. */
+    const referenceFournisseur = saisie.referenceFournisseur ?? refF;
+    const unite = saisie.unite ?? (uniteArticle(l?.unite) || 'u');
+    const tva = saisie.tva !== undefined ? (nombre(saisie.tva) || 0) : (l?.tva ?? 20);
+    const poidsLu = poidsDepuisLibelle(designationAchat) ?? poidsDepuisLibelle(designation) ?? undefined;
+    const poids = saisie.poids !== undefined ? nombre(saisie.poids) : poidsLu;
+    return { reference, referenceProposee, designation, designationAchat, categorie, prixAchat, coef, conseille, prixPropose, vente, remise,
+             coefRevendeur, origineCoef, parCoefs, referenceFournisseur, unite, tva,
+             poids: poids != null && poids > 0 ? poids : undefined, poidsLu, saisie };
   }, [result, dfFiche, odooPourCreation, produits, categorieFournisseur, dfPrixDeLigne, coefsDoc]);
 
   /* Ce qu'Odoo connaît des lignes, relu quand le fournisseur ou l'article
@@ -3446,14 +3496,22 @@ const [contratOdoo, setContratOdoo] = useState<
   const ficheArticleAchat = (i: number) => {
     const f = ficheProposee(i);
     const prixAchat = dfPrixDeLigne(i);
-    const maj = (champ: 'reference' | 'designation' | 'categorie' | 'prixHT' | 'remise'
+    const maj = (champ: 'reference' | 'designation' | 'categorie' | 'prixHT' | 'coefRevendeur'
       | 'referenceFournisseur' | 'unite' | 'tva' | 'poids' | 'designationAchat', v: string) => {
       dfTouche.current = true;
       setDfFiche(prev => ({ ...prev, [i]: { ...prev[i], [champ]: v } }));
     };
+    /* Le prix ramené au kilo quand le poids d'une unité est connu. */
+    const auKg = (prix?: number) => {
+      const k = prixAuKg(prix, f.poids);
+      return k != null ? <span className="text-[10px] text-muted-foreground tabular-nums">soit {formatMontant(k)}/kg</span> : null;
+    };
     return (
       <div className="mt-1 rounded border border-success/40 bg-background/60 p-1.5 space-y-1.5">
-        <p className="text-[10px] font-medium text-success">Nouvel article MonCRM — tout se corrige avant l'enregistrement</p>
+        <p className="text-[10px] font-medium text-success">
+          Nouvel article MonCRM — tout se corrige avant l'enregistrement
+          <span className="ml-2 font-normal text-muted-foreground">Prix de vente précédent : aucun (création)</span>
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
           <label className="space-y-0.5">
             <span className="text-[10px] text-muted-foreground">Code article MonCRM</span>
@@ -3501,6 +3559,7 @@ const [contratOdoo, setContratOdoo] = useState<
                 setDfPrix(prev => ({ ...prev, [i]: isNaN(v) ? 0 : v }));
               }}
             />
+            {auKg(prixAchat)}
           </label>
           <div className="grid grid-cols-3 gap-1.5 sm:col-span-2">
             <label className="space-y-0.5">
@@ -3521,8 +3580,10 @@ const [contratOdoo, setContratOdoo] = useState<
               <span className="text-[10px] text-muted-foreground">Poids unitaire (kg)</span>
               <Input
                 className="h-7 text-xs text-right tabular-nums" inputMode="decimal" placeholder="inconnu"
-                value={f.saisie.poids ?? ''} onChange={e => maj('poids', e.target.value)}
+                value={f.saisie.poids ?? (f.poidsLu ? String(f.poidsLu) : '')} onChange={e => maj('poids', e.target.value)}
               />
+              {f.saisie.poids === undefined && f.poidsLu
+                ? <span className="text-[10px] text-muted-foreground">lu dans l'intitulé</span> : null}
             </label>
           </div>
           <label className="space-y-0.5">
@@ -3533,15 +3594,31 @@ const [contratOdoo, setContratOdoo] = useState<
               value={f.saisie.prixHT ?? (f.prixPropose != null ? String(f.prixPropose) : '')}
               onChange={e => maj('prixHT', e.target.value)}
             />
+            {auKg(f.vente.prixHT)}
           </label>
-          <label className="space-y-0.5">
-            <span className="text-[10px] text-muted-foreground">Remise revendeur %</span>
-            <Input
-              className="h-7 text-xs text-right tabular-nums" inputMode="decimal"
-              value={f.saisie.remise ?? String(f.remise)}
-              onChange={e => maj('remise', e.target.value)}
-            />
-          </label>
+          <div className="space-y-0.5">
+            <span className="text-[10px] text-muted-foreground">Prix revendeur HT = achat × coef.</span>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground">×</span>
+              <Input
+                className="h-7 w-16 text-xs text-right tabular-nums" inputMode="decimal"
+                title="Coefficient revendeur sur le prix d'achat"
+                value={f.saisie.coefRevendeur ?? String(f.coefRevendeur).replace('.', ',')}
+                onChange={e => maj('coefRevendeur', e.target.value)}
+              />
+              <span className="flex-1 text-right text-xs font-medium tabular-nums">
+                {f.vente.prixRevendeur > 0 ? formatMontant(f.vente.prixRevendeur) : '—'}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2">
+              {auKg(f.vente.prixRevendeur) ?? <span />}
+              {f.vente.prixHT > 0 && (
+                f.vente.prixRevendeur >= f.vente.prixHT
+                  ? <span className="text-[10px] text-warning">au-dessus du public</span>
+                  : <span className="text-[10px] text-muted-foreground">remise {String(f.vente.remiseRevendeur).replace('.', ',')} % sur le public</span>
+              )}
+            </div>
+          </div>
         </div>
         {/* Le tarif de revente du pied de devis, palier par palier : prix net
             de vente = notre achat × coefficient conseillé. */}
@@ -3569,8 +3646,8 @@ const [contratOdoo, setContratOdoo] = useState<
         )}
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           {f.vente.prixHT > 0
-            ? <>Revendeur {formatMontant(f.vente.prixRevendeur)} · coef. {f.vente.coefficient.toFixed(2)} sur l'achat de {formatMontant(f.prixAchat)}. </>
-            : <span className="text-warning">Prix public à saisir : l'article serait créé sans prix de vente. </span>}
+            ? null
+            : <span className="text-warning">Prix public à saisir : l'article serait créé sans prix public. </span>}
           {f.conseille != null && f.saisie.prixHT === undefined
             ? <>Prix public = prix conseillé du fournisseur ({formatMontant(f.conseille)}). </>
             : f.parCoefs && f.saisie.prixHT === undefined
@@ -3580,7 +3657,7 @@ const [contratOdoo, setContratOdoo] = useState<
               ? <>Coef. public {f.coef.coef.toFixed(2)} mesuré sur {f.coef.effectif} articles « {f.coef.categorie} ». </>
               : <>Coef. public {f.coef.coef.toFixed(2)} de « {f.coef.categorie} » trop dispersé : non appliqué. </>
             : f.categorie.trim() ? <>Aucun coefficient mesurable sur « {f.categorie} ». </> : null}
-          Remise : {f.origineRemise}.
+          Coef. revendeur : {f.origineCoef}.
         </p>
       </div>
     );
@@ -8295,9 +8372,22 @@ const [contratOdoo, setContratOdoo] = useState<
                               const ecart = prop?.ecartLien ?? prop?.ecartArticle;
                               const referenceActuelle = prop?.prixLien ?? prop?.prixArticle;
                               const applicable = !!article && prix != null;
+                              /* La vente d'un article EXISTANT : prix actuels, prix au
+                                 kilo, et le revendeur recalculé au coefficient. */
+                              const venteExistant = article && !dfCreer[i] && prix != null ? (() => {
+                                const achat = prixConditionnement(prix, article, { designation: l.description, quantite: l.quantite, unite: l.unite });
+                                const coefRev = coefRevDeLigne(i);
+                                const nouveau = prixVenteParCoef({ prixAchat: achat, prixHT: article.prixHT, coeffRevendeur: coefRev });
+                                return { achat, coefRev, nouveau, poids: poidsUnitaireDe(article) };
+                              })() : null;
+                              const kgDe = (v: number | undefined, poids: number | null | undefined) => {
+                                const k = prixAuKg(v, poids);
+                                return k != null ? <span className="text-muted-foreground"> ({formatMontant(k)}/kg)</span> : null;
+                              };
 
                               return (
-                                <tr key={i} className="border-b border-border/50 align-top">
+                                <Fragment key={i}>
+                                <tr className={`align-top ${venteExistant ? '' : 'border-b border-border/50'}`}>
                                   <td className="py-1.5 px-1 min-w-[260px]">
                                     {/* La ligne telle que lue, corrigeable : une lecture
                                         fautive ne doit pas obliger à relancer l'analyse. */}
@@ -8499,6 +8589,53 @@ const [contratOdoo, setContratOdoo] = useState<
                                     ) : <span className="text-muted-foreground">—</span>}
                                   </td>
                                 </tr>
+                                {venteExistant && article && (
+                                  <tr className="border-b border-border/50">
+                                    <td colSpan={7} className="pb-2 px-1">
+                                      <div className="rounded border border-border bg-background/60 px-2 py-1 text-[11px] flex flex-wrap items-center gap-x-4 gap-y-1 tabular-nums">
+                                        <span>
+                                          <span className="text-muted-foreground">Achat </span>
+                                          {formatMontant(venteExistant.achat)}{kgDe(venteExistant.achat, venteExistant.poids)}
+                                        </span>
+                                        <span>
+                                          <span className="text-muted-foreground">Public actuel </span>
+                                          {article.prixHT > 0 ? <>{formatMontant(article.prixHT)}{kgDe(article.prixHT, venteExistant.poids)}</> : 'aucun'}
+                                        </span>
+                                        <span>
+                                          <span className="text-muted-foreground">Revendeur actuel </span>
+                                          {article.prixRevendeur > 0 ? <>{formatMontant(article.prixRevendeur)}{kgDe(article.prixRevendeur, venteExistant.poids)}</> : 'aucun'}
+                                        </span>
+                                        <label className="flex items-center gap-1 cursor-pointer">
+                                          <input
+                                            type="checkbox" className="rounded"
+                                            checked={!!dfVersRevendeur[i]}
+                                            onChange={e => {
+                                              dfTouche.current = true;
+                                              setDfVersRevendeur(prev => ({ ...prev, [i]: e.target.checked }));
+                                            }}
+                                          />
+                                          <span className="text-muted-foreground">Nouveau revendeur = achat ×</span>
+                                        </label>
+                                        <Input
+                                          className="h-6 w-14 text-[11px] text-right tabular-nums" inputMode="decimal"
+                                          title="Coefficient revendeur sur le prix d'achat"
+                                          value={dfCoefRev[i] ?? String(venteExistant.coefRev).replace('.', ',')}
+                                          onChange={e => {
+                                            dfTouche.current = true;
+                                            setDfCoefRev(prev => ({ ...prev, [i]: e.target.value }));
+                                          }}
+                                        />
+                                        <span className="font-medium">
+                                          = {formatMontant(venteExistant.nouveau.prixRevendeur)}{kgDe(venteExistant.nouveau.prixRevendeur, venteExistant.poids)}
+                                        </span>
+                                        {article.prixHT > 0 && venteExistant.nouveau.prixRevendeur >= article.prixHT && (
+                                          <span className="text-warning">au-dessus du public</span>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                                </Fragment>
                               );
                             })}
                           </tbody>
