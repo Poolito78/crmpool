@@ -566,6 +566,23 @@ les envois suivants tant que le nom du prompt n'est pas changé. Choisir une
 fiche pendant une VÉRIFICATION reste une vérification (avant, le clic créait
 le devis). **À déployer** : `.\deploy-function.ps1 odoo-devis`.
 
+## Prix d'article refusé par « statement timeout » (21 oct.)
+
+⚠️ SNLR5 : « Enregistrement du produit refusé : canceling statement due to
+statement timeout ». Tout changement de prix d'un article à référence Odoo
+déclenche `synchroniser_jumeaux_odoo` (et `synchroniser_jumeaux_fiches`
+pour une fiche technique), qui cherchent les jumeaux par
+`upper(btrim(reference_odoo))` — expression que l'index sur la colonne brute
+ne couvre pas : parcours des 22 800 articles mesuré à **10,2 s**, au-delà
+des 8 s du `statement_timeout`. Index d'expression
+`idx_produits_reference_odoo_cle` (migration `20261021220000`, **appliquée**
+le 21/10) : 0,13 s, vérifié par un enregistrement réel de la fiche SNLR5.
+La fiche vérifie aussi l'écriture de CE clic (`attendreEcritureProduit(id,
+depuis)`) et renvoie ses prix si rien n'est parti.
+Note : SNLR5 est COMPOSÉ — son achat se recalcule depuis ses composants
+(SNLR775 au prorata 3,14 € + main d'œuvre = 8,15 €) ; un 8,14 posé en base
+redevient 8,15 au prochain enregistrement de la fiche.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du
