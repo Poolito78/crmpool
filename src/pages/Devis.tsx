@@ -7,7 +7,8 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Building2, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat } from 'lucide-react';
-import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, type OdooPayload } from '@/lib/odooSync';
+import { genererScriptOdoo, promptOdooPartnerName, getOdooPartnerId, setOdooPartnerId, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, type OdooPayload } from '@/lib/odooSync';
+import { motsRechercheOdoo, classerClientsOdoo, natureFicheOdoo, type CandidatOdoo } from '@/lib/clientOdoo';
 import { compterBrides } from '@/lib/bridesDevis';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -483,7 +484,11 @@ export default function Devis() {
       desc: string;
       propositions: { code: string; nom: string; note: number; ecart?: string }[];
     }[];
-    candidats?: { id: number; nom: string; ville: string; estSociete: boolean; societeMere: string }[];
+    candidats?: CandidatOdoo[];
+    /* Pour retenir la fiche cliquée, et relancer comme l'envoi d'origine
+       (une vérification reste une vérification). */
+    clientId?: string;
+    dryRun?: boolean;
     payload?: OdooPayload;
     /* Chemin de secours : dépôt pour le pont, et script console. */
     transport?: string;
@@ -534,25 +539,36 @@ export default function Devis() {
   const lancerOdoo = useCallback(async (
     payload: OdooPayload,
     scriptSecours: string,
-    options?: { partnerId?: number; dryRun?: boolean },
+    options?: { partnerId?: number; dryRun?: boolean; clientId?: string },
   ) => {
     setOdooInfo({ numero: payload.numero, etat: 'envoi', payload, script: scriptSecours });
     try {
       const { data, error } = await supabase.functions.invoke('odoo-devis', {
-        body: { payload, dryRun: !!options?.dryRun, partnerId: options?.partnerId },
+        body: {
+          payload, dryRun: !!options?.dryRun, partnerId: options?.partnerId,
+          /* Si le nom entier n'est pas chez Odoo, ses mots y sont cherchés. */
+          motsClient: motsRechercheOdoo(payload.client),
+        },
       });
       if (error) throw new Error(error.message || 'Appel refusé');
       if (data?.erreur) throw new Error(data.erreur);
 
-      if (data?.etat === 'client-ambigu' || data?.etat === 'client-introuvable') {
+      if (data?.etat === 'client-ambigu' || data?.etat === 'client-introuvable' || data?.etat === 'client-proche') {
         /* Plusieurs sociétés portent ce nom, ou aucune. On ne devine pas à
-           la place de l'utilisateur : la liste s'affiche, il tranche. */
+           la place de l'utilisateur : la liste s'affiche, il tranche. Sans
+           le nom exact, les fiches qui portent ses mots sont classées. */
+        const proches = data.etat === 'client-proche'
+          ? classerClientsOdoo(data.cherche || payload.client, data.candidats || [])
+          : [];
         setOdooInfo({
           numero: payload.numero, etat: 'client', payload, script: scriptSecours,
-          candidats: data.candidats || [],
-          message: data.etat === 'client-introuvable'
-            ? `Aucune société « ${data.cherche} » dans Odoo.`
-            : `Plusieurs fiches répondent à « ${data.cherche} ».`,
+          clientId: options?.clientId, dryRun: !!options?.dryRun,
+          candidats: data.etat === 'client-proche' ? proches : data.candidats || [],
+          message: data.etat === 'client-ambigu'
+            ? `Plusieurs fiches répondent à « ${data.cherche} ».`
+            : proches.length
+              ? `Aucune société « ${data.cherche} » dans Odoo. Ces fiches portent ses mots — laquelle est la bonne ?`
+              : `Aucune société « ${data.cherche} » dans Odoo.`,
         });
         return;
       }
@@ -727,7 +743,7 @@ export default function Devis() {
       await lancerOdoo(
         buildOdooPayload(current, selectedClient, produits, opts),
         genererScriptOdoo(current, selectedClient, produits, opts),
-        { dryRun: verifier },
+        { dryRun: verifier, clientId, partnerId: getOdooPartnerId(clientId, odooNom) },
       );
     } catch (err) {
       toast.error('Erreur lors de la préparation du devis Odoo');
@@ -758,7 +774,7 @@ export default function Devis() {
       await lancerOdoo(
         buildOdooPayload(d, client, produits, opts),
         genererScriptOdoo(d, client, produits, opts),
-        { dryRun: false },
+        { dryRun: false, clientId: client.id, partnerId: getOdooPartnerId(client.id, odooNom) },
       );
     } catch (err) {
       toast.error('Erreur lors de la préparation du devis Odoo');
@@ -5822,15 +5838,23 @@ ${dosage.source}` : ''}`}>
                       type="button"
                       onClick={() => {
                         if (!odooInfo.payload) return;
-                        lancerOdoo(odooInfo.payload, odooInfo.script || '', { partnerId: c.id });
+                        /* Retenue pour ce client : le prompt la proposera, et
+                           son id partira avec les envois suivants. */
+                        if (odooInfo.clientId) setOdooPartnerId(odooInfo.clientId, { id: c.id, nom: c.nom });
+                        lancerOdoo(odooInfo.payload, odooInfo.script || '', {
+                          partnerId: c.id, dryRun: odooInfo.dryRun, clientId: odooInfo.clientId,
+                        });
                       }}
                       className="w-full text-left px-3 py-2 hover:bg-muted/60"
                     >
                       <span className="font-medium">{c.nom}</span>
                       {c.ville && <span className="text-muted-foreground"> · {c.ville}</span>}
                       {!c.estSociete && (
-                        <span className="text-warning text-xs">
-                          {' '}· contact{c.societeMere ? ` de ${c.societeMere}` : ''}
+                        <span className="text-warning text-xs"> · {natureFicheOdoo(c)}</span>
+                      )}
+                      {(c.rue || c.rue2) && (
+                        <span className="block text-xs text-muted-foreground">
+                          {[c.rue, c.rue2].filter(Boolean).join(' · ')}
                         </span>
                       )}
                     </button>

@@ -25,6 +25,32 @@ export function setOdooPartnerName(clientId: string, name: string): void {
   localStorage.setItem(LS_PREFIX + clientId, name);
 }
 
+const LS_PREFIX_ID = 'odoo_partner_id_';
+
+/**
+ * La fiche Odoo choisie à la main pour ce client, si son nom est toujours
+ * celui qu'on envoie. Un nom corrigé depuis dans le prompt l'annule : c'est
+ * alors une autre société que l'utilisateur désigne.
+ */
+export function getOdooPartnerId(clientId: string, nomEnvoye: string): number | undefined {
+  try {
+    const lu = JSON.parse(localStorage.getItem(LS_PREFIX_ID + clientId) || 'null') as { id?: number; nom?: string } | null;
+    return lu?.id && lu.nom === nomEnvoye ? lu.id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Retient la fiche Odoo cliquée dans « Quelle société, dans Odoo ? » : son
+ * nom devient celui du prompt, son id part avec les envois suivants — une
+ * fiche fille (« AGENCE CÔTE D'OPALE ») ne se retrouverait pas par son nom.
+ */
+export function setOdooPartnerId(clientId: string, fiche: { id: number; nom: string }): void {
+  setOdooPartnerName(clientId, fiche.nom);
+  localStorage.setItem(LS_PREFIX_ID + clientId, JSON.stringify({ id: fiche.id, nom: fiche.nom }));
+}
+
 /**
  * Ouvre un prompt pour confirmer/corriger le nom Odoo du client.
  * Retourne le nom confirmé, ou null si l'utilisateur annule.

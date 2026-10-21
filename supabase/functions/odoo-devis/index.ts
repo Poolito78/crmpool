@@ -21,6 +21,9 @@
  *   - « client-ambigu » : plusieurs sociétés portent ce nom. On ne devine
  *     pas : la liste remonte à l'écran, l'utilisateur tranche, et rappelle
  *     avec `partnerId`.
+ *   - « client-proche » : aucune ne porte ce nom, mais des fiches portent
+ *     ses mots (`motsClient`). Même règle : l'écran les classe, rien n'est
+ *     retenu d'office.
  *   - « verifie » (dryRun) : tout est résolu, RIEN n'est écrit. C'est le
  *     mode à employer la première fois, ou quand un devis inquiète.
  *   - « cree » : la commande existe, avec son numéro et son lien.
@@ -209,6 +212,39 @@ async function trouverClient(o: Odoo, nom: string, ctx: Record<string, unknown>)
   if (exactes.length === 1) return { choisi: exactes[0], candidats: parts };
   if (societes.length === 1) return { choisi: societes[0], candidats: parts };
   return { choisi: null, candidats: parts };
+}
+
+/**
+ * Les fiches qui portent l'un des MOTS du nom, quand le nom entier n'est
+ * nulle part : « HELIOS 62 AGENCE CÔTE D'OPALE » est chez Odoo « 01ISO16621
+ * – T1 GROUPE HELIOS (62 ST MARTIN B.) », avec « AGENCE CÔTE D'OPALE » en
+ * fiche fille ou en adresse. Chaque mot est cherché dans le nom, celui de la
+ * société mère et l'adresse.
+ *
+ * LECTURE SEULE, ET RIEN N'EST CHOISI : les fiches remontent telles quelles,
+ * l'écran les classe (`classerClientsOdoo`, `src/lib/clientOdoo.ts`) et
+ * l'utilisateur tranche. Les mots viennent de l'écran (`motsRechercheOdoo`).
+ */
+async function chercherParMots(o: Odoo, mots: string[], ctx: Record<string, unknown>) {
+  const lus = await Promise.all(mots.slice(0, 8).map((m) =>
+    o.kw(
+      "res.partner",
+      "search_read",
+      [
+        ouBien([
+          ["name", "ilike", m],
+          ["parent_id.name", "ilike", m],
+          ["street", "ilike", m],
+          ["street2", "ilike", m],
+        ]),
+        ["id", "name", "city", "is_company", "parent_id", "street", "street2", "type"],
+      ],
+      { limit: 40, order: "is_company desc, name", context: ctx },
+    ).catch(() => []) as Promise<any[]>
+  ));
+  const parId = new Map<number, any>();
+  for (const p of lus.flat()) parId.set(p.id, p);
+  return [...parId.values()];
 }
 
 // ---------------------------------------------------------------- contact
@@ -539,15 +575,24 @@ serve(async (req) => {
     } else {
       const { choisi, candidats } = await trouverClient(o, payload.client, ctx);
       if (!choisi) {
+        /* Le nom entier n'est nulle part : on cherche ses mots. */
+        const mots = Array.isArray(entree?.motsClient)
+          ? (entree.motsClient as unknown[]).map(String).filter(Boolean)
+          : [];
+        const proches = !candidats.length && mots.length ? await chercherParMots(o, mots, ctx) : [];
+        const liste = candidats.length ? candidats : proches;
         return json({
-          etat: candidats.length ? "client-ambigu" : "client-introuvable",
+          etat: candidats.length ? "client-ambigu" : proches.length ? "client-proche" : "client-introuvable",
           cherche: payload.client,
-          candidats: candidats.map((p) => ({
+          candidats: liste.map((p) => ({
             id: p.id,
             nom: p.name,
             ville: p.city || "",
             estSociete: !!p.is_company,
             societeMere: Array.isArray(p.parent_id) ? p.parent_id[1] : "",
+            rue: p.street || "",
+            rue2: p.street2 || "",
+            type: p.type || "",
           })),
         });
       }

@@ -552,6 +552,20 @@ un mot avec le nom ; civilité (« M. ») ignorée ; recherche en `child_of`,
 sociétés exclues.
 **À déployer** : `.\deploy-function.ps1 odoo-devis`.
 
+## Envoi Odoo : la société cherchée par ses mots (21 oct.)
+
+« HELIOS 62 AGENCE CÔTE D'OPALE » : aucune société de ce nom chez Odoo, qui
+la porte sous « 01ISO16621 – T1 GROUPE HELIOS (62 ST MARTIN B.) » avec
+« AGENCE CÔTE D'OPALE » dessous. Le nom entier introuvable, `odoo-devis`
+cherche désormais ses MOTS (`motsClient`, tirés par `motsRechercheOdoo`,
+`clientOdoo.ts`) dans le nom, la société mère et l'adresse des fiches, en
+lecture seule, et rend `client-proche` ; l'écran classe (`classerClientsOdoo`)
+et l'utilisateur clique — **rien n'est retenu d'office**. Le clic est mémorisé
+(`setOdooPartnerId`, `odooSync.ts` : nom + id par client) et l'id part avec
+les envois suivants tant que le nom du prompt n'est pas changé. Choisir une
+fiche pendant une VÉRIFICATION reste une vérification (avant, le clic créait
+le devis). **À déployer** : `.\deploy-function.ps1 odoo-devis`.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du
