@@ -1274,27 +1274,52 @@ export default function Produits() {
        * n'est pas celui qu'on a envoyé, on le dit, en rouge, avec les deux
        * valeurs.
        *
-       * ⚠️ Pas sur un minuteur seul : relue « 1,2 s plus tard », la base
-       * répondait parfois avant que l'écriture n'arrive, et l'alerte tombait
-       * sur un prix enregistré l'instant d'après. Le court délai ne sert qu'à
-       * laisser React lancer l'écriture (elle part du `setProduits`). */
+       * ⚠️ Pas sur un minuteur : relue « 1,2 s plus tard » puis « 300 ms
+       * plus tard », la base répondait parfois avant que l'écriture ne parte
+       * (elle part du `setProduits`, après le recalcul du catalogue) — on
+       * attend l'écriture de CE clic (`attendreEcritureProduit(id, depuis)`). */
       const idVerif = editing.id;
       const achatVoulu = form.prixAchat;
+      /* Les prix tels qu'enregistrés, pour les renvoyer si l'écriture ne part pas. */
+      const prixVoulus = {
+        prix_achat: form.prixAchat, prix_ht: form.prixHT, prix_revendeur: form.prixRevendeur,
+        coefficient: form.coefficient, coeff_revendeur: form.coeffRevendeur, remise_revendeur: form.remiseRevendeur,
+      };
+      const depuis = Date.now();
       toast.success('Produit modifié');
-      setTimeout(async () => {
-        await attendreEcritureProduit(idVerif);
-        supabase.from('produits').select('prix_achat').eq('id', idVerif).maybeSingle()
-          .then(({ data, error }) => {
-            if (error || !data) return;
-            const enBase = Number((data as { prix_achat: number }).prix_achat) || 0;
-            if (Math.abs(enBase - achatVoulu) >= 0.005) {
-              toast.error(
-                `Le prix d'achat n'a pas été retenu : ${formatMontant(achatVoulu)} envoyé, ${formatMontant(enBase)} en base.`,
-                { duration: 15000 },
-              );
-            }
-          });
-      }, 300);
+      void (async () => {
+        /* ⚠️ SNLR5, 21/10 : l'alerte tombait sans dire si l'écriture était
+           partie. On attend celle de CE clic ; si aucune n'est partie (la
+           copie en mémoire portait déjà ce prix, ou l'écriture s'est perdue),
+           la fiche écrit elle-même ses prix, datés, puis relit. */
+        const partie = await attendreEcritureProduit(idVerif, depuis);
+        const lirePrix = async () => {
+          const { data, error } = await supabase.from('produits').select('prix_achat').eq('id', idVerif).maybeSingle();
+          return error || !data ? null : Number((data as { prix_achat: number }).prix_achat) || 0;
+        };
+        let enBase = await lirePrix();
+        if (enBase == null || Math.abs(enBase - achatVoulu) < 0.005) return;
+        if (!partie) {
+          const maintenant = new Date().toISOString();
+          const { error } = await supabase.from('produits')
+            .update({ ...prixVoulus, prix_achat_maj: maintenant, prix_vente_maj: maintenant } as never)
+            .eq('id', idVerif);
+          if (error) {
+            toast.error(`Le prix d'achat n'a pas pu être enregistré : ${error.message}`, { duration: 15000 });
+            return;
+          }
+          enBase = await lirePrix();
+          if (enBase != null && Math.abs(enBase - achatVoulu) < 0.005) {
+            toast.info(`Prix d'achat ${formatMontant(achatVoulu)} enregistré (renvoyé : la première écriture n'était pas partie).`);
+            return;
+          }
+        }
+        toast.error(
+          `Le prix d'achat n'a pas été retenu : ${formatMontant(achatVoulu)} envoyé, ${formatMontant(enBase ?? 0)} en base`
+            + (partie ? ' — une autre écriture l\'a remplacé.' : '.'),
+          { duration: 15000 },
+        );
+      })();
     } else {
       const newId = generateId();
       const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, typeOptions: isTypeOptions, lignesOptions: lignesOptionsToSave || undefined, typeVariantesCompo: isTypeVariantesCompo, variantesCompo: variantesCompoToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined, dateCreation: new Date().toISOString().split('T')[0] };

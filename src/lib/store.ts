@@ -2389,8 +2389,10 @@ export function useStore() {
    * chargement n'était pas trouvé en mémoire, donc traité comme nouveau,
    * donc INSÉRÉ — et l'insertion se heurtait à la référence déjà présente.
    * Silencieusement. L'`upsert` écrit dans les deux cas. */
-  /** Dernière écriture partie pour chaque article : la relire avant qu'elle n'arrive donnait une fausse alerte. */
-  const ecrituresProduits = useRef(new Map<string, PromiseLike<unknown>>());
+  /** Dernière écriture partie pour chaque article, et QUAND elle est partie :
+      la relire avant qu'elle n'arrive donnait une fausse alerte, et attendre
+      « la dernière connue » pouvait attendre celle d'un enregistrement d'avant. */
+  const ecrituresProduits = useRef(new Map<string, { quand: number; ecriture: PromiseLike<unknown> }>());
   const updateProduits = useCallback((fn: (prev: Produit[]) => Produit[]) => {
     setProduits(prev => {
       const next = dater(prev, fn(prev));
@@ -2413,10 +2415,13 @@ export function useStore() {
           updated.forEach(p => {
             const patch = colonnesModifiees(avant.get(p.id)!, p, userId);
             if (!Object.keys(patch).length) return;
-            ecrituresProduits.current.set(p.id, supabase.from('produits')
-              .update(patch as any)
-              .eq('id', p.id)
-              .then(signaler('modification')));
+            ecrituresProduits.current.set(p.id, {
+              quand: Date.now(),
+              ecriture: supabase.from('produits')
+                .update(patch as any)
+                .eq('id', p.id)
+                .then(signaler('modification')),
+            });
           });
         }
         if (removed.length) {
@@ -2585,8 +2590,20 @@ export function useStore() {
    * tard » pouvait passer AVANT l'écriture, et annoncer un prix refusé qui
    * s'enregistrait l'instant d'après.
    */
-  const attendreEcritureProduit = useCallback(async (id: string) => {
-    await ecrituresProduits.current.get(id);
+  /* ⚠️ SNLR5, 21/10 : « 8,14 € envoyé, 3,14 € en base ». La relecture partait
+     300 ms après le clic et attendait la DERNIÈRE écriture connue — celle de
+     l'enregistrement précédent, déjà arrivée, quand la nouvelle n'était pas
+     encore partie (22 000 articles à recalculer avant). On attend donc une
+     écriture partie DEPUIS le clic (`depuis`), jusqu'à 5 s ; rend `false` si
+     aucune n'est partie — l'appelant sait alors qu'il doit écrire lui-même. */
+  const attendreEcritureProduit = useCallback(async (id: string, depuis = 0): Promise<boolean> => {
+    const limite = Date.now() + 5000;
+    for (;;) {
+      const e = ecrituresProduits.current.get(id);
+      if (e && e.quand >= depuis) { await e.ecriture; return true; }
+      if (Date.now() > limite) return false;
+      await new Promise(r => setTimeout(r, 100));
+    }
   }, []);
 
   return { clients, fournisseurs, produits, produitsCharges, nbProduits, assurerProduits, devis, numerosLiberes, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, attendreEcritureProduit, creerProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading, etatQuota };
