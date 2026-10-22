@@ -144,40 +144,49 @@ const couleurStatut = (d: DevisType) => estRelance(d) ? 'bg-sky-100 text-sky-700
 const STATUTS_MASQUES: DevisType['statut'][] = ['accepté', 'expiré', 'archivé', 'système'];
 /** Le filtre de statut connaît deux valeurs de plus que le statut : « relancé » et « à relancer ». */
 /**
- * Coût revendeur simulé sur `surf` m² (ou ml) pour un devis modèle.
- * Utilise prixRevendeur — pas le prix public — pour montrer ce qu'un
- * applicateur paie en matières pour réaliser la surface.
+ * Coût chantier CONSOMMÉ d'un système, au prix revendeur, ramené au m² (ou ml)
+ * sur `surf` m² : la matière réellement mise en œuvre, pas les conditionnements
+ * arrondis. Quantité de chaque ligne recalculée pour `surf` :
+ *  - avec une conso (ligne, sinon fiche) : surf × conso, en kg / m² / unités ;
+ *  - sans conso : la quantité du modèle mise à l'échelle de sa surface de
+ *    référence (celle de la ligne, sinon celle du modèle).
+ * Le palier de prix est celui de la quantité à acheter (arrondie). Une ligne
+ * qu'on ne sait pas chiffrer (ni conso ni surface de référence, pas de prix)
+ * n'est pas devinée : elle est comptée dans `aVerifier`.
  */
 function simCoutRevientM2(
-  lignes: LigneDevis[],
+  d: Pick<DevisType, 'lignes' | 'uniteSurface' | 'surfaceGlobaleM2'>,
   tousLesProduits: Produit[],
-  unite: UniteSurface = 'm2',
   surf = 100,
-): number | null {
+): { parUnite: number; aVerifier: number } | null {
+  const unite: UniteSurface = d.uniteSurface ?? 'm2';
   let total = 0;
-  for (const l of lignes) {
+  let aVerifier = 0;
+  for (const l of d.lignes) {
     if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') continue;
-    const prod = l.produitId ? tousLesProduits.find(p => p.id === l.produitId) : undefined;
-    if (!prod) continue;
-    const conso = consoDeLigne(l, unite) || consoFiche(prod, unite);
-    if (!conso || conso <= 0) continue;
-    if (l.unite && /^m(²|2)$/i.test(l.unite.trim())) {
-      const qte = Math.ceil(surf * conso - 1e-9);
-      total += getPrixPourQuantite(prod, qte).prixRevendeur * qte;
-      continue;
-    }
+    const prod = l.produitId ? produitParId(tousLesProduits, l.produitId) : undefined;
+    const qModele = Number(l.quantite) || 0;
+    if (!prod) { if (qModele > 0) aVerifier++; continue; }
+    const conso = Number(consoDeLigne(l, unite)) || Number(consoFiche(prod, unite)) || 0;
+    const poids = Number(prod.poids) || 0;
     const couv = unite === 'ml' ? null : couvertureM2(prod);
-    if (couv && couv > 0) {
-      const qte = Math.ceil(surf * (conso > 0 ? conso : 1) / couv - 1e-9);
-      total += getPrixPourQuantite(prod, qte).prixRevendeur * qte;
-      continue;
+    // Unités consommées pour `surf`.
+    let unites: number | null = null;
+    if (conso > 0 && l.unite && /^m(²|2)$/i.test(l.unite.trim())) unites = surf * conso;
+    else if (couv && couv > 0) unites = surf * (conso > 0 ? conso : 1) / couv;
+    else if (conso > 0 && poids > 0) unites = surf * conso / poids;
+    else {
+      const sRef = Number(l.surfaceM2) || Number(d.surfaceGlobaleM2) || 0;
+      if (qModele > 0 && sRef > 0) unites = qModele * surf / sRef;
     }
-    if (!prod.poids || prod.poids <= 0) continue;
-    const qte = Math.ceil(surf * conso / prod.poids);
-    if (qte <= 0) continue;
-    total += getPrixPourQuantite(prod, qte).prixRevendeur * qte;
+    if (unites == null) { if (qModele > 0) aVerifier++; continue; }
+    if (unites <= 0) continue;
+    const prix = getPrixPourQuantite(prod, Math.ceil(unites - 1e-9)).prixRevendeur;
+    if (!prix || prix <= 0) { aVerifier++; continue; }
+    total += unites * prix;
   }
-  return total > 0 ? Math.round(total / surf * 100) / 100 : null;
+  if (total <= 0) return null;
+  return { parUnite: Math.round(total / surf * 100) / 100, aVerifier };
 }
 
 function statutCorrespond(d: DevisType, s: string, aujourdhui: string): boolean {
@@ -676,6 +685,14 @@ export default function Devis() {
       .filter((id): id is string => !!id && !produitParId(produits, id));
     if (manquants.length) void assurerProduits(manquants);
   }, [lignes, produits, assurerProduits]);
+  // Idem pour les articles des systèmes : leur coût chantier en a besoin.
+  useEffect(() => {
+    const manquants = devis
+      .filter(d => d.statut === 'système')
+      .flatMap(d => d.lignes.map(l => l.produitId))
+      .filter((id): id is string => !!id && !produitParId(produits, id));
+    if (manquants.length) void assurerProduits(manquants);
+  }, [devis, produits, assurerProduits]);
   const [undoStack, setUndoStack] = useState<LigneDevis[][]>([]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -3350,7 +3367,15 @@ export default function Devis() {
                       case 'client': return <td style={ws} className="px-3 py-2.5"><p className="text-sm font-medium truncate max-w-[160px]">{client?.societe || client?.nom || '—'}</p></td>;
                       case 'refAffaire': return <td style={ws} className={`px-3 py-2.5 text-muted-foreground text-xs${trunc}`} title={d.referenceAffaire || ''}>{d.referenceAffaire || '—'}</td>;
                       case 'chantier': return <td style={ws} className={`px-3 py-2.5 text-muted-foreground text-xs${trunc}`} title={d.chantier || ''}>{d.chantier || '—'}</td>;
-                      case 'systeme': return <td style={ws} className={`px-3 py-2.5 text-muted-foreground text-xs${trunc}`} title={d.systeme || ''}>{d.systeme || '—'}</td>;
+                      case 'systeme': {
+                        // Un modèle porte déjà son nom dans « SYS - … » : la colonne montre son coût consommé.
+                        if (d.statut === 'système') {
+                          const cout = simCoutRevientM2(d, produits);
+                          const u = d.uniteSurface === 'ml' ? 'ml' : 'm²';
+                          return <td style={ws} className={`px-3 py-2.5 text-violet-600 dark:text-violet-400 text-xs whitespace-nowrap${trunc}`} title={`Coût consommé au prix revendeur, chantier de 100 ${u}`}>{cout ? `${cout.parUnite.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${u}` : '—'}</td>;
+                        }
+                        return <td style={ws} className={`px-3 py-2.5 text-muted-foreground text-xs${trunc}`} title={d.systeme || ''}>{d.systeme || '—'}</td>;
+                      }
                       case 'date': return <td style={ws} className="px-3 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(d.dateCreation)}</td>;
                       case 'validite': return <td style={ws} className={`px-3 py-2.5 text-sm whitespace-nowrap ${horsDelai ? 'text-destructive font-medium' : 'text-muted-foreground'}`} title={horsDelai ? 'Hors délais' : undefined}>{formatDate(d.dateValidite)}</td>;
                       case 'totalHT': return <td style={ws} className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">{formatMontant(t.totalHT)}</td>;
@@ -3512,7 +3537,7 @@ export default function Devis() {
                         <HardHat className="w-3 h-3" /> {d.chantier.trim()}
                       </span>
                     )}
-                    {visDevisTableCols.has('systeme') && d.systeme && (
+                    {visDevisTableCols.has('systeme') && d.systeme && d.statut !== 'système' && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
                         {d.systeme}
                       </span>
@@ -3522,9 +3547,6 @@ export default function Devis() {
                       <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 border border-violet-300 dark:border-violet-700 tracking-wide">
                         MODÈLE
                       </span>
-                    )}
-                    {d.statut === 'système' && (d.systeme || d.referenceAffaire) && !(visDevisTableCols.has('systeme') && d.systeme) && (
-                      <span className="text-sm font-semibold text-foreground">{d.systeme || d.referenceAffaire}</span>
                     )}
                     {d.statut === 'archivé' && d.archiveRaison && (
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${RAISON_ARCHIVE[d.archiveRaison]?.color || 'bg-muted text-muted-foreground'}`}>
@@ -3536,11 +3558,12 @@ export default function Devis() {
                     <p className="text-xs text-muted-foreground mt-0.5 italic">{d.archiveCommentaire}</p>
                   )}
                   {d.statut === 'système' && (() => {
-                    const cout = simCoutRevientM2(d.lignes, produits, d.uniteSurface ?? 'm2');
+                    const cout = simCoutRevientM2(d, produits);
                     const u = d.uniteSurface === 'ml' ? 'ml' : 'm²';
                     return cout != null ? (
                       <p className="text-xs text-violet-600 dark:text-violet-400 font-medium mt-0.5">
-                        100 {u} → {cout.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/{u} revendeur
+                        Chantier 100 {u} : {cout.parUnite.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/{u} consommé (prix revendeur)
+                        {cout.aVerifier > 0 && <span className="text-warning"> · {cout.aVerifier} ligne{cout.aVerifier > 1 ? 's' : ''} à vérifier</span>}
                       </p>
                     ) : null;
                   })()}
@@ -4079,7 +4102,7 @@ export default function Devis() {
                       id: d.id,
                       nom: d.systeme || d.referenceAffaire || d.numero,
                       nbLignes: d.lignes.filter(l => l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte').length,
-                      coutParM2: simCoutRevientM2(d.lignes, produits, d.uniteSurface ?? 'm2') ?? undefined,
+                      coutParM2: simCoutRevientM2(d, produits)?.parUnite,
                       unite: d.uniteSurface ?? 'm2',
                     }))}
                   onInsererLignes={insererLignesSysteme}
