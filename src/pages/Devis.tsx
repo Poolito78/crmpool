@@ -150,7 +150,8 @@ const STATUTS_MASQUES: DevisType['statut'][] = ['accepté', 'expiré', 'archivé
  *  - avec une conso (ligne, sinon fiche) : surf × conso, en kg / m² / unités ;
  *  - sans conso : la quantité du modèle mise à l'échelle de sa surface de
  *    référence (celle de la ligne, sinon celle du modèle).
- * Le palier de prix est celui de la quantité à acheter (arrondie). Une ligne
+ * Prix = celui de la ligne (le modèle est tarifé au client SYSTEME, revendeur),
+ * à défaut le prix revendeur de la fiche au palier de la quantité. Une ligne
  * qu'on ne sait pas chiffrer (ni conso ni surface de référence, pas de prix)
  * n'est pas devinée : elle est comptée dans `aVerifier`.
  */
@@ -181,7 +182,9 @@ function simCoutRevientM2(
     }
     if (unites == null) { if (qModele > 0) aVerifier++; continue; }
     if (unites <= 0) continue;
-    const prix = getPrixPourQuantite(prod, Math.ceil(unites - 1e-9)).prixRevendeur;
+    // Le prix de la ligne = tarif revendeur du client SYSTEME ; la fiche en repli.
+    const prixLigne = (Number(l.prixUnitaireHT) || 0) * (1 - (Number(l.remise) || 0) / 100);
+    const prix = prixLigne > 0 ? prixLigne : getPrixPourQuantite(prod, Math.ceil(unites - 1e-9)).prixRevendeur;
     if (!prix || prix <= 0) { aVerifier++; continue; }
     total += unites * prix;
   }
@@ -2567,10 +2570,33 @@ export default function Devis() {
     if (!clientId && statut !== 'système') { if (!silent) toast.error('Sélectionnez un client'); return null; }
     if (lignes.length === 0) { if (!silent) toast.error('Ajoutez au moins une ligne'); return null; }
 
-    // Un devis modèle n'a pas de numéro DEV- et ne garde pas de client (le client n'est
-    // sélectionné que temporairement pour appliquer le niveau de tarif revendeur).
+    /* Un modèle n'a pas de numéro DEV- et revient TOUJOURS au client SYSTEME
+       (revendeur, sans niveau de grille) : un autre client ne sert qu'un temps,
+       à voir ses prix. Ses lignes sont re-tarifées au prix revendeur SYSTEME,
+       que la liste des systèmes et leur coût chantier affichent. */
     const estModele = statut === 'système';
-    const clientIdASauver = estModele ? undefined : clientId;
+    const clientSysteme = estModele
+      ? clients.find(c => ['societe', 'nom'].some(k => (c[k as 'societe' | 'nom'] || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase() === 'SYSTEME'))
+      : undefined;
+    if (estModele && !clientSysteme && !silent) toast.warning('Client « SYSTEME » introuvable : le modèle garde le client choisi.');
+    const clientIdASauver = estModele ? (clientSysteme?.id ?? (clientId || undefined)) : clientId;
+    const niveauASauver = estModele && clientSysteme ? (clientSysteme.niveauTarif || null) : (niveauTarif || null);
+    const retourSysteme = !!clientSysteme && clientSysteme.id !== clientId;
+    const lignesASauver = retourSysteme && !clientSysteme.niveauTarif
+      ? lignes.map(l => {
+          if (!l.produitId || l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') return l;
+          const p = produitParId(produits, l.produitId);
+          if (!p) return l;
+          const compo = varianteDeLigne(p, l.variantesChoisies);
+          const rem = clientSysteme.remisesParCategorie;
+          const prixUnitaireHT = compo
+            ? prixLigneCompo(compo,
+                c => { const pc = c.produitId ? produitParId(produits, c.produitId) : undefined; return pc ? prixDeBase(pc, c.quantite, clientSysteme.estRevendeur, null, undefined, undefined, rem) : undefined; },
+                id => produitParId(produits, id), l.variantesChoisies)
+            : Math.round((prixDeBase(p, l.quantite, clientSysteme.estRevendeur, null, undefined, undefined, rem) + getVarianteDiff(p, l.variantesChoisies)) * 100) / 100;
+          return { ...l, prixUnitaireHT, remise: 0 };
+        })
+      : lignes;
 
     let savedId = editingId;
     if (editingId) {
@@ -2578,7 +2604,7 @@ export default function Devis() {
       updateDevis(prev => prev.map(d => d.id === editingId ? {
         ...d,
         numero: estModele ? ('SYS - ' + (systeme || referenceAffaire || 'MODÈLE')) : d.numero,
-        clientId: clientIdASauver, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
+        clientId: clientIdASauver, contactId: retourSysteme ? undefined : contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes: lignesASauver, referenceAffaire, chantier, niveauTarif: niveauASauver, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: retourSysteme ? undefined : adresseLivraisonId || undefined, contactLivraisonId: retourSysteme ? undefined : contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
@@ -2588,8 +2614,8 @@ export default function Devis() {
       const numero = estModele ? ('SYS - ' + (systeme || referenceAffaire || 'MODÈLE')) : prochainNumeroDevis(devis, undefined, numerosLiberes, serieDe('DEV', undefined, false));
       savedId = generateId();
       const newDevis: DevisType = {
-        id: savedId, numero, clientId: clientIdASauver, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,
-        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
+        id: savedId, numero, clientId: clientIdASauver, contactId: retourSysteme ? undefined : contactId || undefined, adresseLivraisonId: retourSysteme ? undefined : adresseLivraisonId || undefined, contactLivraisonId: retourSysteme ? undefined : contactLivraisonId || undefined, dateCreation,
+        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes: lignesASauver, referenceAffaire, chantier, niveauTarif: niveauASauver, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) {
