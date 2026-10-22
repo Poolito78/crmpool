@@ -201,6 +201,11 @@ function statutCorrespond(d: DevisType, s: string, aujourdhui: string): boolean 
 export default function Devis() {
   const { devis, numerosLiberes, updateDevis, clients, updateClients, produits, updateProduits, assurerProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
   const { serieDe, societes } = useSocietes();
+  /** Le client « SYSTEME » (revendeur) : celui des devis modèles. */
+  const clientSystemeCRM = useMemo(
+    () => clients.find(c => [c.societe, c.nom].some(v => (v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase() === 'SYSTEME')),
+    [clients],
+  );
   /** Odoo ne concerne que les sociétés qui y sont reliées (ISOSIGN). */
   const odooPermis = (d?: { societeId?: string } | null) => societeDuDocument(d, societes)?.odoo ?? true;
   const [societeDoc, setSocieteDoc] = useState<DevisType | null>(null);
@@ -1060,7 +1065,8 @@ export default function Devis() {
     portOuvertureRef.current = lignesFigeesRef.current.size > 0
       ? signaturePort(d.lignes, d.fraisPortAuto ?? !(d.fraisPortHT > 0))
       : null;
-    setClientId(d.clientId);
+    // Un modèle sans client s'ouvre sur le client SYSTEME.
+    setClientId(d.clientId || (d.statut === 'système' ? clientSystemeCRM?.id : undefined) || d.clientId);
     setContactId(d.contactId || '');
     setDateCreation(d.dateCreation);
     setDateValidite(d.dateValidite);
@@ -2575,9 +2581,7 @@ export default function Devis() {
        à voir ses prix. Ses lignes sont re-tarifées au prix revendeur SYSTEME,
        que la liste des systèmes et leur coût chantier affichent. */
     const estModele = statut === 'système';
-    const clientSysteme = estModele
-      ? clients.find(c => ['societe', 'nom'].some(k => (c[k as 'societe' | 'nom'] || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toUpperCase() === 'SYSTEME'))
-      : undefined;
+    const clientSysteme = estModele ? clientSystemeCRM : undefined;
     if (estModele && !clientSysteme && !silent) toast.warning('Client « SYSTEME » introuvable : le modèle garde le client choisi.');
     const clientIdASauver = estModele ? (clientSysteme?.id ?? (clientId || undefined)) : clientId;
     const niveauASauver = estModele && clientSysteme ? (clientSysteme.niveauTarif || null) : (niveauTarif || null);
@@ -4083,6 +4087,13 @@ export default function Devis() {
                 <select className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" value={statut} onChange={e => {
                   const ns = e.target.value as DevisType['statut'];
                   setStatut(ns);
+                  // Un modèle se tarife au client SYSTEME (revendeur).
+                  if (ns === 'système' && clientSystemeCRM && clientId !== clientSystemeCRM.id) {
+                    setClientId(clientSystemeCRM.id);
+                    setContactId('');
+                    setAdresseLivraisonId('');
+                    setContactLivraisonId('');
+                  }
                   // Passage à 'accepté' → probabilité 100% + date de réalisation auto (si absente)
                   if (ns === 'accepté') {
                     setProbabiliteReussite(100);
