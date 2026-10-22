@@ -1207,6 +1207,19 @@ export default function Produits() {
     });
   }
 
+  /** Prix public saisi → revendeur par la remise, puis coefficient à rebours. */
+  function updateFormPrixPublic(prixHT: number) {
+    setForm(prev => {
+      const next = { ...prev, prixHT };
+      next.prixRevendeur = Math.round(prixHT * (1 - next.remiseRevendeur / 100) * 100) / 100;
+      if (next.prixAchat > 0) {
+        next.coefficient = Math.round(next.prixRevendeur / next.prixAchat * 10000) / 10000;
+        next.coeffRevendeur = next.coefficient;
+      }
+      return next;
+    });
+  }
+
   function save(andReturnToDevis = false) {
     if (!form.description.trim() || !form.reference.trim()) { toast.error('Référence et description requis'); return; }
     /* Recréer à la main un article supprimé le sort de la liste noire. */
@@ -2289,7 +2302,7 @@ export default function Produits() {
               </div>
 
               {/* Tarif Revendeur */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-3">
                 {canAchat && (
                 <div>
                   <Label className="text-xs">Prix Achat *{composants.length > 0 && <span className="ml-1 text-primary font-normal">(calculé)</span>}</Label>
@@ -2326,6 +2339,11 @@ export default function Produits() {
                     </p>
                   )}
                 </div>
+                {/* Public ↔ revendeur par la remise revendeur ; le coefficient suit. */}
+                <div>
+                  <Label className="text-xs">Prix Public HT <span className="font-normal text-muted-foreground">(−{form.remiseRevendeur}%)</span></Label>
+                  <InputNombre decimales={2} value={form.prixHT} onChange={v => updateFormPrixPublic(v)} className="font-semibold" />
+                </div>
                 {canAchat && (
                 <div>
                   <Label className="text-xs">Marge brute revend.</Label>
@@ -2358,7 +2376,7 @@ export default function Produits() {
                       )}
                       <div className="col-span-2 sm:col-span-1">
                         <Label className="text-xs">Prix Vente HT (public)</Label>
-                        <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
+                        <InputNombre decimales={2} value={form.prixHT} onChange={v => updateFormPrixPublic(v)} className="font-semibold" />
                         {form.prixVenteMaj && (
                           <p className="text-[10px] text-muted-foreground mt-0.5">
                             maj {dateHeure(form.prixVenteMaj)}
