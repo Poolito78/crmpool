@@ -31,6 +31,10 @@ const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,
 
 export default function ChampSysteme({ value, onChange, systemes, onInsererLignes, placeholder }: Props) {
   const [focus, setFocus] = useState(false);
+  // Passe à true dès que l'utilisateur tape/efface dans cette session de focus.
+  // Tant que false (clic sans encore modifier), on filtre sur le premier mot seulement
+  // pour que « Flowfast BC (4-6mm) » déjà renseigné propose tous les Flowfast.
+  const [edited, setEdited] = useState(false);
   const ref = useRef<HTMLInputElement>(null);
 
   // Un nom en double (deux modèles « Moquette de pierre ») ne s'affiche qu'une fois.
@@ -41,8 +45,10 @@ export default function ChampSysteme({ value, onChange, systemes, onInsererLigne
 
   const q = norm(value);
   const mots = q.split(/\s+/).filter(Boolean);
+  // Premier focus sur une valeur existante → filtre permissif (1er mot), puis filtre strict dès la frappe.
+  const motsFiltrage = !edited && mots.length > 1 ? mots.slice(0, 1) : mots;
   const proposes = q
-    ? uniques.filter(s => norm(s.nom) !== q && mots.every(m => norm(s.nom).includes(m))).slice(0, 6)
+    ? uniques.filter(s => norm(s.nom) !== q && motsFiltrage.every(m => norm(s.nom).includes(m))).slice(0, 6)
     : uniques.slice(0, 6);
   // La complétion en ligne : un nom qui COMMENCE comme la saisie.
   const suite = q ? uniques.find(s => norm(s.nom).startsWith(q) && norm(s.nom) !== q) : undefined;
@@ -56,9 +62,9 @@ export default function ChampSysteme({ value, onChange, systemes, onInsererLigne
           data-voice="systeme"
           placeholder={placeholder}
           value={value}
-          onChange={e => onChange(e.target.value)}
-          onFocus={() => setFocus(true)}
-          onBlur={() => setTimeout(() => setFocus(false), 150)}
+          onChange={e => { onChange(e.target.value); setEdited(true); }}
+          onFocus={() => { setFocus(true); setEdited(false); }}
+          onBlur={() => setTimeout(() => { setFocus(false); setEdited(false); }, 150)}
           onKeyDown={e => {
             if (fantome && (e.key === 'Tab' || (e.key === 'ArrowRight' && ref.current?.selectionStart === value.length))) {
               e.preventDefault();
