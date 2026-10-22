@@ -150,8 +150,8 @@ const STATUTS_MASQUES: DevisType['statut'][] = ['accepté', 'expiré', 'archivé
  *  - avec une conso (ligne, sinon fiche) : surf × conso, en kg / m² / unités ;
  *  - sans conso : la quantité du modèle mise à l'échelle de sa surface de
  *    référence (celle de la ligne, sinon celle du modèle).
- * Prix = celui de la ligne (le modèle est tarifé au client SYSTEME, revendeur),
- * à défaut le prix revendeur de la fiche au palier de la quantité. Une ligne
+ * Prix = revendeur de la fiche au palier de la quantité (comme le tarif d'un
+ * modèle, voir prixDeBase), à défaut celui de la ligne. Une ligne
  * qu'on ne sait pas chiffrer (ni conso ni surface de référence, pas de prix)
  * n'est pas devinée : elle est comptée dans `aVerifier`.
  */
@@ -182,9 +182,9 @@ function simCoutRevientM2(
     }
     if (unites == null) { if (qModele > 0) aVerifier++; continue; }
     if (unites <= 0) continue;
-    // Le prix de la ligne = tarif revendeur du client SYSTEME ; la fiche en repli.
-    const prixLigne = (Number(l.prixUnitaireHT) || 0) * (1 - (Number(l.remise) || 0) / 100);
-    const prix = prixLigne > 0 ? prixLigne : getPrixPourQuantite(prod, Math.ceil(unites - 1e-9)).prixRevendeur;
+    // Prix revendeur de la fiche au palier ; le prix de la ligne en repli.
+    const rev = getPrixPourQuantite(prod, Math.ceil(unites - 1e-9)).prixRevendeur;
+    const prix = rev > 0 ? rev : (Number(l.prixUnitaireHT) || 0) * (1 - (Number(l.remise) || 0) / 100);
     if (!prix || prix <= 0) { aVerifier++; continue; }
     total += unites * prix;
   }
@@ -2313,6 +2313,14 @@ export default function Devis() {
       const r = prixAuNiveau(produit, niveau, grille, grilleR4);
       if (r) return r.prix;
     }
+    /* UN MODÈLE (statut système) SE TARIFE AU PRIX REVENDEUR DE LA FICHE, palier
+       compris — exception voulue (22/10) à la règle de gamme ci-dessous, qui
+       vaut pour les devis clients : FLOWFAST31920 doit sortir à 275 €, pas à
+       343,49 − 30 % = 240,44 €. */
+    if (statut === 'système') {
+      const rev = getPrixPourQuantite(produit, quantite).prixRevendeur;
+      if (rev > 0) return rev;
+    }
     /* ISOMARK / ISOFLOOR : prix public de la fiche, moins la remise du client
        (ou la remise de gamme pour un revendeur) — jamais le prix revendeur
        recopié d'Odoo, jamais `prixTarif`. Voir `prixGamme`. Le public est
@@ -2586,19 +2594,19 @@ export default function Devis() {
     const clientIdASauver = estModele ? (clientSysteme?.id ?? (clientId || undefined)) : clientId;
     const niveauASauver = estModele && clientSysteme ? (clientSysteme.niveauTarif || null) : (niveauTarif || null);
     const retourSysteme = !!clientSysteme && clientSysteme.id !== clientId;
-    const lignesASauver = retourSysteme && !clientSysteme.niveauTarif
+    const lignesASauver = estModele && !niveauASauver
       ? lignes.map(l => {
           if (!l.produitId || l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') return l;
           const p = produitParId(produits, l.produitId);
           if (!p) return l;
           const compo = varianteDeLigne(p, l.variantesChoisies);
-          const rem = clientSysteme.remisesParCategorie;
+          // prixDeBase rend le prix revendeur de la fiche pour un modèle.
           const prixUnitaireHT = compo
             ? prixLigneCompo(compo,
-                c => { const pc = c.produitId ? produitParId(produits, c.produitId) : undefined; return pc ? prixDeBase(pc, c.quantite, clientSysteme.estRevendeur, null, undefined, undefined, rem) : undefined; },
+                c => { const pc = c.produitId ? produitParId(produits, c.produitId) : undefined; return pc ? prixDeBase(pc, c.quantite, true, null, undefined, undefined, undefined) : undefined; },
                 id => produitParId(produits, id), l.variantesChoisies)
-            : Math.round((prixDeBase(p, l.quantite, clientSysteme.estRevendeur, null, undefined, undefined, rem) + getVarianteDiff(p, l.variantesChoisies)) * 100) / 100;
-          return { ...l, prixUnitaireHT, remise: 0 };
+            : Math.round((prixDeBase(p, l.quantite, true, null, undefined, undefined, undefined) + getVarianteDiff(p, l.variantesChoisies)) * 100) / 100;
+          return { ...l, prixUnitaireHT, ...(retourSysteme ? { remise: 0 } : {}) };
         })
       : lignes;
 
