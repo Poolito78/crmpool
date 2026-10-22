@@ -2523,7 +2523,7 @@ export default function Devis() {
       const existing = devis.find(d => d.id === editingId);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
         ...d,
-        numero: estModele ? '' : d.numero,
+        numero: estModele ? ('SYS - ' + (systeme || referenceAffaire || 'MODÈLE')) : d.numero,
         clientId: clientIdASauver, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
       } : d));
       if (!silent) {
@@ -2531,7 +2531,7 @@ export default function Devis() {
         logHistorique({ entiteType: 'devis', entiteId: editingId, entiteNumero: existing?.numero ?? editingId, action: 'modification', details: { client: clients.find(c => c.id === clientId)?.nom, referenceAffaire: referenceAffaire || undefined, snapshot: existing ?? null } });
       }
     } else {
-      const numero = estModele ? '' : prochainNumeroDevis(devis, undefined, numerosLiberes, serieDe('DEV', undefined, false));
+      const numero = estModele ? ('SYS - ' + (systeme || referenceAffaire || 'MODÈLE')) : prochainNumeroDevis(devis, undefined, numerosLiberes, serieDe('DEV', undefined, false));
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId: clientIdASauver, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,
