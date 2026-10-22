@@ -2513,27 +2513,34 @@ export default function Devis() {
     if (!clientId && statut !== 'système') { if (!silent) toast.error('Sélectionnez un client'); return null; }
     if (lignes.length === 0) { if (!silent) toast.error('Ajoutez au moins une ligne'); return null; }
 
+    // Un devis modèle n'a pas de numéro DEV- et ne garde pas de client (le client n'est
+    // sélectionné que temporairement pour appliquer le niveau de tarif revendeur).
+    const estModele = statut === 'système';
+    const clientIdASauver = estModele ? undefined : clientId;
+
     let savedId = editingId;
     if (editingId) {
       const existing = devis.find(d => d.id === editingId);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
+        ...d,
+        numero: estModele ? '' : d.numero,
+        clientId: clientIdASauver, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
         logHistorique({ entiteType: 'devis', entiteId: editingId, entiteNumero: existing?.numero ?? editingId, action: 'modification', details: { client: clients.find(c => c.id === clientId)?.nom, referenceAffaire: referenceAffaire || undefined, snapshot: existing ?? null } });
       }
     } else {
-      const numero = prochainNumeroDevis(devis, undefined, numerosLiberes, serieDe('DEV', undefined, false));
+      const numero = estModele ? '' : prochainNumeroDevis(devis, undefined, numerosLiberes, serieDe('DEV', undefined, false));
       savedId = generateId();
       const newDevis: DevisType = {
-        id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,
+        id: savedId, numero, clientId: clientIdASauver, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,
         dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) {
         toast.success('Devis créé');
-        logHistorique({ entiteType: 'devis', entiteId: savedId!, entiteNumero: numero, action: 'creation', details: { client: clients.find(c => c.id === clientId)?.nom, referenceAffaire: referenceAffaire || undefined } });
+        logHistorique({ entiteType: 'devis', entiteId: savedId!, entiteNumero: numero || systeme || savedId!, action: 'creation', details: { client: clients.find(c => c.id === clientId)?.nom, referenceAffaire: referenceAffaire || undefined } });
       }
     }
     // Devis neuf : uploader les images collées avant le 1er enregistrement (le paste ne pouvait pas, sans id)
