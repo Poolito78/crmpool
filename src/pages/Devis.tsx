@@ -143,6 +143,43 @@ const couleurStatut = (d: DevisType) => estRelance(d) ? 'bg-sky-100 text-sky-700
 /** Statuts absents de la liste tant que le filtre de statut ne les sélectionne pas. */
 const STATUTS_MASQUES: DevisType['statut'][] = ['accepté', 'expiré', 'archivé', 'système'];
 /** Le filtre de statut connaît deux valeurs de plus que le statut : « relancé » et « à relancer ». */
+/**
+ * Coût revendeur simulé sur `surf` m² (ou ml) pour un devis modèle.
+ * Utilise prixRevendeur — pas le prix public — pour montrer ce qu'un
+ * applicateur paie en matières pour réaliser la surface.
+ */
+function simCoutRevientM2(
+  lignes: LigneDevis[],
+  tousLesProduits: Produit[],
+  unite: UniteSurface = 'm2',
+  surf = 100,
+): number | null {
+  let total = 0;
+  for (const l of lignes) {
+    if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') continue;
+    const prod = l.produitId ? tousLesProduits.find(p => p.id === l.produitId) : undefined;
+    if (!prod) continue;
+    const conso = consoDeLigne(l, unite) || consoFiche(prod, unite);
+    if (!conso || conso <= 0) continue;
+    if (l.unite && /^m(²|2)$/i.test(l.unite.trim())) {
+      const qte = Math.ceil(surf * conso - 1e-9);
+      total += getPrixPourQuantite(prod, qte).prixRevendeur * qte;
+      continue;
+    }
+    const couv = unite === 'ml' ? null : couvertureM2(prod);
+    if (couv && couv > 0) {
+      const qte = Math.ceil(surf * (conso > 0 ? conso : 1) / couv - 1e-9);
+      total += getPrixPourQuantite(prod, qte).prixRevendeur * qte;
+      continue;
+    }
+    if (!prod.poids || prod.poids <= 0) continue;
+    const qte = Math.ceil(surf * conso / prod.poids);
+    if (qte <= 0) continue;
+    total += getPrixPourQuantite(prod, qte).prixRevendeur * qte;
+  }
+  return total > 0 ? Math.round(total / surf * 100) / 100 : null;
+}
+
 function statutCorrespond(d: DevisType, s: string, aujourdhui: string): boolean {
   if (s === 'relancé') return estRelance(d);
   if (s === 'à relancer') { const e = etatRelance(d, aujourdhui); return e === 'en_retard' || e === 'aujourdhui'; }
@@ -3498,6 +3535,15 @@ export default function Devis() {
                   {d.statut === 'archivé' && d.archiveCommentaire && (
                     <p className="text-xs text-muted-foreground mt-0.5 italic">{d.archiveCommentaire}</p>
                   )}
+                  {d.statut === 'système' && (() => {
+                    const cout = simCoutRevientM2(d.lignes, produits, d.uniteSurface ?? 'm2');
+                    const u = d.uniteSurface === 'ml' ? 'ml' : 'm²';
+                    return cout != null ? (
+                      <p className="text-xs text-violet-600 dark:text-violet-400 font-medium mt-0.5">
+                        100 {u} → {cout.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/{u} revendeur
+                      </p>
+                    ) : null;
+                  })()}
                   <p className="text-sm text-muted-foreground">
                     {client ? (
                       <button
@@ -4033,6 +4079,8 @@ export default function Devis() {
                       id: d.id,
                       nom: d.systeme || d.referenceAffaire || d.numero,
                       nbLignes: d.lignes.filter(l => l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte').length,
+                      coutParM2: simCoutRevientM2(d.lignes, produits, d.uniteSurface ?? 'm2') ?? undefined,
+                      unite: d.uniteSurface ?? 'm2',
                     }))}
                   onInsererLignes={insererLignesSysteme}
                 />

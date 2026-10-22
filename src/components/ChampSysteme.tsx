@@ -16,6 +16,9 @@ export interface SystemeConnu {
   id: string;
   nom: string;
   nbLignes: number;
+  /** Coût revendeur simulé sur 100 m² (ou 100 ml), rapporté à l'unité. */
+  coutParM2?: number;
+  unite?: string;
 }
 
 interface Props {
@@ -91,6 +94,11 @@ export default function ChampSysteme({ value, onChange, systemes, onInsererLigne
                 onClick={() => { onChange(s.nom); setFocus(false); }} title="Prendre ce nom de système">
                 {s.nom}
               </button>
+              {s.coutParM2 != null && (
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums" title={`Coût revendeur simulé sur 100 ${s.unite ?? 'm²'}`}>
+                  {s.coutParM2.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/{s.unite === 'ml' ? 'ml' : 'm²'}
+                </span>
+              )}
               {onInsererLignes && s.nbLignes > 0 && (
                 <button type="button" onMouseDown={e => e.preventDefault()}
                   onClick={() => { onChange(s.nom); onInsererLignes(s.id); setFocus(false); }}
