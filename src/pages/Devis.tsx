@@ -978,6 +978,17 @@ export default function Devis() {
       : [l.id, l.produitId, l.quantite, l.epaisseurMm ?? null]));
   const calculsAOuverture = (ls: LigneDevis[]) =>
     lignesFigeesRef.current.size > 0 && signatureCalculs(ls) === signatureOuvertureRef.current;
+  /* Le PORT non plus : le calcul automatique tournait à chaque ouverture et
+     l'enregistrement automatique l'écrivait — DEV-2026-157 perdait ses 178 €
+     de port (franco atteint au barème du jour) du seul fait d'être ouvert.
+     Empreinte de ce qui commande le port, prise à l'ouverture ; le calcul
+     reprend dès qu'elle change (lignes, transporteur, express, case « auto »)
+     et ne se refige plus. `null` = devis neuf ou déjà retouché. */
+  const portOuvertureRef = useRef<string | null>(null);
+  const signaturePort = (ls: LigneDevis[], auto: boolean) => JSON.stringify([
+    ls.map(l => [l.id, l.produitId ?? null, l.quantite, l.prixUnitaireHT, l.remise ?? null]),
+    auto, transporteur, coeffTransport, expressJ1, coeffExpress,
+  ]);
   /** Re-tarifer un devis enregistré aux prix du jour se demande, et se confirme. */
   const accepteRetarif = (): boolean => lignesFigeesRef.current.size === 0
     || window.confirm(`Ce devis a été établi le ${new Date(dateCreation).toLocaleDateString('fr-FR')} : ses prix sont ceux de ce jour-là.\n\nLe re-tarifer aux prix d'aujourd'hui ?`);
@@ -989,6 +1000,9 @@ export default function Devis() {
       ? new Set(d.lignes.map(l => l.id))
       : new Set();
     signatureOuvertureRef.current = signatureCalculs(d.lignes);
+    portOuvertureRef.current = lignesFigeesRef.current.size > 0
+      ? signaturePort(d.lignes, d.fraisPortAuto ?? !(d.fraisPortHT > 0))
+      : null;
     setClientId(d.clientId);
     setContactId(d.contactId || '');
     setDateCreation(d.dateCreation);
@@ -1063,6 +1077,7 @@ export default function Devis() {
 
   function openNew() {
     lignesFigeesRef.current = new Set();   // devis neuf : prix du jour
+    portOuvertureRef.current = null;       // et port calculé
     openedViaUrlRef.current = false;
     returnToRef.current = null;
     setEditingId(null);
@@ -2832,6 +2847,11 @@ export default function Devis() {
 
   // Auto-calcul frais de port basé sur le poids
   useEffect(() => {
+    const fige = portOuvertureRef.current;
+    if (fige !== null) {
+      if (signaturePort(lignes, fraisPortAuto) === fige) return;   // devis rouvert, rien touché : port enregistré
+      portOuvertureRef.current = null;
+    }
     if (!fraisPortAuto || !dialogOpen) return;
     const poidsTotal = lignes.reduce((acc, l) => {
       const prod = l.produitId ? produitParId(produits, l.produitId) : null;

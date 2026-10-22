@@ -532,6 +532,11 @@ l'historique : écrit par un enregistrement silencieux (`save(true)`).
 - **Catalyseur et granulats** ne bougent plus à la seule ouverture
   (`calculsAOuverture`) : ils suivent dès que résine, mortier, épaisseur ou
   température changent.
+- **Le port automatique non plus** (22 oct., `portOuvertureRef`,
+  `signaturePort`) : ouvrir DEV-2026-157 recalculait le port (franco au
+  barème du jour → 0 €) et l'enregistrement automatique l'écrivait — 178 €
+  perdus sans rien toucher (remis en base le 22/10). Le calcul reprend dès
+  que lignes, transporteur, express ou case « auto » changent.
 
 ## Envoi Odoo : contact et chantier (15 oct.)
 
