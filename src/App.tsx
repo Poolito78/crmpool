@@ -195,8 +195,11 @@ function AppRoutes() {
           <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
         </div>
       }>
+        {/* Chaque onglet de la coquille rend ces routes à sa propre adresse
+            (`lib/onglets.ts`) : la coquille n'est plus une route parente. */}
         <Routes>
-          <Route element={<CRMLayout />}>
+          <Route path="/auth" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<CRMLayout pages={<>
             <Route path="/" element={<Dashboard />} />
             <Route path="/clients" element={<Clients />} />
             <Route path="/produits" element={<Produits />} />
@@ -214,9 +217,8 @@ function AppRoutes() {
             <Route path="/stats-variantes" element={<StatsVariantes />} />
             <Route path="/veille-concurrence" element={<VeilleConcurrence />} />
             <Route path="/parametres" element={<Parametres />} />
-          </Route>
-          <Route path="/auth" element={<Navigate to="/" replace />} />
-          <Route path="*" element={<NotFound />} />
+            <Route path="*" element={<NotFound />} />
+          </>} />} />
         </Routes>
       </Suspense>
     </StoreProvider>

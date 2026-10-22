@@ -3,12 +3,21 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { gardesOnglet, useDefilementConserve, useOnglet } from "@/hooks/useOnglet";
 
-const Dialog = DialogPrimitive.Root;
+// Onglets du CRM (`hooks/useOnglet.ts`) : modal seulement dans l'onglet affiché,
+// rendu dans l'onglet pour être caché avec lui.
+const Dialog = ({ modal = true, ...props }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Root>) => {
+  const actif = useOnglet()?.actif ?? true;
+  return <DialogPrimitive.Root modal={modal && actif} {...props} />;
+};
 
 const DialogTrigger = DialogPrimitive.Trigger;
 
-const DialogPortal = DialogPrimitive.Portal;
+const DialogPortal = ({ container, ...props }: React.ComponentPropsWithoutRef<typeof DialogPrimitive.Portal>) => {
+  const onglet = useOnglet();
+  return <DialogPrimitive.Portal container={container ?? onglet?.conteneur} {...props} />;
+};
 
 const DialogClose = DialogPrimitive.Close;
 
@@ -34,7 +43,14 @@ interface DialogContentProps extends React.ComponentPropsWithoutRef<typeof Dialo
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
->(({ className, children, mobileFullscreen, style, ...props }, ref) => {
+>(({ className, children, mobileFullscreen, style, onInteractOutside, onEscapeKeyDown, ...props }, ref) => {
+  const actif = useOnglet()?.actif ?? true;
+  const noeud = useDefilementConserve(actif);
+  const refs = React.useCallback((n: HTMLDivElement | null) => {
+    noeud.current = n;
+    if (typeof ref === 'function') ref(n);
+    else if (ref) ref.current = n;
+  }, [ref, noeud]);
   const [isMobile, setIsMobile] = React.useState(false);
   // Visual Viewport height — mis à jour quand le clavier s'ouvre/ferme
   const [vvHeight, setVvHeight] = React.useState<number | null>(null);
@@ -95,7 +111,8 @@ const DialogContent = React.forwardRef<
     <DialogPortal>
       <DialogOverlay />
       <DialogPrimitive.Content
-        ref={ref}
+        ref={refs}
+        {...gardesOnglet(actif, { onInteractOutside, onEscapeKeyDown })}
         data-mobile-fullscreen={mobileFullscreen ? "true" : undefined}
         style={{ ...fullscreenStyle, ...style }}
         className={cn(

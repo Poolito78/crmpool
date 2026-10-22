@@ -64,6 +64,7 @@ import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import DevisAssistantDialog from '@/components/DevisAssistantDialog';
 import DevisVoiceAssistantDialog, { type VoiceDevis } from '@/components/DevisVoiceAssistantDialog';
 import { useAssistantVocal } from '@/hooks/useAssistantVocal';
+import { useOnglet, useTitreOnglet } from '@/hooks/useOnglet';
 import DevisChatter from '@/components/DevisChatter';
 import DevisArchiveDialog from '@/components/DevisArchiveDialog';
 import CRMActionDialog from '@/components/CRMActionDialog';
@@ -396,9 +397,20 @@ export default function Devis() {
     } else if (pushedStateRef.current && !fromPop) {
       // Ouvert depuis la liste → retirer l'entrée factice (reste sur la liste)
       pushedStateRef.current = false;
-      window.history.back();
+      retirerEntreeFactice();
     }
   };
+  /* Onglets : passer à un autre onglet REMPLACE l'entrée courante. Revenu au
+     devis, l'entrée factice n'est plus là, et « retour » ramènerait la page
+     vue avant dans l'onglet voisin — on ne recule que si elle y est encore. */
+  const retirerEntreeFactice = () => {
+    if ((window.history.state as { devisDialog?: boolean } | null)?.devisDialog) window.history.back();
+  };
+  const onglet = useOnglet();
+  const ongletActifRef = useRef(true);
+  ongletActifRef.current = onglet?.actif ?? true;
+  // Deux onglets « Devis » se distinguent par le devis ouvert.
+  useTitreOnglet(dialogOpen ? (editingId ? devis.find(d => d.id === editingId)?.numero : 'Nouveau devis') : null);
   useEffect(() => { dialogOpenRef.current = dialogOpen; }, [dialogOpen]);
   const closeRef = useRef(closeDevisDialog);
   closeRef.current = closeDevisDialog;
@@ -412,6 +424,8 @@ export default function Devis() {
   // Bouton « retour » navigateur → ferme le devis si ouvert depuis la liste
   useEffect(() => {
     const onPop = () => {
+      // Le « retour » vise l'onglet affiché, pas un devis ouvert dans un onglet caché.
+      if (!ongletActifRef.current) return;
       if (dialogOpenRef.current && !openedViaUrlRef.current) {
         pushedStateRef.current = false;
         closeRef.current(true);
@@ -2514,7 +2528,7 @@ export default function Devis() {
       setDialogOpen(false);
       setEditingId(null);
       if (openedViaUrlRef.current) { openedViaUrlRef.current = false; navigateBackFromDevis(); }
-      else if (pushedStateRef.current) { pushedStateRef.current = false; window.history.back(); }
+      else if (pushedStateRef.current) { pushedStateRef.current = false; retirerEntreeFactice(); }
     }
     return savedId;
   }

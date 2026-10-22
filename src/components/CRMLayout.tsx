@@ -1,6 +1,6 @@
-import { Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic, MailSearch, Ruler, Power } from 'lucide-react';
-import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, useContext, createContext, lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useCurrentUser } from '@/hooks/useAuth';
@@ -24,6 +24,10 @@ import { CA_ODOO_URL } from '@/lib/caOdoo';
 import { ouvrirFenetre } from '@/lib/fenetres';
 import { useFenetres } from '@/hooks/useFenetres';
 import FenetresMenu from '@/components/FenetresMenu';
+import { useOnglets } from '@/hooks/useOnglets';
+import PageOnglet from '@/components/PageOnglet';
+import BarreOnglets from '@/components/BarreOnglets';
+import { memePage, type Onglet } from '@/lib/onglets';
 import AssistantVocal from '@/components/AssistantVocal';
 import { AssistantVocalContext, type AssistantVocalCtx, type CaptureDictee, type GestionnaireDictee } from '@/hooks/useAssistantVocal';
 import { terminerConnexionRedirection } from '@/lib/microsoftGraph';
@@ -62,9 +66,18 @@ type NavEntry = NavLink | NavGroup;
 /* `draggable={false}` : l'appui long réordonne le menu, et le glisser natif
    d'un lien l'interromprait (pointercancel) ; il ferait aussi croire au dépôt
    de document de la coquille qu'un glisser interne a commencé. */
+/* Clic sur une entrée du menu vu des onglets (`useOnglets().cliquerMenu`) :
+   `true` = traité (nouvel onglet, ou bascule vers l'onglet qui montre déjà la
+   page), le lien ne navigue pas. */
+const MenuOngletsContext = createContext<{
+  cliquer: (path: string, e: { ctrlKey: boolean; metaKey: boolean }) => boolean;
+  ouvrir: (path: string) => void;
+} | null>(null);
+
 function NavItem({ item, className, onClick, title, children }: {
   item: NavLink; className: string; onClick?: () => void; title?: string; children: React.ReactNode;
 }) {
+  const onglets = useContext(MenuOngletsContext);
   if (item.action) {
     return (
       <a
@@ -91,8 +104,10 @@ function NavItem({ item, className, onClick, title, children }: {
       draggable={false}
       onClick={e => {
         if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); ouvrirFenetre(item.path); return; }
+        if (!e.altKey && !e.shiftKey && onglets?.cliquer(item.path, e)) e.preventDefault();
         onClick?.();
       }}
+      onAuxClick={e => { if (e.button === 1 && onglets) { e.preventDefault(); onglets.ouvrir(item.path); } }}
       title={title}
       className={className}
     >
@@ -149,14 +164,16 @@ const NAV: NavEntry[] = [
   },
 ];
 
-/* Icône « ouvrir dans une nouvelle fenêtre », au survol d'une entrée du menu
-   déplié. Sœur du lien et non enfant : un bouton dans un <a> est invalide. */
+/* Icône « ouvrir dans un nouvel onglet », au survol d'une entrée du menu
+   déplié. Sœur du lien et non enfant : un bouton dans un <a> est invalide.
+   La fenêtre séparée (deuxième écran) reste au Maj+clic et au menu Fenêtres. */
 function BoutonFenetre({ path, actif }: { path: string; actif: boolean }) {
+  const onglets = useContext(MenuOngletsContext);
   return (
     <button
       type="button"
-      onClick={() => ouvrirFenetre(path)}
-      title="Ouvrir dans une nouvelle fenêtre (Maj+clic)"
+      onClick={() => (onglets ? onglets.ouvrir(path) : ouvrirFenetre(path))}
+      title="Ouvrir dans un nouvel onglet (Ctrl+clic ou clic molette) — Maj+clic : nouvelle fenêtre"
       className={cn(
         'hidden md:flex absolute right-1.5 top-1/2 -translate-y-1/2 items-center justify-center w-6 h-6 rounded-md opacity-0 group-hover/nav:opacity-100 focus:opacity-100 transition-opacity',
         actif ? 'text-sidebar-primary-foreground/80 hover:bg-white/15' : 'text-sidebar-foreground/60 hover:bg-sidebar-border hover:text-sidebar-foreground',
@@ -167,7 +184,8 @@ function BoutonFenetre({ path, actif }: { path: string; actif: boolean }) {
   );
 }
 
-export default function CRMLayout() {
+/** `pages` : les <Route> des pages, rendues dans chaque onglet (`PageOnglet`). */
+export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
   const { etatQuota } = useCRM();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [analyseOpen, setAnalyseOpen] = useState(false);
@@ -411,14 +429,7 @@ export default function CRMLayout() {
   };
 
   // Lien actif : compare le pathname et, pour les liens avec ?tab=, l'onglet courant.
-  const isLinkActive = (path: string) => {
-    const [base, query] = path.split('?');
-    if (location.pathname !== base) return false;
-    if (!query) return true;
-    const want = new URLSearchParams(query).get('tab');
-    const cur = new URLSearchParams(location.search).get('tab') || 'dashboard';
-    return want === cur;
-  };
+  const isLinkActive = (path: string) => memePage(location, path);
   // Section active (pour ouvrir le groupe) : par pathname seul (ignore ?tab=).
   const isSectionActive = (path: string) => location.pathname === path.split('?')[0];
 
@@ -563,6 +574,18 @@ export default function CRMLayout() {
     : undefined;
   const libelleFenetre = groupeCourant?.label === 'Paramètres' ? `Paramètres · ${currentLabel}` : currentLabel;
   const fenetres = useFenetres(libelleFenetre);
+
+  const onglets = useOnglets();
+  const menuOnglets = useMemo(() => ({ cliquer: onglets.cliquerMenu, ouvrir: onglets.ouvrir }), [onglets.cliquerMenu, onglets.ouvrir]);
+  /** Libellé et icône d'un onglet : l'entrée du menu qui désigne son adresse. */
+  const libelleOnglet = (o: Onglet) => {
+    const l = o.location;
+    const item = navFlat.find(i => !i.external && memePage(l, i.path))
+      ?? navFlat.find(i => !i.external && i.path.split('?')[0] === l.pathname);
+    if (!item) return { libelle: l.pathname === '/crm' ? 'CRM' : 'MonCRM', icon: FileText };
+    const groupe = nav.find((e): e is NavGroup => e.type === 'group' && e.items.includes(item));
+    return { libelle: groupe?.label === 'Paramètres' ? `Paramètres · ${item.label}` : item.label, icon: item.icon };
+  };
   const pagesFenetre = useMemo(
     () => navFlat.filter(i => !i.external && !i.path.startsWith('/parametres') && i.path !== '/ged'),
     [navFlat],
@@ -570,6 +593,7 @@ export default function CRMLayout() {
 
   return (
     <AssistantVocalContext.Provider value={assistantCtx}>
+    <MenuOngletsContext.Provider value={menuOnglets}>
     <div
       className="h-screen overflow-hidden flex bg-background"
       onDragEnter={depotDragEnter}
@@ -737,6 +761,7 @@ export default function CRMLayout() {
 
       {/* Main content */}
       <div className={cn('flex-1 flex flex-col min-h-0 min-w-0 transition-[margin] duration-200', collapsed ? 'md:ml-16' : 'md:ml-64')}>
+        <BarreOnglets onglets={onglets} libelle={libelleOnglet} />
         {/* Top bar */}
         <header className="shrink-0 z-20 h-16 flex items-center px-4 md:px-6 bg-card/80 backdrop-blur-md border-b border-border gap-3">
           <button className="md:hidden mr-3 p-2 rounded-lg hover:bg-muted" onClick={() => setSidebarOpen(true)}>
@@ -747,7 +772,7 @@ export default function CRMLayout() {
             <span className="hidden lg:inline">{currentLabel}</span>
           </h1>
           <SocieteSelecteur />
-          <PageHeaderSlotTarget />
+          <PageHeaderSlotTarget onglets={onglets.onglets.map(o => o.id)} actif={onglets.actif} />
           {location.pathname === '/' && (
             <button
               onClick={() => setAnalyseOpen(true)}
@@ -776,8 +801,18 @@ export default function CRMLayout() {
           </div>
         )}
 
-        <main className="relative flex-1 flex flex-col min-h-0 px-4 md:px-6 pt-2 md:pt-2 pb-20 md:pb-6 overflow-x-hidden">
-          <Outlet />
+        {/* Un onglet par page ouverte, tous montés : c'est l'onglet qui défile. */}
+        <main className="relative flex-1 flex flex-col min-h-0 overflow-hidden">
+          {onglets.onglets.map(o => (
+            <PageOnglet
+              key={o.id}
+              onglet={o}
+              actif={o.id === onglets.actif}
+              routes={pages}
+              deplacer={onglets.deplacer}
+              nommer={onglets.nommer}
+            />
+          ))}
         </main>
       </div>
 
@@ -845,6 +880,7 @@ export default function CRMLayout() {
         })}
       </nav>
     </div>
+    </MenuOngletsContext.Provider>
     </AssistantVocalContext.Provider>
   );
 }

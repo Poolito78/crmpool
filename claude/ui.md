@@ -201,8 +201,26 @@ plutôt que des `<th>`/`<td>` codés en dur.
 - **Roue crantée (`Settings`) dans la dernière cellule d'en-tête** : composant partagé **`TableGearMenu`** = colonnes visibles + export Excel. (Produits/Devis ont leur variante inline ; `Produits` ajoute `Columns2` + reset via `cols.reset()`.)
 
 **Bandeau titre fixe + en-tête sticky + pleine page** :
-- **Coquille `CRMLayout`** : racine en **`h-screen overflow-hidden`**. Le bandeau titre (`<header>`) est `shrink-0`, et **`<main>` est l'unique zone qui défile** (`relative flex flex-col min-h-0 overflow-x-hidden`). → un seul scrollbar.
-- **`<PageHeaderSlot>`** (`src/components/PageHeaderSlot.tsx`) : portaile son contenu dans le bandeau titre fixe, à droite du titre. Y placer la **recherche** + le **bouton d'action principal**. (Le layout rend `<PageHeaderSlotTarget />`.)
+- **Coquille `CRMLayout`** : racine en **`h-screen overflow-hidden`**. Le bandeau titre (`<header>`) est `shrink-0`. **C'est l'ONGLET qui défile**, plus `<main>` : chaque page vit dans son `PageOnglet` (`relative flex flex-col min-h-0 overflow-x-hidden`, padding de l'ancien `<main>`), et `<main>` est en `overflow-hidden`. → un seul scrollbar, une position par onglet. Les marges négatives des pages (CRM) s'alignent sur ce padding.
+- **`<PageHeaderSlot>`** (`src/components/PageHeaderSlot.tsx`) : portaile son contenu dans le bandeau titre fixe, à droite du titre. Y placer la **recherche** + le **bouton d'action principal**. (Le layout rend `<PageHeaderSlotTarget />`, **un emplacement par onglet**.)
+
+**Onglets** (`lib/onglets.ts`, `hooks/useOnglets.ts`, `hooks/useOnglet.ts`,
+`PageOnglet`, `BarreOnglets`) — plusieurs pages ouvertes dans une fenêtre,
+toutes montées, la cachée en `display: none` :
+- Barre au-dessus du bandeau titre (desktop). Ctrl+clic / clic molette / icône
+  au survol d'une entrée du menu = nouvel onglet ; clic simple sur une page
+  déjà ouverte ailleurs = bascule ; Maj+clic = fenêtre séparée (inchangé).
+- `CRMLayout` reçoit les `<Route>` des pages (`pages`, `App.tsx`) et les rend
+  dans chaque onglet par `<Routes location>` ; `useNavigate` d'un onglet caché
+  ne déplace que lui (navigateur propre à l'onglet).
+- ⚠️ **Les dialogues de `components/ui` connaissent l'onglet** : rendus dans
+  son conteneur, modaux seulement s'il est affiché, sourds aux clics de la
+  barre et de l'onglet voisin. Un dialogue codé hors de `ui/dialog` /
+  `ui/alert-dialog` (primitive Radix directe) n'a pas ces gardes.
+- ⚠️ **Un écouteur global (`popstate`, `keydown` sur `window`) dans une page
+  agit aussi depuis l'onglet caché** : le borner à `useOnglet()?.actif`
+  (ex. `onPop` de `Devis.tsx`).
+- Une page nomme son onglet par `useTitreOnglet` (« Devis · DEV-2026-134 »).
 - Page « tableau seul » → carte en **`md:flex md:flex-col flex-1 min-h-0 bg-card rounded-xl border overflow-hidden`** ; conteneur de scroll interne en **`flex-1 min-h-0 overflow-auto`** (PAS de `max-h`). Racine de page en `flex flex-col flex-1 min-h-0`. ⚠️ Ne PAS utiliser `md:absolute md:inset-0` : ça recouvre un éventuel bandeau au-dessus (ex. « Retour au devis » via `?returnDevis`). Devis (vue tableau plein écran) reste l'exception en `md:absolute`.
 - Page multi-sections (Commandes Client, Factures) → racine en **`flex flex-col flex-1 min-h-0 gap-4`** ; contenu au-dessus auto ; conteneur de tableau en **`flex-1 min-h-0 overflow-auto`**.
 - Chaque `<th>` reste `sticky top-0 z-10 bg-muted`.
