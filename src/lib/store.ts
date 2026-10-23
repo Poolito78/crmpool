@@ -582,6 +582,8 @@ export interface LigneDevis {
   note?: string;
   variantesChoisies?: Record<string, string>; // dimensionId -> option.label
   prixAchatLigne?: number; // coût achat unitaire pour lignes libres (ex: surcharges énergie)
+  /** Fournisseur choisi à la main dans le comparatif (base du port réel, `portReel.ts`). Absent = le prioritaire, ou l'unique. */
+  fournisseurId?: string;
   /**
    * Référence Odoo de l'article, pour les lignes qui n'ont pas d'article
    * MonCRM.

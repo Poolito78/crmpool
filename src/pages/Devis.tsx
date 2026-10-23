@@ -1131,7 +1131,10 @@ export default function Devis() {
       if (!l.produitId) continue;
       const pfs = produitFournisseurs.filter(pf => pf.produitId === l.produitId);
       const prio = pfs.find(pf => pf.estPrioritaire) || pfs[0];
-      if (prio) fInit[l.id] = prio.fournisseurId;
+      // Le choix enregistré sur la ligne prime, tant que ce fournisseur vend encore l'article.
+      const choisi = l.fournisseurId && pfs.some(pf => pf.fournisseurId === l.fournisseurId) ? l.fournisseurId : undefined;
+      if (choisi) fInit[l.id] = choisi;
+      else if (prio) fInit[l.id] = prio.fournisseurId;
     }
     setSelectedFournisseurPerLigne(fInit);
     setPortAchatManuel(d.portAchatManuel ?? null);
@@ -2532,7 +2535,7 @@ export default function Devis() {
             if (dim.options.length > 0 && !partages.has(cleDimension(dim.nom))) variantesChoisies[dim.id] = dim.options[0].label;
           });
         }
-        return { ...l, produitId: p.id, description: designationProduit(p), prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise: remiseReprise, quantite, surfaceM2: surfaceLigne > 0 ? surfaceLigne : undefined, consommation: undefined, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
+        return { ...l, fournisseurId: undefined, produitId: p.id, description: designationProduit(p), prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise: remiseReprise, quantite, surfaceM2: surfaceLigne > 0 ? surfaceLigne : undefined, consommation: undefined, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
       }));
       // Initialise le fournisseur prioritaire pour cette ligne dans le comparatif
       const pfs = produitFournisseurs.filter(pf => pf.produitId === produitId);
@@ -5694,7 +5697,7 @@ ${dosage.source}` : ''}`}>
                                 <select
                                   className="text-xs rounded border border-input bg-background px-1 py-0.5 max-w-[140px]"
                                   value={selFournId || ''}
-                                  onChange={e => setSelectedFournisseurPerLigne(prev => ({ ...prev, [l.id]: e.target.value }))}
+                                  onChange={e => { setSelectedFournisseurPerLigne(prev => ({ ...prev, [l.id]: e.target.value })); updateLigne(l.id, 'fournisseurId', e.target.value); }}
                                 >
                                   {pfs.map(pf => {
                                     const f = fournisseurs.find(f => f.id === pf.fournisseurId);
