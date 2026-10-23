@@ -2317,7 +2317,13 @@ export function useStore() {
     const abonner = () => {
       if (channel || economie) return;
       channel = supabase.channel('crm-realtime');
-      for (const table of Object.keys(refetchers)) {
+      /* ⚠️ `produits` n'est PLUS dans la publication `supabase_realtime`
+         (migration 20261023120000) : le WAL de ses lignes de 4 Ko, réécrites par
+         la synchro Odoo de nuit, saturait le CPU bridé de la base — la requête de
+         lecture du Realtime est la première du classement, 22 000 s cumulées.
+         S'y abonner quand même ferait refuser TOUT le canal. Le catalogue se met
+         à jour par différence (`updated_at`) au chargement de la page. */
+      for (const table of Object.keys(refetchers).filter(t => t !== 'produits')) {
         channel.on('postgres_changes' as any, { event: '*', schema: 'public', table }, (payload: any) => {
           if (table !== 'produits') { scheduleRefetch(table, payload); return; }
           enAttente.push(payload);
