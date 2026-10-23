@@ -5405,6 +5405,14 @@ ${dosage.source}` : ''}`}>
                     </span>
                   </div>
                   )}
+                  {/* Le port est refacturé au prix coûtant (achat = vente, coeff 1,00) : il tire le coeff total sous
+                      celui de chaque ligne. On montre donc aussi le coeff des seules lignes, port exclu. */}
+                  {canAchat && portAchatApercu > 0 && totalAchat > 0 && (
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>dont lignes, hors port (port refacturé à {formatMontant(portAchatApercu)} coûtant)</span>
+                    <span>coeff {(totalHTLignes / totalAchat).toFixed(2)}</span>
+                  </div>
+                  )}
                   {canAchat && (() => {
                     // Coût chantier = produits consommés (surface × conso kg/m² × prix/kg).
                     // Même calcul que la note envoyée à Odoo : `coutChantier`.
