@@ -1761,15 +1761,33 @@ async function lireTout(
      L'estimation du planificateur (`reltuples`) est instantanée et suffit ici :
      le total ne sert qu'à savoir COMBIEN de tranches lancer en parallèle. La
      fin réelle, elle, se reconnaît autrement — voir plus bas. */
-  const premiere = await supabase
+  /* ⚠️ **LA PREMIÈRE TRANCHE SE REPREND, ET SON ÉCHEC SE DIT.** Une base au CPU
+     bridé met parfois 7 s à servir mille articles (mesuré le 23/10 : 6,7 et
+     7,5 s contre 4 ms une minute plus tard), contre 8 s de `statement_timeout`.
+     Une seule tentative muette laissait l'application démarrer SANS catalogue,
+     sans rien dire ni réessayer — alors que les plages suivantes, elles,
+     étaient reprises deux fois. */
+  let premiere = await supabase
     .from(table as any)
     .select('*', { count: 'estimated' })
     .order('id')
     .range(0, TRANCHE - 1);
+  for (let essai = 1; premiere.error && essai <= 2; essai++) {
+    console.warn(`Lecture de ${table} : première tranche refusée (${premiere.error.message}), reprise ${essai}/2.`);
+    await new Promise(r => setTimeout(r, 1500 * essai));
+    premiere = await supabase
+      .from(table as any)
+      .select('*', { count: 'estimated' })
+      .order('id')
+      .range(0, TRANCHE - 1);
+  }
 
   if (premiere.error) {
     console.error(`Lecture de ${table} interrompue :`, premiere.error.message);
-    return [];
+    toast.error(`« ${table} » n'a pas pu être lu (${premiere.error.message}). La base est surchargée : rechargez la page dans un instant.`, { duration: 12000 });
+    const vide: any[] = [];
+    lecturesIncompletes.add(vide);   // jamais mis en cache
+    return vide;
   }
   const tout: any[] = premiere.data || [];
   /* Une page COURTE est la fin, et c'est le seul signal qui ne mente jamais :
@@ -2082,7 +2100,15 @@ export function useStore() {
       // Le catalogue continue d'arriver en arrière-plan.
       /* Les articles arrivés après coup — plages reprises, ou articles
          cités par un devis — s'ajoutent sans rien réécrire en base. */
-      const pRes = await lireTout('produits', lignes => ajouterProduitsLus(lignes));
+      let pRes = await lireTout('produits', lignes => ajouterProduitsLus(lignes));
+      /* Catalogue vide = la base a refusé jusqu'à la première tranche (voir
+         `lireTout`) : on la laisse souffler et on redemande, au lieu d'afficher
+         « 0 article » comme si c'était vrai. L'écran reste en chargement. */
+      for (const attente of [5000, 20000, 60000]) {
+        if (pRes.length) break;
+        await new Promise(r => setTimeout(r, attente));
+        pRes = await lireTout('produits', lignes => ajouterProduitsLus(lignes));
+      }
       await poserCatalogue(pRes);
       curseurCatalogue = curseurDe(pRes);
       // Une lecture amputée de plages ne doit pas devenir le cache de demain.
