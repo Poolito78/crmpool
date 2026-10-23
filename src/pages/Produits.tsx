@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback, memo, Fragment, clon
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { useJournalPrix, periodesDePrix } from '@/lib/journalPrix';
+import { remiseRevendeurCategorie, publicDepuisRevendeur } from '@/lib/prixAchatFournisseur';
 import {
   useProduitImages, occupation, formatOctets, estImageAcceptee,
   COTE_MAX, type ImageProduit,
@@ -1183,12 +1184,22 @@ export default function Produits() {
     openEdit(fresh);
   }
 
+  /* LE PUBLIC SE DÉDUIT DU REVENDEUR PAR LA REMISE DE LA CATÉGORIE (règle du
+     20/10, celle de la fiche de création) : revendeur 275 € en ISOFLOOR 30 % →
+     public 392,86 €, que la remise client de 30 % ramène bien à 275 € au devis.
+     La remise propre à la fiche (19,94 % recopiés d'Odoo sur FLOWFAST31920)
+     n'est gardée que si on la saisit soi-même. */
+  function remiseDeCategorie(categorie: string) {
+    return remiseRevendeurCategorie(produits, categorie)?.remise ?? 30;
+  }
+
   function updateFormPrix(updates: Partial<typeof form>) {
     setForm(prev => {
       const next = { ...prev, ...updates };
+      if (updates.remiseRevendeur === undefined) next.remiseRevendeur = remiseDeCategorie(next.categorie);
       // Coefficient pilote le prix revendeur
       next.prixRevendeur = calcPrixRevendeurFromCoeff(next.prixAchat, next.coefficient);
-      next.prixHT = calcPrixPublicFromRevendeur(next.prixRevendeur, next.remiseRevendeur);
+      next.prixHT = publicDepuisRevendeur(next.prixRevendeur, next.remiseRevendeur) || next.prixRevendeur;
       next.coeffRevendeur = next.coefficient; // identique maintenant
       return next;
     });
@@ -1202,15 +1213,17 @@ export default function Produits() {
         next.coefficient = Math.round(prixRevendeur / next.prixAchat * 10000) / 10000;
         next.coeffRevendeur = next.coefficient;
       }
-      next.prixHT = calcPrixPublicFromRevendeur(prixRevendeur, next.remiseRevendeur);
+      next.remiseRevendeur = remiseDeCategorie(next.categorie);
+      next.prixHT = publicDepuisRevendeur(prixRevendeur, next.remiseRevendeur) || prixRevendeur;
       return next;
     });
   }
 
-  /** Prix public saisi → revendeur par la remise, puis coefficient à rebours. */
+  /** Prix public saisi → revendeur par la remise de catégorie, puis coefficient à rebours. */
   function updateFormPrixPublic(prixHT: number) {
     setForm(prev => {
       const next = { ...prev, prixHT };
+      next.remiseRevendeur = remiseDeCategorie(next.categorie);
       next.prixRevendeur = Math.round(prixHT * (1 - next.remiseRevendeur / 100) * 100) / 100;
       if (next.prixAchat > 0) {
         next.coefficient = Math.round(next.prixRevendeur / next.prixAchat * 10000) / 10000;
