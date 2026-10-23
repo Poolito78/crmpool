@@ -6458,6 +6458,9 @@ ${dosage.source}` : ''}`}>
             updateDevis(prev => prev.map(d =>
               d.id === emailDevis.id ? { ...d, statut: 'envoyé', dateEnvoi } : d
             ));
+            // Le formulaire ouvert porte son propre statut : sans cela l'enregistrement
+            // automatique réécrit l'ancien (« brouillon ») par-dessus l'envoi.
+            if (dialogOpen && editingId === emailDevis.id) { setStatut('envoyé'); setDateEnvoi(dateEnvoi); }
             toast.success('Devis envoyé — statut et date d\'envoi mis à jour');
             logHistorique({ entiteType: 'devis', entiteId: emailDevis.id, entiteNumero: emailDevis.numero, action: 'envoi_email', details: { destinataire: clients.find(c => c.id === emailDevis.clientId)?.email, dateEnvoi, client: clients.find(c => c.id === emailDevis.clientId)?.nom } });
           }
