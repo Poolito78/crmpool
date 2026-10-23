@@ -5363,18 +5363,21 @@ ${dosage.source}` : ''}`}>
                 return acc + puAchat * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id));
               }, 0);
               // Inclure transport dans le total achat pour marge/coeff cohérents avec comparatif
-              const portAchatApercu = (() => {
+              // Même règle que l'onglet comparatif : barème du transporteur, ou tarif standard refacturé au coûtant ;
+              // `portAchatManuel` (partagé avec le comparatif) l'emporte.
+              const portAchatCalcule = (() => {
                 if (fraisPortHT <= 0) return 0;
                 if (transporteur !== 'standard' && BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>]) {
-                  const poidsTot = lignes.reduce((acc, l) => {
-                    const prod = l.produitId ? produitParId(produits, l.produitId) : null;
-                    return acc + (prod?.poids || 0) * l.quantite;
-                  }, 0);
-                  const { prix } = calculerFraisPortBareme(BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>].bareme, poidsTot);
+                  const { prix } = calculerFraisPortBareme(BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>].bareme, poidsTotal);
                   return prix ?? 0;
                 }
-                return fraisPortHT;
+                const hasGranulat = lignes.some(l => {
+                  const prod = l.produitId ? produitParId(produits, l.produitId) : null;
+                  return prod?.categorie?.toLowerCase().includes('granulat');
+                });
+                return calculerFraisPort(poidsTotal, hasGranulat) ?? fraisPortHT;
               })();
+              const portAchatApercu = fraisPortHT > 0 ? (portAchatManuel ?? portAchatCalcule) : 0;
               const totalHTLignes = calculerTotalDevis(lignes, 0, 0).totalHT;
               const totalAchatAvecPort = totalAchat + portAchatApercu;
               const totalVenteAvecPort = totalHTLignes + fraisPortHT;
@@ -5407,10 +5410,37 @@ ${dosage.source}` : ''}`}>
                   )}
                   {/* Le port est refacturé au prix coûtant (achat = vente, coeff 1,00) : il tire le coeff total sous
                       celui de chaque ligne. On montre donc aussi le coeff des seules lignes, port exclu. */}
-                  {canAchat && portAchatApercu > 0 && totalAchat > 0 && (
+                  {canAchat && totalAchat > 0 && fraisPortHT > 0 && (
                   <div className="flex justify-between text-xs text-muted-foreground">
-                    <span>dont lignes, hors port (port refacturé à {formatMontant(portAchatApercu)} coûtant)</span>
-                    <span>coeff {(totalHTLignes / totalAchat).toFixed(2)}</span>
+                    <span>dont lignes, hors port</span>
+                    <span>{formatMontant(totalHTLignes - totalAchat)} · coeff {(totalHTLignes / totalAchat).toFixed(2)}</span>
+                  </div>
+                  )}
+                  {canAchat && fraisPortHT > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                    <span>dont port</span>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <label className="flex items-center gap-1">coût
+                        <Input type="number" step="0.01" min={0} value={portAchatApercu}
+                          onFocus={e => e.target.select()}
+                          onChange={e => { const v = parseFloat(e.target.value); setPortAchatManuel(isNaN(v) || v < 0 ? null : v); }}
+                          title={portAchatManuel != null ? 'Coût transport modifié manuellement' : 'Coût transport calculé — modifiable'}
+                          className={`h-7 w-24 text-xs text-right ${portAchatManuel != null ? 'text-amber-600 dark:text-amber-400 border-amber-500/60' : ''}`} />
+                      </label>
+                      {portAchatManuel != null && (
+                        <button type="button" title="Remettre le coût transport calculé" onClick={() => setPortAchatManuel(null)}
+                          className="text-muted-foreground hover:text-destructive"><RotateCcw className="w-3 h-3" /></button>
+                      )}
+                      <label className="flex items-center gap-1">vente
+                        <Input type="number" step="0.01" min={0} value={fraisPortHT || ''}
+                          onFocus={e => e.target.select()}
+                          onChange={e => { setFraisPortAuto(false); setFraisPortHT(e.target.value === '' ? 0 : parseFloat(e.target.value)); }}
+                          className="h-7 w-24 text-xs text-right" />
+                      </label>
+                      <span className={`font-medium ${fraisPortHT - portAchatApercu < 0 ? 'text-destructive' : ''}`}>
+                        {formatMontant(fraisPortHT - portAchatApercu)}{portAchatApercu > 0 ? ` · coeff ${(fraisPortHT / portAchatApercu).toFixed(2)}` : ''}
+                      </span>
+                    </div>
                   </div>
                   )}
                   {canAchat && (() => {
