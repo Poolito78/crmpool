@@ -2111,8 +2111,11 @@ const [contratOdoo, setContratOdoo] = useState<
       updateFournisseurs(prev => prev.map(f => {
         if (f.id !== fourn.id) return f;
         if (poidsMin > 0) {
-          const autres = (f.paliersPortPoids ?? []).filter(p => p.poidsMin !== poidsMin);
-          return { ...f, paliersPortPoids: [...autres, { poidsMin, coutTransport: portRetenu }]
+          /* Le tarif vaut POUR la destination du document : on garde le département de livraison avec le palier,
+             et un palier de même poids ne remplace que celui de la même destination. */
+          const dept = livraison.dpt || undefined;
+          const autres = (f.paliersPortPoids ?? []).filter(p => !(p.poidsMin === poidsMin && (p.dept ?? '') === (dept ?? '')));
+          return { ...f, paliersPortPoids: [...autres, { poidsMin, coutTransport: portRetenu, ...(dept ? { dept } : {}) }]
             .sort((a, b) => a.poidsMin - b.poidsMin) };
         }
         return f.coutTransport === portRetenu ? f : { ...f, coutTransport: portRetenu };
@@ -6328,7 +6331,7 @@ const [contratOdoo, setContratOdoo] = useState<
                           const f = fournisseurs.find(x => x.id === creerCFFournisseurId);
                           const euro = (n: number) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
                           const poids = poidsCF();
-                          const attendu = f ? portFournisseur(f, poids, result.totalHT ?? 0) : null;
+                          const attendu = f ? portFournisseur(f, poids, result.totalHT ?? 0, livraison.dpt || undefined) : null;
                           return (
                             <div className="rounded-lg border border-border bg-background/60 p-2 space-y-1">
                               <p className="text-xs font-medium">Frais de transport lus : {euro(fraisPortCF)}{poids > 0 ? ` · ${poids.toLocaleString('fr-FR')} kg` : ''}</p>
@@ -6340,7 +6343,7 @@ const [contratOdoo, setContratOdoo] = useState<
                               {f && (
                                 <p className="text-[11px]">
                                   {attendu
-                                    ? `D'après la fiche (${attendu.source === 'franco' ? 'franco atteint' : attendu.source === 'palier' ? 'palier de poids' : 'coût fixe'}) : ${euro(attendu.montant)}${Math.abs(attendu.montant - fraisPortCF) > 0.005 ? ' — écart avec le document' : ' — conforme'}.`
+                                    ? `D'après la fiche (${attendu.source === 'franco' ? 'franco atteint' : attendu.source === 'palier' ? `palier de poids${attendu.dept ? `, relevé pour le dépt ${attendu.dept}${attendu.approximatif ? ' — autre destination : estimation' : ''}` : ''}` : 'coût fixe'}) : ${euro(attendu.montant)}${Math.abs(attendu.montant - fraisPortCF) > 0.005 ? ' — écart avec le document' : ' — conforme'}.`
                                     : 'La fiche ne permet pas de prévoir ce port.'}
                                 </p>
                               )}
@@ -6355,7 +6358,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                   <Input className="h-7 w-20 text-xs text-right" inputMode="decimal"
                                     value={creerCFPalierPoids !== '' ? creerCFPalierPoids : String(Math.floor(poids))}
                                     onChange={e => setCreerCFPalierPoids(e.target.value)} />
-                                  <span>kg (palier de la fiche{Math.floor(poids) > 0 || creerCFPalierPoids !== '' ? '' : ' — 0 kg = coût fixe'})</span>
+                                  <span>kg (palier de la fiche{Math.floor(poids) > 0 || creerCFPalierPoids !== '' ? '' : ' — 0 kg = coût fixe'}{livraison.dpt ? `, livraison dépt ${livraison.dpt}` : ''})</span>
                                 </div>
                               )}
                             </div>

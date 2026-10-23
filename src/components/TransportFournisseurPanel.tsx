@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatMontant, type ModeTransport, type PalierPortPoids } from '@/lib/store';
 import {
-  LIBELLE_MODE, analyserTransportFournisseur, fusionnerPaliers, type TransportLu,
+  LIBELLE_MODE, analyserTransportFournisseur, fusionnerPaliers, normaliserDept, type TransportLu,
 } from '@/lib/transportFournisseur';
 
 /**
@@ -111,10 +111,11 @@ export default function TransportFournisseurPanel({ valeur, onChange }: Props) {
           )}
           <ul className="text-xs space-y-0.5">
             {d.paliers.map(p => (
-              <li key={p.poidsMin}>
+              <li key={`${p.poidsMin}|${p.dept ?? ''}`}>
                 dès {p.poidsMin} kg → <strong>{formatMontant(p.coutTransport)}</strong>
                 {p.mode ? ` (${LIBELLE_MODE[p.mode]})` : ''}
-                {paliers.some(x => x.poidsMin === p.poidsMin) && <span className="text-amber-600"> — remplace le palier existant</span>}
+                {p.dept ? ` · livraison dépt ${p.dept}` : ''}
+                {paliers.some(x => x.poidsMin === p.poidsMin && (x.dept ?? '') === (p.dept ?? '')) && <span className="text-amber-600"> — remplace le palier existant</span>}
               </li>
             ))}
           </ul>
@@ -156,6 +157,10 @@ export default function TransportFournisseurPanel({ valeur, onChange }: Props) {
               <Input type="number" step="0.01" className="h-8 w-24" value={p.coutTransport}
                 onChange={e => majPalier(i, { coutTransport: parseFloat(e.target.value) || 0 })} />
               <span className="text-xs text-muted-foreground shrink-0">€</span>
+              <Input className="h-8 w-20 text-xs" placeholder="Dépt" maxLength={3} value={p.dept ?? ''}
+                title="Département de livraison pour lequel ce tarif a été relevé (vide = valable partout)"
+                onChange={e => majPalier(i, { dept: e.target.value.trim() === '' ? undefined : e.target.value.toUpperCase().slice(0, 3) })}
+                onBlur={e => majPalier(i, { dept: normaliserDept(e.target.value) })} />
               <Select value={p.mode ?? 'aucun'} onValueChange={v => majPalier(i, { mode: v === 'aucun' ? undefined : v as ModeTransport })}>
                 <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>

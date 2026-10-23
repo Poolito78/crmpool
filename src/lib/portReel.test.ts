@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { portReelParFournisseur } from './portReel';
+import { destinationDuDevis, portReelParFournisseur } from './portReel';
+import { normaliserDept, fusionnerPaliers } from './transportFournisseur';
+import { departementDeCodePostal, portFournisseur } from './store';
 import type { Fournisseur, LigneDevis, Produit, ProduitFournisseur } from './store';
 
 const four = (id: string, o: Partial<Fournisseur> = {}) =>
@@ -71,5 +73,69 @@ describe('portReelParFournisseur', () => {
       choix: { '1': 'F1' },
     }));
     expect(r.fournisseurs.map(f => [f.fournisseurId, f.montant]).sort()).toEqual([['F1', 10], ['F2', 30]]);
+  });
+});
+
+describe('port selon la destination', () => {
+  const f = four('F1', {
+    paliersPortPoids: [
+      { poidsMin: 0, coutTransport: 40 },
+      { poidsMin: 100, coutTransport: 90, dept: '13' },
+      { poidsMin: 100, coutTransport: 60 },
+    ],
+  });
+
+  it('le tarif relevé pour le département passe devant le tarif valable partout', () => {
+    expect(portFournisseur(f, 150, 0, '13')).toMatchObject({ montant: 90, dept: '13' });
+    expect(portFournisseur(f, 150, 0, '76')).toMatchObject({ montant: 60 });
+    expect(portFournisseur(f, 150, 0, '76')?.approximatif).toBeUndefined();
+  });
+
+  it('sans tarif générique, un autre département sert d’estimation signalée', () => {
+    const seul = four('F2', { paliersPortPoids: [{ poidsMin: 0, coutTransport: 55, dept: '13' }] });
+    expect(portFournisseur(seul, 80, 0, '76')).toMatchObject({ montant: 55, dept: '13', approximatif: true });
+  });
+
+  it('sans département, les tarifs d’avant se lisent comme avant', () => {
+    expect(portFournisseur(four('F3', { paliersPortPoids: [{ poidsMin: 0, coutTransport: 20 }, { poidsMin: 50, coutTransport: 30 }] }), 60, 0)).toMatchObject({ montant: 30 });
+  });
+
+  it('portReel transmet la destination', () => {
+    const r = portReelParFournisseur(base({
+      lignes: [ligne('1', 'a', 8)], // 160 kg
+      produitFournisseurs: [pf('a', 'F1')], fournisseurs: [f], dept: '13',
+    }));
+    expect(r.fournisseurs[0]).toMatchObject({ montant: 90, dept: '13' });
+  });
+
+  it('départements : codes postaux, Corse, DOM, saisie libre', () => {
+    expect(departementDeCodePostal('78000')).toBe('78');
+    expect(departementDeCodePostal('20000')).toBe('2A');
+    expect(departementDeCodePostal('20200')).toBe('2B');
+    expect(departementDeCodePostal('97100')).toBe('971');
+    expect(departementDeCodePostal('7800')).toBeUndefined();
+    expect(['7', '07', '013', '2a', 'abc'].map(normaliserDept)).toEqual(['07', '07', '13', '2A', undefined]);
+  });
+
+  it('un palier relevé remplace celui du même poids ET de la même destination', () => {
+    const r = fusionnerPaliers(
+      [{ poidsMin: 100, coutTransport: 60 }, { poidsMin: 100, coutTransport: 90, dept: '13' }],
+      [{ poidsMin: 100, coutTransport: 95, dept: '13' }],
+    );
+    expect(r).toEqual([{ poidsMin: 100, coutTransport: 60 }, { poidsMin: 100, coutTransport: 95, dept: '13' }]);
+  });
+
+  it('destination du devis : livraison choisie, sinon défaut, sinon facturation', () => {
+    const client = {
+      codePostal: '78000',
+      adressesLivraison: [
+        { id: 'a1', libelle: 'Chantier Lyon', adresse: '', ville: 'Lyon', codePostal: '69003', parDefaut: false, type: 'livraison' as const },
+        { id: 'a2', libelle: 'Dépôt', adresse: '', ville: 'Rouen', codePostal: '76000', parDefaut: true, type: 'livraison' as const },
+      ],
+    };
+    expect(destinationDuDevis(client, 'a1')?.dept).toBe('69');
+    expect(destinationDuDevis(client)?.dept).toBe('76');
+    expect(destinationDuDevis({ ...client, adressesLivraison: [] })?.dept).toBe('78');
+    expect(destinationDuDevis(undefined)).toBeNull();
   });
 });

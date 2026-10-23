@@ -15,8 +15,10 @@
  * part pour que l'écran le dise.
  */
 import {
+  departementDeCodePostal,
   getPfTransportPourMontant,
   portFournisseur,
+  type Client,
   type Fournisseur,
   type LigneDevis,
   type ModeTransport,
@@ -35,6 +37,10 @@ export interface PortParFournisseur {
   montant: number | null;
   source: 'franco' | 'palier' | 'fixe' | 'lien' | null;
   mode?: ModeTransport;
+  /** Département du tarif retenu (relevé sur un devis fournisseur), s'il est propre à une destination. */
+  dept?: string;
+  /** Tarif relevé pour une AUTRE destination que celle du devis : une estimation, pas un tarif. */
+  approximatif?: boolean;
 }
 
 export interface PortReel {
@@ -58,6 +64,8 @@ interface Entree {
   choix: Record<string, string>;
   /** Achat HT total de la ligne (quantité × prix d'achat + forfait de commande). */
   achatDeLigne: (l: LigneDevis) => number;
+  /** Département de livraison du devis : choisit, parmi les tarifs relevés, celui de cette destination. */
+  dept?: string;
 }
 
 export function portReelParFournisseur(e: Entree): PortReel {
@@ -92,9 +100,11 @@ export function portReelParFournisseur(e: Entree): PortReel {
     // Des paliers de lien tous à 0 € ne disent rien (TREMCO : [0 €, 0 €] sur FLOWFAST 319, alors que la fiche
     // porte 38,11 €) : la fiche fait foi. Un lien ne prime que s'il chiffre un port.
     const lien = g.pfs.find(p => p.paliersPort?.some(x => x.coutTransport > 0));
-    if (lien) return { ...base, montant: getPfTransportPourMontant(lien, f, g.montantAchat, g.poidsKg), source: 'lien' };
-    const r = portFournisseur(f, g.poidsKg, g.montantAchat);
-    return r ? { ...base, montant: r.montant, source: r.source, mode: r.mode } : { ...base, montant: null, source: null };
+    if (lien) return { ...base, montant: getPfTransportPourMontant(lien, f, g.montantAchat, g.poidsKg, e.dept), source: 'lien' };
+    const r = portFournisseur(f, g.poidsKg, g.montantAchat, e.dept);
+    return r
+      ? { ...base, montant: r.montant, source: r.source, mode: r.mode, dept: r.dept, approximatif: r.approximatif }
+      : { ...base, montant: null, source: null };
   }).sort((a, b) => b.montantAchat - a.montantAchat);
 
   const connus = fournisseurs.filter(f => f.montant !== null);
@@ -105,6 +115,26 @@ export function portReelParFournisseur(e: Entree): PortReel {
     incomplet: connus.length < fournisseurs.length,
     sansFournisseur,
   };
+}
+
+/**
+ * Département où le devis est livré : l'adresse de livraison choisie, sinon la
+ * livraison par défaut du client, sinon son adresse de facturation. Les deux
+ * derniers sont des replis — l'écran l'indique (`origine`).
+ */
+export function destinationDuDevis(
+  client: Pick<Client, 'codePostal' | 'adressesLivraison'> | undefined,
+  adresseLivraisonId?: string,
+): { dept: string; origine: string } | null {
+  if (!client) return null;
+  const livraisons = (client.adressesLivraison ?? []).filter(a => a.type !== 'facturation');
+  const choisie = adresseLivraisonId ? livraisons.find(a => a.id === adresseLivraisonId) : undefined;
+  const dChoisie = departementDeCodePostal(choisie?.codePostal);
+  if (choisie && dChoisie) return { dept: dChoisie, origine: `adresse de livraison « ${choisie.libelle || choisie.ville} »` };
+  const parDefaut = livraisons.find(a => a.parDefaut && departementDeCodePostal(a.codePostal)) ?? livraisons.find(a => departementDeCodePostal(a.codePostal));
+  if (parDefaut) return { dept: departementDeCodePostal(parDefaut.codePostal)!, origine: `livraison « ${parDefaut.libelle || parDefaut.ville} », à défaut` };
+  const fact = departementDeCodePostal(client.codePostal);
+  return fact ? { dept: fact, origine: 'adresse de facturation, à défaut' } : null;
 }
 
 export const LIBELLE_SOURCE_PORT: Record<NonNullable<PortParFournisseur['source']>, string> = {

@@ -91,7 +91,7 @@ import { useCurrentUser } from '@/hooks/useAuth';
 import { useCommercials } from '@/hooks/useCommercials';
 import { moFichesSupported, ensureMoFolder, findMoFiches, type MoFiche } from '@/lib/moFiches';
 import { generatePdfFromElement, writeFileToFolder } from '@/lib/pdfFolder';
-import { portReelParFournisseur, LIBELLE_SOURCE_PORT } from '@/lib/portReel';
+import { portReelParFournisseur, destinationDuDevis, LIBELLE_SOURCE_PORT } from '@/lib/portReel';
 
 // ── Colonnes optionnelles (toujours disponibles) ──────────────────────────────
 const LIGNE_COLS = [
@@ -3066,10 +3066,11 @@ export default function Devis() {
   /* Coût RÉEL du port : celui des fournisseurs, un port par commande fournisseur (`portReel.ts`). Il remplace
      « achat = vente » pour le transport standard dès qu'un fournisseur a un port connu ; un fournisseur dont la
      fiche ne le dit pas reste « à vérifier » et hors du total. Les autres transporteurs gardent leur barème. */
+  const destinationPort = dialogOpen && canAchat && fraisPortHT > 0 ? destinationDuDevis(clients.find(c => c.id === clientId), adresseLivraisonId) : null;
   const portReel = dialogOpen && canAchat && fraisPortHT > 0
     ? portReelParFournisseur({
         lignes, produitParId: id => produitParId(produits, id), produitFournisseurs, fournisseurs,
-        choix: selectedFournisseurPerLigne,
+        choix: selectedFournisseurPerLigne, dept: destinationPort?.dept,
         achatDeLigne: l => {
           const prod = l.produitId ? produitParId(produits, l.produitId) : null;
           const pu = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
@@ -3080,14 +3081,17 @@ export default function Devis() {
   const portAchatReelDefaut = portReel?.connu && transporteur === 'standard' ? portReel.total : null;
   const detailPort = portReel && transporteur === 'standard' ? (
     <div className="space-y-0.5 pl-3 text-[11px] text-muted-foreground">
+      {destinationPort && <div>Livraison : dépt {destinationPort.dept} ({destinationPort.origine})</div>}
       {portReel.fournisseurs.map(f => (
         <div key={f.fournisseurId} className="flex justify-between gap-2">
           <span className="truncate" title={f.source ? LIBELLE_SOURCE_PORT[f.source] : 'Port non renseigné sur la fiche du fournisseur'}>
             {f.nom} · {f.poidsKg.toFixed(0)} kg · achat {formatMontant(f.montantAchat)}{f.source ? ` · ${LIBELLE_SOURCE_PORT[f.source]}` : ''}
+            {f.dept ? ` · tarif relevé pour le dépt ${f.dept}` : ''}
+            {f.approximatif ? ' — autre destination : estimation' : ''}
           </span>
           {f.montant === null
             ? <span className="shrink-0 font-medium text-amber-600 dark:text-amber-400">à vérifier</span>
-            : <span className="shrink-0 whitespace-nowrap">{formatMontant(f.montant)}</span>}
+            : <span className={`shrink-0 whitespace-nowrap ${f.approximatif ? 'text-amber-600 dark:text-amber-400' : ''}`}>{f.approximatif ? '≈ ' : ''}{formatMontant(f.montant)}</span>}
         </div>
       ))}
       {portReel.sansFournisseur > 0 && <div>{portReel.sansFournisseur} ligne(s) sans fournisseur : aucun port compté</div>}

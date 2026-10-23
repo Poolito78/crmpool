@@ -87,24 +87,47 @@ export interface PalierPortPoids {
   poidsMin: number;      // kg à partir desquels ce tarif s'applique
   coutTransport: number; // € HT
   mode?: ModeTransport;
+  /**
+   * Département de livraison pour lequel ce tarif a été relevé (« 13 », « 2A »),
+   * le plus souvent sur un devis fournisseur. Absent = tarif valable partout.
+   */
+  dept?: string;
 }
 
 /**
  * Port d'une commande fournisseur d'après sa fiche : 0 au-delà du franco,
  * sinon le palier de poids atteint, sinon le coût de transport fixe.
  * `null` = la fiche ne permet pas de le dire (rien n'est deviné).
+ *
+ * Avec un département de livraison (`dept`), le tarif relevé POUR ce département
+ * passe d'abord, puis les tarifs valables partout, et seulement en dernier
+ * recours celui d'une autre destination — rendu `approximatif`, avec son
+ * département, pour que l'écran le dise : c'est une estimation, pas un tarif.
  */
 export function portFournisseur(
   f: Pick<Fournisseur, 'francoPort' | 'coutTransport' | 'paliersPortPoids'>,
   poidsKg: number,
   montantHT: number,
-): { montant: number; source: 'franco' | 'palier' | 'fixe'; mode?: ModeTransport } | null {
+  dept?: string,
+): { montant: number; source: 'franco' | 'palier' | 'fixe'; mode?: ModeTransport; dept?: string; approximatif?: boolean } | null {
   if (f.francoPort > 0 && montantHT >= f.francoPort) return { montant: 0, source: 'franco' };
-  const paliers = [...(f.paliersPortPoids ?? [])].sort((a, b) => b.poidsMin - a.poidsMin);
-  const p = poidsKg > 0 ? paliers.find(x => poidsKg >= x.poidsMin) : undefined;
-  if (p) return { montant: p.coutTransport, source: 'palier', mode: p.mode };
+  const tous = [...(f.paliersPortPoids ?? [])].sort((a, b) => b.poidsMin - a.poidsMin);
+  const atteint = (liste: PalierPortPoids[]) => (poidsKg > 0 ? liste.find(x => poidsKg >= x.poidsMin) : undefined);
+  const exact = dept ? atteint(tous.filter(p => p.dept === dept)) : undefined;
+  const partout = atteint(tous.filter(p => !p.dept));
+  const ailleurs = atteint(tous.filter(p => !!p.dept && p.dept !== dept));
+  const p = exact ?? partout ?? ailleurs;
+  if (p) return { montant: p.coutTransport, source: 'palier', mode: p.mode, ...(p.dept ? { dept: p.dept } : {}), ...(p === ailleurs ? { approximatif: true } : {}) };
   if (f.coutTransport > 0) return { montant: f.coutTransport, source: 'fixe' };
   return null;
+}
+
+/** Département (« 13 », « 2A », « 971 ») d'un code postal ; `undefined` si le code n'en est pas un. */
+export function departementDeCodePostal(cp?: string): string | undefined {
+  const t = String(cp ?? '').replace(/\s/g, '').toUpperCase();
+  if (/^20\d{3}$/.test(t)) return Number(t.slice(0, 3)) < 202 ? '2A' : '2B';
+  if (/^9[78]\d{3}$/.test(t)) return t.slice(0, 3);
+  return /^\d{5}$/.test(t) ? t.slice(0, 2) : undefined;
 }
 
 export interface Fournisseur {
@@ -392,13 +415,14 @@ export function getPfTransportPourMontant(
   fourn: Pick<Fournisseur, 'francoPort' | 'coutTransport' | 'paliersPortPoids'>,
   montantAchat: number,
   poidsKg = 0,
+  dept?: string,
 ): number {
   if (pf.paliersPort && pf.paliersPort.length > 0) {
     const sorted = [...pf.paliersPort].sort((a, b) => b.montantMin - a.montantMin);
     const palier = sorted.find(p => montantAchat >= p.montantMin);
     return palier?.coutTransport ?? fourn.coutTransport;
   }
-  const fiche = portFournisseur(fourn, poidsKg, montantAchat);
+  const fiche = portFournisseur(fourn, poidsKg, montantAchat, dept);
   if (fiche) return fiche.montant;
   return montantAchat >= fourn.francoPort ? 0 : fourn.coutTransport;
 }
