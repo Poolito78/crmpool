@@ -764,6 +764,8 @@ export interface Devis {
    * lieu du « FRAIS DE PORT » générique. Absent = port générique.
    */
   fraisPortLibelle?: string;
+  /** Coût d'achat du transport corrigé à la main (récap / comparatif). Absent ou null = coût calculé. */
+  portAchatManuel?: number | null;
   fraisPortAuto?: boolean;
   modeCalcul?: 'standard' | 'surface';
   /** Surface globale — en m², ou en mètres linéaires si `uniteSurface` = 'ml' (le nom du champ est historique). */
@@ -1211,6 +1213,7 @@ function dbToDevis(r: any): Devis {
     fraisPortHT: r.frais_port_ht != null ? Number(r.frais_port_ht) : undefined,
     fraisPortTVA: r.frais_port_tva != null ? Number(r.frais_port_tva) : undefined,
     fraisPortLibelle: r.frais_port_libelle || undefined,
+    portAchatManuel: r.port_achat_manuel != null ? Number(r.port_achat_manuel) : undefined,
     fraisPortAuto: r.frais_port_auto != null ? Boolean(r.frais_port_auto) : undefined,
     modeCalcul: r.mode_calcul || 'standard',
     surfaceGlobaleM2: r.surface_globale_m2 != null ? Number(r.surface_globale_m2) : undefined,
@@ -1257,6 +1260,7 @@ function devisToDb(d: Devis, userId: string) {
     frais_port_ht: d.fraisPortHT ?? 0,
     frais_port_tva: d.fraisPortTVA ?? 20,
     ...(d.fraisPortLibelle !== undefined ? { frais_port_libelle: d.fraisPortLibelle || null } : {}),
+    ...(d.portAchatManuel !== undefined ? { port_achat_manuel: d.portAchatManuel } : {}),
     ...(d.fraisPortAuto !== undefined ? { frais_port_auto: d.fraisPortAuto } : {}),
     mode_calcul: d.modeCalcul || 'standard',
     surface_globale_m2: d.surfaceGlobaleM2 ?? null,

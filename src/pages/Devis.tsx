@@ -91,6 +91,7 @@ import { useCurrentUser } from '@/hooks/useAuth';
 import { useCommercials } from '@/hooks/useCommercials';
 import { moFichesSupported, ensureMoFolder, findMoFiches, type MoFiche } from '@/lib/moFiches';
 import { generatePdfFromElement, writeFileToFolder } from '@/lib/pdfFolder';
+import { portReelParFournisseur, LIBELLE_SOURCE_PORT } from '@/lib/portReel';
 
 // ── Colonnes optionnelles (toujours disponibles) ──────────────────────────────
 const LIGNE_COLS = [
@@ -1133,7 +1134,7 @@ export default function Devis() {
       if (prio) fInit[l.id] = prio.fournisseurId;
     }
     setSelectedFournisseurPerLigne(fInit);
-    setPortAchatManuel(null);
+    setPortAchatManuel(d.portAchatManuel ?? null);
     setCompaEditingId(null);
     setUndoStack([]);
   }
@@ -2616,7 +2617,7 @@ export default function Devis() {
       updateDevis(prev => prev.map(d => d.id === editingId ? {
         ...d,
         numero: estModele ? ('SYS - ' + (systeme || referenceAffaire || 'MODÈLE')) : d.numero,
-        clientId: clientIdASauver, contactId: retourSysteme ? undefined : contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes: lignesASauver, referenceAffaire, chantier, niveauTarif: niveauASauver, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: retourSysteme ? undefined : adresseLivraisonId || undefined, contactLivraisonId: retourSysteme ? undefined : contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
+        clientId: clientIdASauver, contactId: retourSysteme ? undefined : contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes: lignesASauver, referenceAffaire, chantier, niveauTarif: niveauASauver, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, ...(portAchatManuel != null || d.portAchatManuel != null ? { portAchatManuel } : {}), adresseLivraisonId: retourSysteme ? undefined : adresseLivraisonId || undefined, contactLivraisonId: retourSysteme ? undefined : contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
@@ -2627,7 +2628,7 @@ export default function Devis() {
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId: clientIdASauver, contactId: retourSysteme ? undefined : contactId || undefined, adresseLivraisonId: retourSysteme ? undefined : adresseLivraisonId || undefined, contactLivraisonId: retourSysteme ? undefined : contactLivraisonId || undefined, dateCreation,
-        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes: lignesASauver, referenceAffaire, chantier, niveauTarif: niveauASauver, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
+        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes: lignesASauver, referenceAffaire, chantier, niveauTarif: niveauASauver, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, ...(portAchatManuel != null ? { portAchatManuel } : {}), modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) {
@@ -2800,12 +2801,12 @@ export default function Devis() {
     autoSaveRef.current = setTimeout(() => {
       if ((clientId || statut === 'système') && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
+          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, ...(portAchatManuel != null || d.portAchatManuel != null ? { portAchatManuel } : {}), adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
         } : d));
       }
     }, 500);
     return () => clearTimeout(autoSaveRef.current);
-  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, chantier, niveauTarif, notes, conditions, moContent, probabiliteReussite, dateRealisation, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2, uniteSurface]);
+  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, chantier, niveauTarif, notes, conditions, moContent, probabiliteReussite, dateRealisation, fraisPortHT, fraisPortTVA, fraisPortAuto, portAchatManuel, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2, uniteSurface]);
 
   // Chargement pièces jointes pour la sidebar
   useEffect(() => {
@@ -3058,6 +3059,39 @@ export default function Devis() {
   }
 
   const total = calculerTotalDevis(lignes, fraisPortHT, fraisPortTVA);
+
+  /* Coût RÉEL du port : celui des fournisseurs, un port par commande fournisseur (`portReel.ts`). Il remplace
+     « achat = vente » pour le transport standard dès qu'un fournisseur a un port connu ; un fournisseur dont la
+     fiche ne le dit pas reste « à vérifier » et hors du total. Les autres transporteurs gardent leur barème. */
+  const portReel = dialogOpen && canAchat && fraisPortHT > 0
+    ? portReelParFournisseur({
+        lignes, produitParId: id => produitParId(produits, id), produitFournisseurs, fournisseurs,
+        choix: selectedFournisseurPerLigne,
+        achatDeLigne: l => {
+          const prod = l.produitId ? produitParId(produits, l.produitId) : null;
+          const pu = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
+          return pu * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id));
+        },
+      })
+    : null;
+  const portAchatReelDefaut = portReel?.connu && transporteur === 'standard' ? portReel.total : null;
+  const detailPort = portReel && transporteur === 'standard' ? (
+    <div className="space-y-0.5 pl-3 text-[11px] text-muted-foreground">
+      {portReel.fournisseurs.map(f => (
+        <div key={f.fournisseurId} className="flex justify-between gap-2">
+          <span className="truncate" title={f.source ? LIBELLE_SOURCE_PORT[f.source] : 'Port non renseigné sur la fiche du fournisseur'}>
+            {f.nom} · {f.poidsKg.toFixed(0)} kg · achat {formatMontant(f.montantAchat)}{f.source ? ` · ${LIBELLE_SOURCE_PORT[f.source]}` : ''}
+          </span>
+          {f.montant === null
+            ? <span className="shrink-0 font-medium text-amber-600 dark:text-amber-400">à vérifier</span>
+            : <span className="shrink-0 whitespace-nowrap">{formatMontant(f.montant)}</span>}
+        </div>
+      ))}
+      {portReel.sansFournisseur > 0 && <div>{portReel.sansFournisseur} ligne(s) sans fournisseur : aucun port compté</div>}
+      {portReel.incomplet && portReel.connu && <div className="text-amber-600 dark:text-amber-400">Coût partiel : un fournisseur n'a pas de port renseigné (fiche fournisseur)</div>}
+      {!portReel.connu && <div>Aucun port fournisseur renseigné : port compté au prix coûtant</div>}
+    </div>
+  ) : null;
 
   /* ── Coller image dans note de ligne ── */
   function handleLigneNotePaste(ligneId: string, e: React.ClipboardEvent) {
@@ -5375,7 +5409,7 @@ ${dosage.source}` : ''}`}>
                   const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                   return prod?.categorie?.toLowerCase().includes('granulat');
                 });
-                return calculerFraisPort(poidsTotal, hasGranulat) ?? fraisPortHT;
+                return portAchatReelDefaut ?? calculerFraisPort(poidsTotal, hasGranulat) ?? fraisPortHT;
               })();
               const portAchatApercu = fraisPortHT > 0 ? (portAchatManuel ?? portAchatCalcule) : 0;
               const totalHTLignes = calculerTotalDevis(lignes, 0, 0).totalHT;
@@ -5443,6 +5477,7 @@ ${dosage.source}` : ''}`}>
                     </div>
                   </div>
                   )}
+                  {canAchat && fraisPortHT > 0 && detailPort}
                   {canAchat && (() => {
                     // Coût chantier = produits consommés (surface × conso kg/m² × prix/kg).
                     // Même calcul que la note envoyée à Odoo : `coutChantier`.
@@ -5574,8 +5609,8 @@ ${dosage.source}` : ''}`}>
                 const { prix } = calculerFraisPortBareme(BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>].bareme, poidsCompa);
                 portAchatCalcule = prix ?? 0;
               } else {
-                // standard : pas de markup → achat = vente
-                portAchatCalcule = calculerFraisPort(poidsCompa, hasGranulatCompa) ?? fraisPortHT;
+                // standard : coût réel des fournisseurs ; sans port fournisseur connu, pas de markup → achat = vente
+                portAchatCalcule = portAchatReelDefaut ?? calculerFraisPort(poidsCompa, hasGranulatCompa) ?? fraisPortHT;
               }
             }
             const portAchat = portAchatManuel ?? portAchatCalcule;
@@ -5816,6 +5851,7 @@ ${dosage.source}` : ''}`}>
                         totalAchat += portAchat;
                         totalVente += portVente;
                         return (
+                          <>
                           <tr className="border-b border-border/50 hover:bg-muted/30 bg-blue-50/30 dark:bg-blue-950/20">
                             <td className="px-2 py-1.5 text-muted-foreground italic" colSpan={3}>{transportLabel}</td>
                             <td className="px-2 py-1.5 text-right">
@@ -5865,6 +5901,12 @@ ${dosage.source}` : ''}`}>
                             <td className="px-2 py-1.5 text-right text-muted-foreground">—</td>
                             <td className={`px-2 py-1.5 text-right font-semibold ${portCoeffColor}`}>{portCoeff != null ? portCoeff.toFixed(2) : <span className="text-muted-foreground font-normal">—</span>}</td>
                           </tr>
+                          {detailPort && (
+                            <tr className="border-b border-border/50 bg-blue-50/30 dark:bg-blue-950/20">
+                              <td colSpan={10} className="px-2 py-1.5">{detailPort}</td>
+                            </tr>
+                          )}
+                          </>
                         );
                       })()}
                     </tbody>
