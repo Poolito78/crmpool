@@ -208,3 +208,47 @@ describe('palettes comptées article par article', () => {
     expect(r.fournisseurs[0]).toMatchObject({ poidsKg: 900, source: 'affretement', palettes: 2, montant: 375 });
   });
 });
+
+describe('transport choisi sur le devis', () => {
+  const messagerie = {
+    dateImport: '2026-10-24', tranches: [{ min: 0, max: 99 }], zones: [{ zone: '10', prix: [41] }],
+    departements: { '13': '10' }, supplementParEnvoi: 3.3,
+  };
+  const affretement = {
+    dateImport: '2026-10-24', kgParPalette: 1000,
+    tarifs: [{ dept: '13', service: 'T3', paliers: [{ palettes: 1, prix: 246 }, { palettes: 2, prix: 375 }] }],
+  };
+  const qrm = four('QRM', { grilleMessagerie: messagerie, grilleAffretement: affretement });
+  const entree = (choixTransport?: Record<string, string>) => base({
+    lignes: [ligne('1', 'a', 4)], // 80 kg
+    produitFournisseurs: [pf('a', 'QRM')],
+    fournisseurs: [qrm],
+    dept: '13',
+    choixTransport,
+  });
+
+  it('propose la messagerie (poids dans ses tranches) et chaque palier d’affrètement du département', () => {
+    const r = portReelParFournisseur(entree());
+    expect(r.fournisseurs[0].options.map(o => [o.cle, o.montant])).toEqual([
+      ['messagerie', 44.3], ['affretement:1', 246], ['affretement:2', 375],
+    ]);
+    expect(r.fournisseurs[0]).toMatchObject({ source: 'messagerie', montant: 44.3 });
+    expect(r.fournisseurs[0].choisi).toBeUndefined();
+  });
+
+  it('le transport choisi fait le coût du port', () => {
+    const r = portReelParFournisseur(entree({ QRM: 'affretement:2' }));
+    expect(r.fournisseurs[0]).toMatchObject({ source: 'affretement', montant: 375, palettes: 2, service: 'T3', choisi: 'affretement:2' });
+    expect(r.total).toBe(375);
+  });
+
+  it('un choix qui ne correspond plus à aucune option retombe sur le calcul', () => {
+    const r = portReelParFournisseur(entree({ QRM: 'affretement:6' }));
+    expect(r.fournisseurs[0]).toMatchObject({ source: 'messagerie', montant: 44.3 });
+  });
+
+  it('sans département, aucune option', () => {
+    const r = portReelParFournisseur({ ...entree({ QRM: 'affretement:2' }), dept: undefined });
+    expect(r.fournisseurs[0].options).toEqual([]);
+  });
+});

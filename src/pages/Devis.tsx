@@ -724,6 +724,8 @@ export default function Devis() {
   const [selectedFournisseurPerLigne, setSelectedFournisseurPerLigne] = useState<Record<string, string>>({});
   // Comparatif — édition manuelle du PU Achat
   const [portAchatManuel, setPortAchatManuel] = useState<number | null>(null);
+  /** Transport choisi par fournisseur dans le détail du port (« affretement:2 ») : son prix fait le coût du port. */
+  const [choixTransport, setChoixTransport] = useState<Record<string, string>>({});
   const [compaEditingId, setCompaEditingId] = useState<string | null>(null); // ligneId ou '__transport__'
   const [compaEditingField, setCompaEditingField] = useState<'achat' | 'vente' | 'coeff'>('achat');
   const [compaEditVal, setCompaEditVal] = useState('');
@@ -1141,6 +1143,7 @@ export default function Devis() {
     }
     setSelectedFournisseurPerLigne(fInit);
     setPortAchatManuel(d.portAchatManuel ?? null);
+    setChoixTransport(d.choixTransport ?? {});
     setCompaEditingId(null);
     setUndoStack([]);
   }
@@ -1183,6 +1186,7 @@ export default function Devis() {
     setDialogTab('devis');
     setSelectedFournisseurPerLigne({});
     setPortAchatManuel(null);
+    setChoixTransport({});
     setCompaEditingId(null);
     setAdresseLivraisonId('');
     setUndoStack([]);
@@ -2623,7 +2627,7 @@ export default function Devis() {
       updateDevis(prev => prev.map(d => d.id === editingId ? {
         ...d,
         numero: estModele ? ('SYS - ' + (systeme || referenceAffaire || 'MODÈLE')) : d.numero,
-        clientId: clientIdASauver, contactId: retourSysteme ? undefined : contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes: lignesASauver, referenceAffaire, chantier, niveauTarif: niveauASauver, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, ...(portAchatManuel != null || d.portAchatManuel != null ? { portAchatManuel } : {}), adresseLivraisonId: retourSysteme ? undefined : adresseLivraisonId || undefined, contactLivraisonId: retourSysteme ? undefined : contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
+        clientId: clientIdASauver, contactId: retourSysteme ? undefined : contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes: lignesASauver, referenceAffaire, chantier, niveauTarif: niveauASauver, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, ...(portAchatManuel != null || d.portAchatManuel != null ? { portAchatManuel } : {}), ...(Object.keys(choixTransport).length || d.choixTransport ? { choixTransport } : {}), adresseLivraisonId: retourSysteme ? undefined : adresseLivraisonId || undefined, contactLivraisonId: retourSysteme ? undefined : contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
@@ -2634,7 +2638,7 @@ export default function Devis() {
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId: clientIdASauver, contactId: retourSysteme ? undefined : contactId || undefined, adresseLivraisonId: retourSysteme ? undefined : adresseLivraisonId || undefined, contactLivraisonId: retourSysteme ? undefined : contactLivraisonId || undefined, dateCreation,
-        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes: lignesASauver, referenceAffaire, chantier, niveauTarif: niveauASauver, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, ...(portAchatManuel != null ? { portAchatManuel } : {}), modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
+        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes: lignesASauver, referenceAffaire, chantier, niveauTarif: niveauASauver, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, ...(portAchatManuel != null ? { portAchatManuel } : {}), ...(Object.keys(choixTransport).length ? { choixTransport } : {}), modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) {
@@ -2807,12 +2811,12 @@ export default function Devis() {
     autoSaveRef.current = setTimeout(() => {
       if ((clientId || statut === 'système') && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, ...(portAchatManuel != null || d.portAchatManuel != null ? { portAchatManuel } : {}), adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
+          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, ...(portAchatManuel != null || d.portAchatManuel != null ? { portAchatManuel } : {}), ...(Object.keys(choixTransport).length || d.choixTransport ? { choixTransport } : {}), adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface: uniteSurfaceAEcrire
         } : d));
       }
     }, 500);
     return () => clearTimeout(autoSaveRef.current);
-  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, chantier, niveauTarif, notes, conditions, moContent, probabiliteReussite, dateRealisation, fraisPortHT, fraisPortTVA, fraisPortAuto, portAchatManuel, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2, uniteSurface]);
+  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, chantier, niveauTarif, notes, conditions, moContent, probabiliteReussite, dateRealisation, fraisPortHT, fraisPortTVA, fraisPortAuto, portAchatManuel, choixTransport, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2, uniteSurface]);
 
   // Chargement pièces jointes pour la sidebar
   useEffect(() => {
@@ -3073,7 +3077,7 @@ export default function Devis() {
   const portReel = dialogOpen && canAchat
     ? portReelParFournisseur({
         lignes, produitParId: id => produitParId(produits, id), produitFournisseurs, fournisseurs,
-        choix: selectedFournisseurPerLigne, dept: destinationPort?.dept,
+        choix: selectedFournisseurPerLigne, dept: destinationPort?.dept, choixTransport,
         achatDeLigne: l => {
           const prod = l.produitId ? produitParId(produits, l.produitId) : null;
           const pu = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
@@ -3102,6 +3106,29 @@ export default function Devis() {
             {f.approximatif ? ' — autre destination : estimation' : ''}
             {f.sansGrille && <span className="block text-amber-600 dark:text-amber-400">{f.sansGrille}</span>}
           </span>
+          {/* Transport CHOISI parmi ceux que chiffrent les grilles de la fiche : son prix devient le coût
+              du port (le coût saisi à la main est levé), et la marge après port suit. */}
+          {f.options.length > 0 && (
+            <Select value={f.choisi ?? '__auto'}
+              onValueChange={v => {
+                setChoixTransport(prev => {
+                  const autres = Object.fromEntries(Object.entries(prev).filter(([id]) => id !== f.fournisseurId));
+                  return v === '__auto' ? autres : { ...autres, [f.fournisseurId]: v };
+                });
+                setPortAchatManuel(null);
+              }}>
+              <SelectTrigger className={`h-6 w-auto min-w-[150px] text-[11px] px-2 shrink-0 ${f.choisi ? 'border-primary text-primary' : ''}`}
+                title="Choisir le transport de ce fournisseur">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__auto"><span className="text-xs">Calcul automatique</span></SelectItem>
+                {f.options.map(o => (
+                  <SelectItem key={o.cle} value={o.cle}><span className="text-xs">{o.libelle} — {formatMontant(o.montant)}</span></SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           {f.montant === null
             ? <button type="button" className="shrink-0 font-medium text-amber-600 dark:text-amber-400 hover:underline underline-offset-2"
                 title="Renseigner le port sur la fiche fournisseur"

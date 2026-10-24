@@ -13,12 +13,18 @@
  * dire son port rend `montant: null` (« à vérifier ») et reste hors du total.
  * Les lignes sans fournisseur ne portent aucun port ; elles sont comptées à
  * part pour que l'écran le dise.
+ *
+ * Le transport peut aussi être CHOISI sur le devis, fournisseur par
+ * fournisseur, parmi ceux que ses grilles chiffrent pour la destination
+ * (`optionsTransport` : messagerie, affrètement 1 à 6 palettes) : son prix
+ * devient le coût du port, et la marge après port suit.
  */
 import {
   departementDeCodePostal,
   getPfTransportPourMontant,
   palettesDesLignes,
   portFournisseur,
+  prixMessagerie,
   raisonSansGrille,
   type Client,
   type Fournisseur,
@@ -51,6 +57,52 @@ export interface PortParFournisseur {
   dept?: string;
   /** Tarif relevé pour une AUTRE destination que celle du devis : une estimation, pas un tarif. */
   approximatif?: boolean;
+  /** Transports que les grilles de la fiche chiffrent pour cette destination (à choisir sur le devis). */
+  options: OptionTransport[];
+  /** Le transport a été CHOISI sur le devis (clé de l'option), au lieu du calcul. */
+  choisi?: string;
+}
+
+/**
+ * Un transport chiffré par une grille de la fiche pour la destination du
+ * devis : la messagerie (si le poids est dans ses tranches) ou l'affrètement
+ * pour chaque nombre de palettes de la grille. Clé stockée sur le devis :
+ * « messagerie », « affretement:2 ».
+ */
+export interface OptionTransport {
+  cle: string;
+  libelle: string;
+  montant: number;
+  mode: 'messagerie' | 'affretement';
+  palettes?: number;
+  zone?: string;
+  service?: string;
+}
+
+/** Les transports que les grilles de la fiche chiffrent pour ce département et ce poids. */
+export function optionsTransport(
+  f: Pick<Fournisseur, 'grilleMessagerie' | 'grilleAffretement'>,
+  dept: string | undefined,
+  poidsKg: number,
+): OptionTransport[] {
+  if (!dept) return [];
+  const out: OptionTransport[] = [];
+  const mes = prixMessagerie(f.grilleMessagerie, dept, poidsKg);
+  if (mes) {
+    out.push({
+      cle: 'messagerie', mode: 'messagerie', zone: mes.zone, montant: mes.prix,
+      libelle: `Messagerie zone ${mes.zone === 'CORSE' ? 'Corse' : mes.zone} (${mes.tranche.min}-${mes.tranche.max} kg)`,
+    });
+  }
+  const t = f.grilleAffretement?.tarifs.find(x => x.dept === dept);
+  for (const p of [...(t?.paliers ?? [])].sort((a, b) => a.palettes - b.palettes)) {
+    out.push({
+      cle: `affretement:${p.palettes}`, mode: 'affretement', palettes: p.palettes, montant: p.prix,
+      ...(t?.service ? { service: t.service } : {}),
+      libelle: `Affrètement ${p.palettes} palette${p.palettes > 1 ? 's' : ''}${t?.service ? ` (${t.service})` : ''}`,
+    });
+  }
+  return out;
 }
 
 export interface PortReel {
@@ -76,6 +128,8 @@ interface Entree {
   achatDeLigne: (l: LigneDevis) => number;
   /** Département de livraison du devis : choisit, parmi les tarifs relevés, celui de cette destination. */
   dept?: string;
+  /** Transport choisi sur le devis, par fournisseur (clé d'`OptionTransport`) : il remplace le calcul. */
+  choixTransport?: Record<string, string>;
 }
 
 export function portReelParFournisseur(e: Entree): PortReel {
@@ -112,8 +166,19 @@ export function portReelParFournisseur(e: Entree): PortReel {
       nbLignes: g.nbLignes,
       poidsKg: g.poidsKg,
       montantAchat: g.montantAchat,
+      options: [] as OptionTransport[],
     };
     if (!f) return { ...base, montant: null, source: null };
+    base.options = optionsTransport(f, e.dept, g.poidsKg);
+    /* Un transport CHOISI sur le devis (« affrètement 2 palettes ») passe avant tout calcul. */
+    const choisi = base.options.find(o => o.cle === e.choixTransport?.[fournisseurId]);
+    if (choisi) {
+      return {
+        ...base, montant: choisi.montant, source: choisi.mode, mode: choisi.mode, dept: e.dept, choisi: choisi.cle,
+        ...(choisi.palettes ? { palettes: choisi.palettes } : {}), ...(choisi.zone ? { zone: choisi.zone } : {}),
+        ...(choisi.service ? { service: choisi.service } : {}),
+      };
+    }
     // Des paliers de lien tous à 0 € ne disent rien (TREMCO : [0 €, 0 €] sur FLOWFAST 319, alors que la fiche
     // porte 38,11 €) : la fiche fait foi. Un lien ne prime que s'il chiffre un port.
     const lien = g.pfs.find(p => p.paliersPort?.some(x => x.coutTransport > 0));
