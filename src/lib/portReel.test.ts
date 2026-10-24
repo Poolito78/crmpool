@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { destinationDuDevis, portReelParFournisseur } from './portReel';
 import { normaliserDept, fusionnerPaliers } from './transportFournisseur';
-import { departementDeCodePostal, portFournisseur } from './store';
+import { departementDeCodePostal, palettesDesLignes, portFournisseur } from './store';
 import type { Fournisseur, LigneDevis, Produit, ProduitFournisseur } from './store';
 
 const four = (id: string, o: Partial<Fournisseur> = {}) =>
@@ -177,5 +177,34 @@ describe("grille d'affrètement (QRM : dépt × palettes)", () => {
     }));
     expect(r.fournisseurs[0]).toMatchObject({ montant: 246, source: 'affretement', palettes: 1 });
     expect(r.fournisseurs[0].sansGrille).toBeUndefined();
+  });
+});
+
+describe('palettes comptées article par article', () => {
+  it('additionne les fractions de palette, poids par palette de l’article sinon de la fiche', () => {
+    // 600 kg de quartz (fiche : 1 000 kg/pal.) + 300 kg de seaux (article : 600 kg/pal.) = 0,6 + 0,5 → 2
+    expect(palettesDesLignes([{ poidsKg: 600 }, { poidsKg: 300, kgParPalette: 600 }], 1000)).toBe(2);
+    expect(palettesDesLignes([{ poidsKg: 1000 }], 1000)).toBe(1);
+    expect(palettesDesLignes([{ poidsKg: 600 }, { poidsKg: 300, kgParPalette: 600 }])).toBeUndefined();
+    expect(palettesDesLignes([{ poidsKg: 0 }, { poidsKg: 300, kgParPalette: 600 }])).toBe(1);
+  });
+
+  it('le devis compte les palettes avec le poids par palette de chaque article', () => {
+    const grille = {
+      dateImport: '2026-10-24', kgParPalette: 1000,
+      tarifs: [{ dept: '13', paliers: [{ palettes: 1, prix: 246 }, { palettes: 2, prix: 375 }] }],
+    };
+    const seau = { id: 's', poids: 20, kgParPalette: 600 } as Produit;
+    const quartz = { id: 'q', poids: 25 } as Produit;
+    const r = portReelParFournisseur({
+      ...base({}),
+      produitParId: (id: string) => [seau, quartz].find(p => p.id === id),
+      lignes: [ligne('1', 'q', 24), ligne('2', 's', 15)], // 600 kg + 300 kg
+      produitFournisseurs: [pf('q', 'QRM'), pf('s', 'QRM')],
+      fournisseurs: [four('QRM', { grilleAffretement: grille })],
+      dept: '13',
+    });
+    // au poids seul : 900 kg → 1 palette (246 €) ; article par article : 2 palettes
+    expect(r.fournisseurs[0]).toMatchObject({ poidsKg: 900, source: 'affretement', palettes: 2, montant: 375 });
   });
 });

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart, Printer, AlertTriangle, Save, ExternalLink, Warehouse, PackageCheck, RotateCcw } from 'lucide-react';
-import { type Devis, type Produit, type Fournisseur, type ProduitFournisseur, type CommandeFournisseur, calculerFournisseurPrioritaire, formatMontant, formatDate, generateId, portFournisseur, raisonSansGrille } from '@/lib/store';
+import { type Devis, type Produit, type Fournisseur, type ProduitFournisseur, type CommandeFournisseur, calculerFournisseurPrioritaire, formatMontant, formatDate, generateId, palettesDesLignes, portFournisseur, raisonSansGrille } from '@/lib/store';
 import { useCRM } from '@/lib/StoreContext';
 import { destinationDuDevis } from '@/lib/portReel';
 import { toast } from 'sonner';
@@ -38,10 +38,14 @@ function transportDe(
   dept?: string,
 ): { montant: number; franco: boolean; detail?: string } {
   const poids = lignes.reduce((acc, l) => acc + (l.produit.poids || 0) * l.quantite, 0);
+  /* Palettes comptées article par article (poids par palette de l'article, sinon de la fiche). */
+  const palettes = palettesDesLignes(
+    lignes.map(l => ({ poidsKg: (l.produit.poids || 0) * l.quantite, kgParPalette: l.produit.kgParPalette })),
+    fournisseur.grilleAffretement?.kgParPalette);
   const r = fournisseur.paliersPortPoids?.length || fournisseur.grilleAffretement || fournisseur.grilleMessagerie
-    ? portFournisseur(fournisseur, poids, totalAchat, dept)
+    ? portFournisseur(fournisseur, poids, totalAchat, dept, palettes)
     : null;
-  const sansGrille = raisonSansGrille(fournisseur, poids, totalAchat, dept);
+  const sansGrille = raisonSansGrille(fournisseur, poids, totalAchat, dept, palettes);
   if (r) {
     return {
       montant: r.montant, franco: r.source === 'franco',

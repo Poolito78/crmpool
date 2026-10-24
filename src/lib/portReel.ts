@@ -17,6 +17,7 @@
 import {
   departementDeCodePostal,
   getPfTransportPourMontant,
+  palettesDesLignes,
   portFournisseur,
   raisonSansGrille,
   type Client,
@@ -78,7 +79,11 @@ interface Entree {
 }
 
 export function portReelParFournisseur(e: Entree): PortReel {
-  const groupes = new Map<string, { pfs: ProduitFournisseur[]; nbLignes: number; poidsKg: number; montantAchat: number }>();
+  const groupes = new Map<string, {
+    pfs: ProduitFournisseur[]; nbLignes: number; poidsKg: number; montantAchat: number;
+    /** Poids de chaque ligne et poids par palette de son article : les palettes se comptent article par article. */
+    charges: { poidsKg: number; kgParPalette?: number }[];
+  }>();
   let sansFournisseur = 0;
 
   for (const l of e.lignes) {
@@ -88,10 +93,13 @@ export function portReelParFournisseur(e: Entree): PortReel {
     const pfs = e.produitFournisseurs.filter(pf => pf.produitId === l.produitId);
     const pf = pfs.find(p => p.fournisseurId === e.choix[l.id]) ?? pfs.find(p => p.estPrioritaire) ?? pfs[0];
     if (!pf) { sansFournisseur += 1; continue; }
-    const g = groupes.get(pf.fournisseurId) ?? { pfs: [], nbLignes: 0, poidsKg: 0, montantAchat: 0 };
+    const g = groupes.get(pf.fournisseurId) ?? { pfs: [], nbLignes: 0, poidsKg: 0, montantAchat: 0, charges: [] };
     g.pfs.push(pf);
     g.nbLignes += 1;
-    g.poidsKg += (e.produitParId(l.produitId)?.poids || 0) * l.quantite;
+    const produit = e.produitParId(l.produitId);
+    const poidsLigne = (produit?.poids || 0) * l.quantite;
+    g.poidsKg += poidsLigne;
+    g.charges.push({ poidsKg: poidsLigne, kgParPalette: produit?.kgParPalette });
     g.montantAchat += e.achatDeLigne(l);
     groupes.set(pf.fournisseurId, g);
   }
@@ -110,8 +118,9 @@ export function portReelParFournisseur(e: Entree): PortReel {
     // porte 38,11 €) : la fiche fait foi. Un lien ne prime que s'il chiffre un port.
     const lien = g.pfs.find(p => p.paliersPort?.some(x => x.coutTransport > 0));
     if (lien) return { ...base, montant: getPfTransportPourMontant(lien, f, g.montantAchat, g.poidsKg, e.dept), source: 'lien' };
-    const r = portFournisseur(f, g.poidsKg, g.montantAchat, e.dept);
-    const sansGrille = raisonSansGrille(f, g.poidsKg, g.montantAchat, e.dept);
+    const palettes = palettesDesLignes(g.charges, f.grilleAffretement?.kgParPalette);
+    const r = portFournisseur(f, g.poidsKg, g.montantAchat, e.dept, palettes);
+    const sansGrille = raisonSansGrille(f, g.poidsKg, g.montantAchat, e.dept, palettes);
     const extra = sansGrille ? { sansGrille } : {};
     return r
       ? { ...base, montant: r.montant, source: r.source, mode: r.mode, dept: r.dept, approximatif: r.approximatif, palettes: r.palettes, service: r.service, zone: r.zone, ...extra }

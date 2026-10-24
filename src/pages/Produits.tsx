@@ -157,6 +157,7 @@ const emptyProduit = {
   proprietaire: 'isosign' as 'isosign' | 'fournisseur', proprietaireFournisseurId: '',
   disponibleVente: true,
   adr: undefined as boolean | undefined,
+  kgParPalette: undefined as number | undefined,
   consoUnite: undefined as 'kg' | 'm2' | undefined,
   consommationMl: undefined as number | undefined,
   notes: undefined as string | undefined,
@@ -1109,7 +1110,7 @@ export default function Produits() {
     const coefficient = prixEnregistres && prixAchat > 0 && prixRevendeur > 0
       ? Math.round(prixRevendeur / prixAchat * 10000) / 10000
       : p.coefficient;
-    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient, prixHT, coeffRevendeur: coefficient, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', ficheType: p.ficheType, fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, consommationMl: p.consommationMl, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined, dosageEpaisseur: p.dosageEpaisseur ? structuredClone(p.dosageEpaisseur) : undefined });
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient, prixHT, coeffRevendeur: coefficient, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', ficheType: p.ficheType, fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, kgParPalette: p.kgParPalette, consoUnite: p.consoUnite, consommationMl: p.consommationMl, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined, dosageEpaisseur: p.dosageEpaisseur ? structuredClone(p.dosageEpaisseur) : undefined });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -4219,6 +4220,24 @@ export default function Produits() {
                   <span className="text-sm font-medium">Matière dangereuse (ADR)</span>
                   <span className="text-xs text-muted-foreground">(port ISOMARK H2 au poids, sans franco)</span>
                 </label>
+
+                {/* Poids par palette de CET article : compte les palettes de
+                    l'affrètement (`palettesDesLignes`). Vide = celui de la fiche
+                    fournisseur. 0 enregistré = effacé (colonne à NULL). */}
+                <div className="flex flex-wrap items-center gap-2.5 px-1">
+                  <span className="text-sm font-medium">Poids max par palette</span>
+                  <Input
+                    type="number" min="0" step="1" className="h-8 w-24"
+                    placeholder="fiche fourn."
+                    value={form.kgParPalette || ''}
+                    onChange={e => {
+                      const kg = parseFloat(e.target.value);
+                      setForm(p => ({ ...p, kgParPalette: kg > 0 ? kg : 0 }));
+                    }}
+                  />
+                  <span className="text-sm text-muted-foreground">kg</span>
+                  <span className="text-xs text-muted-foreground">(affrètement : nombre de palettes ; vide = poids par palette de la fiche fournisseur)</span>
+                </div>
 
                 {/* Propriétaire de la marchandise */}
                 <div className="space-y-2 rounded-md border border-border p-3 bg-muted/20">

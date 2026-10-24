@@ -188,6 +188,28 @@ export function palettesPourPoids(grille: Pick<GrilleAffretement, 'kgParPalette'
 }
 
 /**
+ * Palettes d'un envoi ARTICLE PAR ARTICLE : chaque ligne occupe son poids ÷
+ * le poids par palette de son article (`Produit.kgParPalette`), à défaut
+ * celui de la fiche fournisseur (`defautKg`). Les fractions s'additionnent,
+ * puis on arrondit au-dessus : 600 kg de quartz (1 000 kg/pal.) + 300 kg de
+ * seaux (600 kg/pal.) = 0,6 + 0,5 → 2 palettes.
+ * `undefined` si une ligne pesante n'a ni l'un ni l'autre : rien n'est deviné.
+ */
+export function palettesDesLignes(
+  lignes: { poidsKg: number; kgParPalette?: number }[],
+  defautKg?: number,
+): number | undefined {
+  let total = 0;
+  for (const l of lignes) {
+    if (!(l.poidsKg > 0)) continue;
+    const kg = l.kgParPalette && l.kgParPalette > 0 ? l.kgParPalette : defautKg && defautKg > 0 ? defautKg : undefined;
+    if (!kg) return undefined;
+    total += l.poidsKg / kg;
+  }
+  return total > 0 ? Math.ceil(total - 1e-9) : undefined;
+}
+
+/**
  * Prix de la grille pour un département (déjà normalisé : « 01 », « 2A ») et
  * un nombre de palettes : le palier égal ou immédiatement supérieur. `null`
  * hors grille — département absent ou plus de palettes que la grille n'en
@@ -209,13 +231,15 @@ export function prixAffretementGrille(
  * chiffré ce port — à afficher, pour qu'un port au palier ou au coût fixe ne
  * passe pas pour un tarif. `undefined` si la fiche n'a pas de grille, ou si
  * l'une d'elles s'applique. La messagerie vaut pour les poids de ses
- * tranches, l'affrètement au-delà.
+ * tranches, l'affrètement au-delà. `palettes` : comptées article par article
+ * (`palettesDesLignes`) ; absent = d'après le seul poids par palette de la fiche.
  */
 export function raisonSansGrille(
   f: Pick<Fournisseur, 'grilleAffretement' | 'grilleMessagerie' | 'francoPort'>,
   poidsKg: number,
   montantHT: number,
   dept?: string,
+  palettes?: number,
 ): string | undefined {
   if (f.francoPort > 0 && montantHT >= f.francoPort) return undefined;
   const m = f.grilleMessagerie;
@@ -231,9 +255,9 @@ export function raisonSansGrille(
       : undefined;
   }
   if (!dept) return 'grille d’affrètement : département de livraison inconnu';
-  if (!(g.kgParPalette && g.kgParPalette > 0)) return 'grille d’affrètement : poids par palette à renseigner sur la fiche (onglet Transport)';
   if (!(poidsKg > 0)) return 'grille d’affrètement : poids de l’envoi inconnu';
-  const n = palettesPourPoids(g, poidsKg)!;
+  const n = palettes ?? palettesPourPoids(g, poidsKg);
+  if (!n) return 'grille d’affrètement : poids par palette à renseigner (fiche fournisseur, onglet Transport, ou fiche des articles)';
   if (!g.tarifs.some(t => t.dept === dept)) return `grille d’affrètement : dépt ${dept} absent de la grille`;
   if (!prixAffretementGrille(g, dept, n)) return `grille d’affrètement : ${n} palettes, au-delà de la grille`;
   return undefined;
@@ -243,8 +267,9 @@ export function raisonSansGrille(
  * Port d'une commande fournisseur d'après sa fiche : 0 au-delà du franco,
  * sinon la GRILLE MESSAGERIE pour un poids de ses tranches (zone du
  * département × tranche de poids), sinon la GRILLE D'AFFRÈTEMENT
- * (département de livraison × nombre de palettes, celui-ci tiré du poids et
- * du poids par palette saisi sur la fiche), sinon le palier de poids
+ * (département de livraison × nombre de palettes : `palettes` comptées
+ * article par article par l'appelant — `palettesDesLignes` —, à défaut tirées
+ * du poids et du poids par palette de la fiche), sinon le palier de poids
  * atteint, sinon le coût de transport fixe.
  * `null` = la fiche ne permet pas de le dire (rien n'est deviné).
  *
@@ -258,6 +283,7 @@ export function portFournisseur(
   poidsKg: number,
   montantHT: number,
   dept?: string,
+  palettesLignes?: number,
 ): {
   montant: number; source: 'franco' | 'messagerie' | 'affretement' | 'palier' | 'fixe'; mode?: ModeTransport;
   dept?: string; approximatif?: boolean; palettes?: number; service?: string; zone?: string;
@@ -265,7 +291,7 @@ export function portFournisseur(
   if (f.francoPort > 0 && montantHT >= f.francoPort) return { montant: 0, source: 'franco' };
   const mes = prixMessagerie(f.grilleMessagerie, dept, poidsKg);
   if (mes) return { montant: mes.prix, source: 'messagerie', mode: 'messagerie', dept, zone: mes.zone };
-  const palettes = palettesPourPoids(f.grilleAffretement, poidsKg);
+  const palettes = palettesLignes ?? palettesPourPoids(f.grilleAffretement, poidsKg);
   const aff = palettes ? prixAffretementGrille(f.grilleAffretement, dept, palettes) : null;
   if (aff) {
     return {
@@ -509,6 +535,9 @@ export interface Produit {
   /** Matière dangereuse (ADR) : le port H2 passe alors à la grille au poids,
       sans franco (tarif ISOMARK, « hors ADR »). Absent = non renseigné. */
   adr?: boolean;
+  /** Poids maximal sur une palette pour CET article (kg) ; absent = celui de la
+      grille d'affrètement du fournisseur. Voir `palettesDesLignes`. */
+  kgParPalette?: number;
   /** Désignation du modèle Odoo ; les articles qui la partagent en sont les variantes. */
   modeleCle?: string;
   /** Vrai pour l'article qui représente son modèle au premier rang de la liste. */
@@ -1270,6 +1299,7 @@ function dbToProduit(r: any): Produit {
     proprietaireFournisseurId: r.proprietaire_fournisseur_id || undefined,
     disponibleVente: r.disponible_vente ?? true,
     adr: r.adr ?? undefined,
+    kgParPalette: Number(r.kg_par_palette) > 0 ? Number(r.kg_par_palette) : undefined,
     modeleCle: r.modele_cle || undefined,
     estModele: r.est_modele !== false,
     nbVariantes: Number(r.nb_variantes) || 1,
@@ -1370,6 +1400,7 @@ function produitToDb(p: Produit, userId: string) {
     ...(p.proprietaireFournisseurId !== undefined ? { proprietaire_fournisseur_id: p.proprietaireFournisseurId || null } : {}),
     ...(p.disponibleVente !== undefined ? { disponible_vente: p.disponibleVente } : {}),
     ...(p.adr !== undefined ? { adr: p.adr } : {}),
+    ...(p.kgParPalette !== undefined ? { kg_par_palette: p.kgParPalette > 0 ? p.kgParPalette : null } : {}),
     ...(p.achatsHistorique !== undefined ? { achats_historique: p.achatsHistorique && p.achatsHistorique.length > 0 ? p.achatsHistorique : null } : {}),
     ...(p.descriptionVariante !== undefined ? { description_variante: p.descriptionVariante || null } : {}),
   };

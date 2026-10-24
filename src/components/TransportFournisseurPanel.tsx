@@ -225,7 +225,7 @@ export default function TransportFournisseurPanel({ valeur, onChange }: Props) {
               <Trash2 className="w-3.5 h-3.5" /></Button>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Label className="text-xs">Poids maximal par palette (kg)</Label>
+            <Label className="text-xs">Poids maximal par palette, par défaut (kg)</Label>
             <Input type="number" step="1" min="0" className="h-8 w-24" placeholder="à saisir"
               value={valeur.grilleAffretement.kgParPalette ?? ''}
               onChange={e => {
@@ -234,8 +234,8 @@ export default function TransportFournisseurPanel({ valeur, onChange }: Props) {
               }} />
             <span className="text-[11px] text-muted-foreground">
               {valeur.grilleAffretement.kgParPalette
-                ? `Port = prix du dépt de livraison pour (poids de l'envoi ÷ ${valeur.grilleAffretement.kgParPalette} kg) palettes, arrondi au-dessus — franco prioritaire.`
-                : 'Sans ce poids, la grille ne chiffre pas le port des devis et des commandes.'}
+                ? `Palettes = somme, article par article, de son poids ÷ son poids par palette (fiche article, sinon ${valeur.grilleAffretement.kgParPalette} kg), arrondie au-dessus. Port = prix du dépt de livraison — franco prioritaire.`
+                : 'Sans ce poids, seuls les articles dont la fiche porte un poids par palette se comptent : un envoi qui en contient d’autres n’est pas chiffré.'}
             </span>
           </div>
           <GrilleAffretementTable grille={valeur.grilleAffretement} />
