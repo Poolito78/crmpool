@@ -23,8 +23,15 @@ import PlanDirectionnelEncart from '@/components/PlanDirectionnelEncart';
 import ClasserDocumentFournisseur from '@/components/ClasserDocumentFournisseur';
 import FicheTechniqueArticle from '@/components/FicheTechniqueArticle';
 import GrilleAffretementTable from '@/components/GrilleAffretementTable';
+import GrilleMessagerieTable from '@/components/GrilleMessagerieTable';
 import { fournisseurNomme, lireGrilleAffretement, ressembleTarifTransport } from '@/lib/grilleAffretement';
-import type { GrilleAffretement } from '@/lib/store';
+import { lireGrilleMessagerie } from '@/lib/grilleMessagerie';
+import type { GrilleAffretement, GrilleMessagerie } from '@/lib/store';
+
+/** Grille de transport lue : messagerie (colis) ou affrètement (palettes), jamais l'une pour l'autre. */
+type GrilleLue =
+  | { mode: 'messagerie'; grille: GrilleMessagerie }
+  | { mode: 'affretement'; grille: GrilleAffretement };
 import { parseEml, type EmlContent } from '@/lib/parseEml';
 import {
   coupeSignatures, extraireIndices, societeDepuisEmail, adresseGenerique, memePersonne,
@@ -995,7 +1002,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* Grille de transport lue (type « tarif_transport ») : à enregistrer sur
      la fiche du fournisseur retenu — celui que nomme la consigne, le fichier
      ou le document, sinon à choisir. */
-  const [grilleTransport, setGrilleTransport] = useState<{ grille: GrilleAffretement; fournisseurId: string; enregistree?: boolean } | null>(null);
+  const [grilleTransport, setGrilleTransport] = useState<(GrilleLue & { fournisseurId: string; enregistree?: boolean }) | null>(null);
   const typeImposeRef = useRef<'' | TypeDocument>('');
   typeImposeRef.current = typeImpose;
   /* Le vocabulaire du catalogue sert de contre-épreuve au rapprochement du
@@ -1711,15 +1718,22 @@ const [contratOdoo, setContratOdoo] = useState<
            elle se lit sans IA et se compare au devis du CRM. Cherchée avant le
            plan Kadri — le mail qui la transmet joint souvent le plan refait
            par ISOSIGN, qui passerait sinon pour une demande. */
-        /* GRILLE DE TRANSPORT (affrètement QRM : prix par département et par
-           nombre de palettes). Lue sans IA, à la position des cellules : six
-           cents prix ne se confient pas à un modèle. Cherchée en premier — la
-           détection automatique la reconnaît à sa forme. */
-        const grille = !impose || impose === 'tarif_transport'
-          ? lireGrilleAffretement(await extraireItemsPDF(await principal.arrayBuffer()).catch(() => []))
-          : null;
+        /* GRILLE DE TRANSPORT, de deux sortes à ne pas confondre :
+           MESSAGERIE (colis : zone × tranche de poids) ou AFFRÈTEMENT
+           (département × nombre de palettes). Lue sans IA, à la position des
+           cellules : six cents prix ne se confient pas à un modèle. Cherchée
+           en premier — la détection automatique la reconnaît à sa forme, la
+           messagerie d'abord (ses « Zone 01 » passeraient sinon pour l'Ain). */
+        const grille: GrilleLue | null = await (async () => {
+          if (impose && impose !== 'tarif_transport') return null;
+          const items = await extraireItemsPDF(await principal.arrayBuffer()).catch(() => []);
+          const mes = lireGrilleMessagerie(items);
+          if (mes) return { mode: 'messagerie', grille: { ...mes, source: principal.name, dateImport: new Date().toISOString().split('T')[0] } };
+          const aff = lireGrilleAffretement(items);
+          return aff ? { mode: 'affretement', grille: { ...aff, source: principal.name, dateImport: new Date().toISOString().split('T')[0] } } : null;
+        })();
         if (!grille && impose === 'tarif_transport') {
-          throw new Error('Aucune grille par département lisible dans ce PDF. Un tarif au poids se dépose dans l’onglet Transport de la fiche fournisseur.');
+          throw new Error('Aucune grille lisible dans ce PDF (messagerie : zones × poids ; affrètement : départements × palettes). Un tarif au poids simple se dépose dans l’onglet Transport de la fiche fournisseur.');
         }
         /* Un type imposé court-circuite les lectures sans IA qui ne sont pas
            de ce type : notre offre Odoo, le plan Kadri (une demande). */
@@ -1735,14 +1749,11 @@ const [contratOdoo, setContratOdoo] = useState<
         })();
         if (grille) {
           const fourn = fournisseurNomme(fournisseurs, [texteCtx, principal.name, pages.join('\n')]);
-          setGrilleTransport({
-            grille: { ...grille, source: principal.name, dateImport: new Date().toISOString().split('T')[0] },
-            fournisseurId: fourn?.id ?? '',
-          });
+          setGrilleTransport({ ...grille, fournisseurId: fourn?.id ?? '' });
           analysis = {
             typeDocument: 'tarif_transport', lignes: [],
             nomPartenaire: fourn ? (fourn.societe || fourn.nom) : undefined,
-            notes: [grille.titre, grille.validite].filter(Boolean).join(' · ') || undefined,
+            notes: [grille.grille.titre, grille.grille.validite].filter(Boolean).join(' · ') || undefined,
           };
         } else if (offre) {
           analysis = { ...offre, notes: texteCtx.trim() ? texteCtx.trim().slice(0, 1500) : offre.notes };
@@ -6112,15 +6123,21 @@ const [contratOdoo, setContratOdoo] = useState<
                 )}
                 {panneauApercu}
 
-                {/* ── Grille de transport du fournisseur (affrètement par département et palettes) ── */}
+                {/* ── Grille de transport du fournisseur : messagerie (zones × poids) OU affrètement (dépts × palettes) ── */}
                 {result.typeDocument === 'tarif_transport' && (grilleTransport ? (() => {
                   const cible = fournisseurs.find(f => f.id === grilleTransport.fournisseurId);
-                  const existante = cible?.grilleAffretement;
+                  const messagerie = grilleTransport.mode === 'messagerie';
+                  const existanteAff = cible?.grilleAffretement;
+                  const existanteMes = cible?.grilleMessagerie;
+                  const existante = messagerie
+                    ? existanteMes && { resume: `${existanteMes.zones.length} zones`, validite: existanteMes.validite, dateImport: existanteMes.dateImport }
+                    : existanteAff && { resume: `${existanteAff.tarifs.length} départements`, validite: existanteAff.validite, dateImport: existanteAff.dateImport };
+                  const libelle = messagerie ? 'Grille MESSAGERIE (colis : zone × tranche de poids)' : 'Grille AFFRÈTEMENT (palettes : département × nombre de palettes)';
                   return (
                     <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <Truck className="w-4 h-4 text-primary shrink-0" />
-                        <span className="text-sm font-semibold">Grille de transport à enregistrer sur la fiche</span>
+                        <span className="text-sm font-semibold">{libelle} à enregistrer sur la fiche</span>
                         <Select value={grilleTransport.fournisseurId || '__aucun__'}
                           onValueChange={v => setGrilleTransport(g => g && { ...g, fournisseurId: v === '__aucun__' ? '' : v, enregistree: false })}>
                           <SelectTrigger className="h-8 text-xs w-auto min-w-[220px]"><SelectValue /></SelectTrigger>
@@ -6137,21 +6154,27 @@ const [contratOdoo, setContratOdoo] = useState<
                       )}
                       {existante && !grilleTransport.enregistree && (
                         <p className="text-xs text-warning">
-                          La fiche porte déjà une grille ({existante.tarifs.length} départements{existante.validite ? `, ${existante.validite}` : ''}, importée le {existante.dateImport}) : elle sera remplacée.
+                          La fiche porte déjà une grille {messagerie ? 'messagerie' : 'd’affrètement'} ({existante.resume}{existante.validite ? `, ${existante.validite}` : ''}, importée le {existante.dateImport}) : elle sera remplacée. L’autre grille de la fiche n’est pas touchée.
                         </p>
                       )}
-                      <GrilleAffretementTable grille={grilleTransport.grille} />
+                      {grilleTransport.mode === 'messagerie'
+                        ? <GrilleMessagerieTable grille={grilleTransport.grille} />
+                        : <GrilleAffretementTable grille={grilleTransport.grille} />}
                       <Button size="sm" disabled={!cible || grilleTransport.enregistree}
                         onClick={() => {
                           if (!cible) return;
-                          /* Le poids par palette est une saisie de la fiche : une nouvelle grille le garde. */
-                          updateFournisseurs(prev => prev.map(f => (f.id === cible.id ? {
-                            ...f,
-                            grilleAffretement: { ...grilleTransport.grille, ...(existante?.kgParPalette ? { kgParPalette: existante.kgParPalette } : {}) },
-                          } : f)));
-                          setGrilleTransport(g => g && { ...g, enregistree: true });
-                          toast.success(`Grille enregistrée sur la fiche ${cible.societe || cible.nom} : ${grilleTransport.grille.tarifs.length} départements (onglet Transport).`
-                            + (existante?.kgParPalette ? '' : ' Renseignez-y le poids par palette pour qu’elle chiffre le port.'));
+                          const g = grilleTransport;
+                          updateFournisseurs(prev => prev.map(f => {
+                            if (f.id !== cible.id) return f;
+                            if (g.mode === 'messagerie') return { ...f, grilleMessagerie: g.grille };
+                            /* Le poids par palette est une saisie de la fiche : une nouvelle grille le garde. */
+                            return { ...f, grilleAffretement: { ...g.grille, ...(existanteAff?.kgParPalette ? { kgParPalette: existanteAff.kgParPalette } : {}) } };
+                          }));
+                          setGrilleTransport(x => x && { ...x, enregistree: true });
+                          toast.success(g.mode === 'messagerie'
+                            ? `Grille messagerie enregistrée sur la fiche ${cible.societe || cible.nom} : ${g.grille.zones.length} zones, ${Object.keys(g.grille.departements).length} départements (onglet Transport).`
+                            : `Grille d’affrètement enregistrée sur la fiche ${cible.societe || cible.nom} : ${g.grille.tarifs.length} départements (onglet Transport).`
+                              + (existanteAff?.kgParPalette ? '' : ' Renseignez-y le poids par palette pour qu’elle chiffre le port.'));
                         }}>
                         {grilleTransport.enregistree
                           ? <><CheckCircle2 className="w-4 h-4 mr-1.5" />Enregistrée sur la fiche {cible?.societe || cible?.nom}</>

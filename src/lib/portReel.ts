@@ -18,7 +18,7 @@ import {
   departementDeCodePostal,
   getPfTransportPourMontant,
   portFournisseur,
-  raisonSansAffretement,
+  raisonSansGrille,
   type Client,
   type Fournisseur,
   type LigneDevis,
@@ -36,14 +36,16 @@ export interface PortParFournisseur {
   montantAchat: number;
   /** Port facturé par ce fournisseur ; `null` = la fiche ne le dit pas. */
   montant: number | null;
-  source: 'franco' | 'affretement' | 'palier' | 'fixe' | 'lien' | null;
+  source: 'franco' | 'messagerie' | 'affretement' | 'palier' | 'fixe' | 'lien' | null;
   mode?: ModeTransport;
   /** Palettes comptées par la grille d'affrètement (palier retenu). */
   palettes?: number;
   /** Code service de la grille (« T3 »). */
   service?: string;
-  /** La fiche a une grille d'affrètement qui n'a pas pu chiffrer ce port, et pourquoi. */
-  sansAffretement?: string;
+  /** Zone de la grille messagerie (« 07 », « CORSE »). */
+  zone?: string;
+  /** La fiche a une grille (messagerie, affrètement) qui n'a pas pu chiffrer ce port, et pourquoi. */
+  sansGrille?: string;
   /** Département du tarif retenu (relevé sur un devis fournisseur), s'il est propre à une destination. */
   dept?: string;
   /** Tarif relevé pour une AUTRE destination que celle du devis : une estimation, pas un tarif. */
@@ -109,10 +111,10 @@ export function portReelParFournisseur(e: Entree): PortReel {
     const lien = g.pfs.find(p => p.paliersPort?.some(x => x.coutTransport > 0));
     if (lien) return { ...base, montant: getPfTransportPourMontant(lien, f, g.montantAchat, g.poidsKg, e.dept), source: 'lien' };
     const r = portFournisseur(f, g.poidsKg, g.montantAchat, e.dept);
-    const sansAffretement = raisonSansAffretement(f, g.poidsKg, g.montantAchat, e.dept);
-    const extra = sansAffretement ? { sansAffretement } : {};
+    const sansGrille = raisonSansGrille(f, g.poidsKg, g.montantAchat, e.dept);
+    const extra = sansGrille ? { sansGrille } : {};
     return r
-      ? { ...base, montant: r.montant, source: r.source, mode: r.mode, dept: r.dept, approximatif: r.approximatif, palettes: r.palettes, service: r.service, ...extra }
+      ? { ...base, montant: r.montant, source: r.source, mode: r.mode, dept: r.dept, approximatif: r.approximatif, palettes: r.palettes, service: r.service, zone: r.zone, ...extra }
       : { ...base, montant: null, source: null, ...extra };
   }).sort((a, b) => b.montantAchat - a.montantAchat);
 
@@ -148,6 +150,7 @@ export function destinationDuDevis(
 
 export const LIBELLE_SOURCE_PORT: Record<NonNullable<PortParFournisseur['source']>, string> = {
   franco: 'franco atteint',
+  messagerie: 'grille messagerie',
   affretement: 'grille d’affrètement',
   palier: 'palier de poids',
   fixe: 'coût fixe',

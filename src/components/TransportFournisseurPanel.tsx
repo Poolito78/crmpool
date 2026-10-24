@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { formatMontant, type GrilleAffretement, type ModeTransport, type PalierPortPoids } from '@/lib/store';
+import { formatMontant, type GrilleAffretement, type GrilleMessagerie, type ModeTransport, type PalierPortPoids } from '@/lib/store';
 import GrilleAffretementTable from '@/components/GrilleAffretementTable';
+import GrilleMessagerieTable from '@/components/GrilleMessagerieTable';
 import {
   LIBELLE_MODE, analyserTransportFournisseur, fusionnerPaliers, normaliserDept, type TransportLu,
 } from '@/lib/transportFournisseur';
@@ -20,16 +21,20 @@ import {
  * même poids, les autres restent. Tout reste modifiable à la main, et rien
  * n'est enregistré avant « Modifier » : on édite le formulaire de la fiche.
  *
- * La grille d'AFFRÈTEMENT (prix par département et nombre de palettes) se lit
- * dans l'analyse de document (type « Tarif transport fournisseur ») ; elle
- * s'affiche ici et peut être retirée. Le poids par palette se saisit ici :
- * c'est lui qui donne le nombre de palettes, donc le prix (`portFournisseur`).
+ * Deux GRILLES distinctes se lisent dans l'analyse de document (type « Tarif
+ * transport fournisseur ») et s'affichent ici, chacune retirable :
+ *  - MESSAGERIE (colis) : prix par zone et tranche de poids — elle chiffre
+ *    les envois dans ses tranches (QRM : jusqu'à 99 kg) ;
+ *  - AFFRÈTEMENT (palettes) : prix par département et nombre de palettes —
+ *    au-delà. Le poids par palette se saisit ici : c'est lui qui donne le
+ *    nombre de palettes, donc le prix (`portFournisseur`).
  */
 interface Valeur {
   francoPort: number;
   coutTransport: number;
   paliersPortPoids?: PalierPortPoids[];
   grilleAffretement?: GrilleAffretement | null;
+  grilleMessagerie?: GrilleMessagerie | null;
 }
 
 interface Props {
@@ -186,11 +191,31 @@ export default function TransportFournisseurPanel({ valeur, onChange }: Props) {
         </div>
       </div>
 
+      {valeur.grilleMessagerie && (
+        <div className="border border-border rounded-lg p-3 space-y-2 bg-muted/30">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-foreground flex-1">
+              Messagerie (colis) — prix par zone et tranche de poids
+            </p>
+            <span className="text-[11px] text-muted-foreground">
+              {valeur.grilleMessagerie.source ? `${valeur.grilleMessagerie.source} · ` : ''}importée le {valeur.grilleMessagerie.dateImport}
+            </span>
+            <Button type="button" variant="ghost" size="sm" className="h-7 px-2" title="Retirer la grille messagerie"
+              onClick={() => onChange({ grilleMessagerie: null })}>
+              <Trash2 className="w-3.5 h-3.5" /></Button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Chiffre le port des envois dans ses tranches de poids ; au-delà, c'est la grille d'affrètement.
+          </p>
+          <GrilleMessagerieTable grille={valeur.grilleMessagerie} />
+        </div>
+      )}
+
       {valeur.grilleAffretement && (
         <div className="border border-border rounded-lg p-3 space-y-2 bg-muted/30">
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold text-foreground flex-1">
-              Affrètement — prix par département et nombre de palettes
+              Affrètement (palettes) — prix par département et nombre de palettes
             </p>
             <span className="text-[11px] text-muted-foreground">
               {valeur.grilleAffretement.source ? `${valeur.grilleAffretement.source} · ` : ''}importée le {valeur.grilleAffretement.dateImport}

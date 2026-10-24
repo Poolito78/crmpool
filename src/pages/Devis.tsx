@@ -3088,9 +3088,11 @@ export default function Devis() {
             {f.nom} · {f.poidsKg.toFixed(0)} kg · achat {formatMontant(f.montantAchat)}{f.source ? ` · ${LIBELLE_SOURCE_PORT[f.source]}` : ''}
             {f.source === 'affretement'
               ? ` · ${f.palettes} palette${(f.palettes ?? 0) > 1 ? 's' : ''}${f.service ? ` (${f.service})` : ''} · dépt ${f.dept}`
-              : f.dept ? ` · tarif relevé pour le dépt ${f.dept}` : ''}
+              : f.source === 'messagerie'
+                ? ` · zone ${f.zone} · dépt ${f.dept}`
+                : f.dept ? ` · tarif relevé pour le dépt ${f.dept}` : ''}
             {f.approximatif ? ' — autre destination : estimation' : ''}
-            {f.sansAffretement && <span className="block text-amber-600 dark:text-amber-400">{f.sansAffretement}</span>}
+            {f.sansGrille && <span className="block text-amber-600 dark:text-amber-400">{f.sansGrille}</span>}
           </span>
           {f.montant === null
             ? <span className="shrink-0 font-medium text-amber-600 dark:text-amber-400">à vérifier</span>

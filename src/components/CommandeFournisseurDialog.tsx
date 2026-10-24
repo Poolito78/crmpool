@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart, Printer, AlertTriangle, Save, ExternalLink, Warehouse, PackageCheck, RotateCcw } from 'lucide-react';
-import { type Devis, type Produit, type Fournisseur, type ProduitFournisseur, type CommandeFournisseur, calculerFournisseurPrioritaire, formatMontant, formatDate, generateId, portFournisseur, raisonSansAffretement } from '@/lib/store';
+import { type Devis, type Produit, type Fournisseur, type ProduitFournisseur, type CommandeFournisseur, calculerFournisseurPrioritaire, formatMontant, formatDate, generateId, portFournisseur, raisonSansGrille } from '@/lib/store';
 import { useCRM } from '@/lib/StoreContext';
 import { destinationDuDevis } from '@/lib/portReel';
 import { toast } from 'sonner';
@@ -38,20 +38,22 @@ function transportDe(
   dept?: string,
 ): { montant: number; franco: boolean; detail?: string } {
   const poids = lignes.reduce((acc, l) => acc + (l.produit.poids || 0) * l.quantite, 0);
-  const r = fournisseur.paliersPortPoids?.length || fournisseur.grilleAffretement
+  const r = fournisseur.paliersPortPoids?.length || fournisseur.grilleAffretement || fournisseur.grilleMessagerie
     ? portFournisseur(fournisseur, poids, totalAchat, dept)
     : null;
-  const sansAffretement = raisonSansAffretement(fournisseur, poids, totalAchat, dept);
+  const sansGrille = raisonSansGrille(fournisseur, poids, totalAchat, dept);
   if (r) {
     return {
       montant: r.montant, franco: r.source === 'franco',
       detail: r.source === 'affretement'
         ? `Affrètement ${r.palettes} palette${(r.palettes ?? 0) > 1 ? 's' : ''}${r.service ? ` (${r.service})` : ''} · ${poids.toFixed(0)} kg · dépt ${r.dept}`
-        : sansAffretement,
+        : r.source === 'messagerie'
+          ? `Messagerie zone ${r.zone} · ${poids.toFixed(0)} kg · dépt ${r.dept}`
+          : sansGrille,
     };
   }
   const franco = totalAchat >= fournisseur.francoPort;
-  return { montant: franco ? 0 : fournisseur.coutTransport, franco, detail: sansAffretement };
+  return { montant: franco ? 0 : fournisseur.coutTransport, franco, detail: sansGrille };
 }
 
 export default function CommandeFournisseurDialog({ open, onOpenChange, devis, produits, fournisseurs, produitFournisseurs, onSaveCommandes, onPriseStock }: Props) {
@@ -426,7 +428,7 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
                             <span>{francoAtteint ? <span className="text-success">Franco ✓</span> : formatMontant(transport)}</span>
                           </div>
                           {port.detail && (
-                            <p className={`text-xs text-right ${port.detail.startsWith('Affrètement') ? 'text-muted-foreground' : 'text-amber-600 dark:text-amber-400'}`}>{port.detail}</p>
+                            <p className={`text-xs text-right ${/^(Affrètement|Messagerie)/.test(port.detail) ? 'text-muted-foreground' : 'text-amber-600 dark:text-amber-400'}`}>{port.detail}</p>
                           )}
                           {!francoAtteint && (
                             <div className="flex justify-between text-xs">

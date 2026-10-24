@@ -165,7 +165,7 @@ describe("grille d'affrètement (QRM : dépt × palettes)", () => {
       fournisseurs: [sansKg],
       dept: '13',
     }));
-    expect(r.fournisseurs[0].sansAffretement).toMatch(/poids par palette/);
+    expect(r.fournisseurs[0].sansGrille).toMatch(/poids par palette/);
   });
 
   it('au devis : 50 × 20 kg = 1 000 kg livrés dans le 13 → 1 palette, 246 €', () => {
@@ -176,6 +176,6 @@ describe("grille d'affrètement (QRM : dépt × palettes)", () => {
       dept: '13',
     }));
     expect(r.fournisseurs[0]).toMatchObject({ montant: 246, source: 'affretement', palettes: 1 });
-    expect(r.fournisseurs[0].sansAffretement).toBeUndefined();
+    expect(r.fournisseurs[0].sansGrille).toBeUndefined();
   });
 });

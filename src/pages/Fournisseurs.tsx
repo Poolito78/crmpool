@@ -285,7 +285,7 @@ export default function Fournisseurs() {
   function openEdit(f: Fournisseur) {
     setEditing(f);
     setOngletFiche('infos');
-    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, telephoneMobile: f.telephoneMobile || '', adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, paliersPortPoids: f.paliersPortPoids ?? [], grilleAffretement: f.grilleAffretement, delaiReglement: normalizeDelaiReglement(f.delaiReglement || '45J FDM'), estStockiste: f.estStockiste ?? false, delaiExpedition: f.delaiExpedition ?? 0 });
+    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, telephoneMobile: f.telephoneMobile || '', adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, paliersPortPoids: f.paliersPortPoids ?? [], grilleAffretement: f.grilleAffretement, grilleMessagerie: f.grilleMessagerie, delaiReglement: normalizeDelaiReglement(f.delaiReglement || '45J FDM'), estStockiste: f.estStockiste ?? false, delaiExpedition: f.delaiExpedition ?? 0 });
     setDialogOpen(true);
   }
 
@@ -604,7 +604,7 @@ export default function Fournisseurs() {
           {ongletFiche === 'transport' && (
             <div className="flex-1 overflow-y-auto min-h-0">
               <TransportFournisseurPanel
-                valeur={{ francoPort: form.francoPort, coutTransport: form.coutTransport, paliersPortPoids: form.paliersPortPoids, grilleAffretement: form.grilleAffretement }}
+                valeur={{ francoPort: form.francoPort, coutTransport: form.coutTransport, paliersPortPoids: form.paliersPortPoids, grilleAffretement: form.grilleAffretement, grilleMessagerie: form.grilleMessagerie }}
                 onChange={patch => setForm(prev => ({ ...prev, ...patch }))}
               />
             </div>

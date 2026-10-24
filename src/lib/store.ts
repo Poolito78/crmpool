@@ -127,6 +127,60 @@ export interface GrilleAffretement {
   tarifs: TarifAffretementDept[];
 }
 
+/**
+ * Grille MESSAGERIE d'un fournisseur (colis, petits poids) — à ne pas
+ * confondre avec l'affrètement à la palette. Tarif QRM 2026 : un prix
+ * forfaitaire par ZONE (01 à 10, Corse) et par tranche de poids (0-4 kg …
+ * 90-99 kg), et une table département → zone. Lue telle quelle sur le PDF
+ * (`grilleMessagerie.ts`).
+ */
+export interface GrilleMessagerie {
+  titre?: string;
+  depart?: string;
+  validite?: string;
+  /** Frais écrits sur la grille et NON comptés (ADR, RDV, zones urbaines…). */
+  conditions?: string[];
+  source?: string;
+  dateImport: string;
+  /** Tranches de poids en kg, bornes telles qu'écrites (« 5 à 9 kg » → 5, 9). */
+  tranches: { min: number; max: number }[];
+  /** Prix par zone, alignés sur `tranches`. */
+  zones: { zone: string; prix: (number | null)[] }[];
+  /** Département (« 01 », « 2A ») → zone (« 07 », « CORSE »). */
+  departements: Record<string, string>;
+  /** Frais facturés « pour tout envoi » (participation sûreté…) : ajoutés au prix. */
+  supplementParEnvoi?: number;
+}
+
+/**
+ * Prix messagerie d'un envoi : la zone du département, la tranche du poids
+ * (« 0 à 4 kg » vaut jusqu'à 5 kg exclus), plus le supplément par envoi.
+ * `null` si la grille ne le dit pas — département sans zone, poids nul ou
+ * au-delà de la dernière tranche.
+ */
+export function prixMessagerie(
+  grille: GrilleMessagerie | null | undefined,
+  dept: string | undefined,
+  poidsKg: number,
+): { prix: number; zone: string; tranche: { min: number; max: number } } | null {
+  if (!grille || !dept || !(poidsKg > 0)) return null;
+  const zone = grille.departements[dept];
+  const ligne = zone ? grille.zones.find(z => z.zone === zone) : undefined;
+  if (!ligne) return null;
+  const i = grille.tranches.findIndex((t, k) => poidsKg >= t.min
+    && poidsKg < (grille.tranches[k + 1]?.min ?? t.max + 1));
+  const prix = i >= 0 ? ligne.prix[i] : null;
+  return prix != null
+    ? { prix: Math.round((prix + (grille.supplementParEnvoi ?? 0)) * 100) / 100, zone, tranche: grille.tranches[i] }
+    : null;
+}
+
+/** Poids à partir duquel la messagerie ne chiffre plus (fin de la dernière tranche). */
+export function poidsMaxMessagerie(grille: Pick<GrilleMessagerie, 'tranches'>): number {
+  const t = grille.tranches[grille.tranches.length - 1];
+  return t ? t.max + 1 : 0;
+}
+
 /** Palettes d'un envoi d'après le poids par palette de la grille ; `undefined` si on ne peut pas le dire. */
 export function palettesPourPoids(grille: Pick<GrilleAffretement, 'kgParPalette'> | null | undefined, poidsKg: number): number | undefined {
   const kg = grille?.kgParPalette;
@@ -151,20 +205,31 @@ export function prixAffretementGrille(
 }
 
 /**
- * Pourquoi la grille d'affrètement de la fiche n'a PAS chiffré ce port —
- * à afficher, pour qu'un port au palier ou au coût fixe ne passe pas pour
- * le tarif d'affrètement. `undefined` si la fiche n'a pas de grille, ou si
- * elle s'applique.
+ * Pourquoi les grilles de la fiche (messagerie, affrètement) n'ont PAS
+ * chiffré ce port — à afficher, pour qu'un port au palier ou au coût fixe ne
+ * passe pas pour un tarif. `undefined` si la fiche n'a pas de grille, ou si
+ * l'une d'elles s'applique. La messagerie vaut pour les poids de ses
+ * tranches, l'affrètement au-delà.
  */
-export function raisonSansAffretement(
-  f: Pick<Fournisseur, 'grilleAffretement' | 'francoPort'>,
+export function raisonSansGrille(
+  f: Pick<Fournisseur, 'grilleAffretement' | 'grilleMessagerie' | 'francoPort'>,
   poidsKg: number,
   montantHT: number,
   dept?: string,
 ): string | undefined {
-  const g = f.grilleAffretement;
-  if (!g) return undefined;
   if (f.francoPort > 0 && montantHT >= f.francoPort) return undefined;
+  const m = f.grilleMessagerie;
+  if (m && poidsKg > 0 && poidsKg < poidsMaxMessagerie(m)) {
+    if (!dept) return 'grille messagerie : département de livraison inconnu';
+    if (!m.departements[dept]) return `grille messagerie : dépt ${dept} sans zone`;
+    return prixMessagerie(m, dept, poidsKg) ? undefined : 'grille messagerie : pas de prix pour ce poids';
+  }
+  const g = f.grilleAffretement;
+  if (!g) {
+    return m && poidsKg > 0
+      ? `grille messagerie : ${poidsKg.toFixed(0)} kg, au-delà de ses tranches (pas de grille d’affrètement)`
+      : undefined;
+  }
   if (!dept) return 'grille d’affrètement : département de livraison inconnu';
   if (!(g.kgParPalette && g.kgParPalette > 0)) return 'grille d’affrètement : poids par palette à renseigner sur la fiche (onglet Transport)';
   if (!(poidsKg > 0)) return 'grille d’affrètement : poids de l’envoi inconnu';
@@ -176,9 +241,11 @@ export function raisonSansAffretement(
 
 /**
  * Port d'une commande fournisseur d'après sa fiche : 0 au-delà du franco,
- * sinon la GRILLE D'AFFRÈTEMENT (département de livraison × nombre de
- * palettes, celui-ci tiré du poids et du poids par palette saisi sur la
- * fiche), sinon le palier de poids atteint, sinon le coût de transport fixe.
+ * sinon la GRILLE MESSAGERIE pour un poids de ses tranches (zone du
+ * département × tranche de poids), sinon la GRILLE D'AFFRÈTEMENT
+ * (département de livraison × nombre de palettes, celui-ci tiré du poids et
+ * du poids par palette saisi sur la fiche), sinon le palier de poids
+ * atteint, sinon le coût de transport fixe.
  * `null` = la fiche ne permet pas de le dire (rien n'est deviné).
  *
  * Avec un département de livraison (`dept`), le tarif relevé POUR ce département
@@ -187,15 +254,17 @@ export function raisonSansAffretement(
  * département, pour que l'écran le dise : c'est une estimation, pas un tarif.
  */
 export function portFournisseur(
-  f: Pick<Fournisseur, 'francoPort' | 'coutTransport' | 'paliersPortPoids' | 'grilleAffretement'>,
+  f: Pick<Fournisseur, 'francoPort' | 'coutTransport' | 'paliersPortPoids' | 'grilleAffretement' | 'grilleMessagerie'>,
   poidsKg: number,
   montantHT: number,
   dept?: string,
 ): {
-  montant: number; source: 'franco' | 'affretement' | 'palier' | 'fixe'; mode?: ModeTransport;
-  dept?: string; approximatif?: boolean; palettes?: number; service?: string;
+  montant: number; source: 'franco' | 'messagerie' | 'affretement' | 'palier' | 'fixe'; mode?: ModeTransport;
+  dept?: string; approximatif?: boolean; palettes?: number; service?: string; zone?: string;
 } | null {
   if (f.francoPort > 0 && montantHT >= f.francoPort) return { montant: 0, source: 'franco' };
+  const mes = prixMessagerie(f.grilleMessagerie, dept, poidsKg);
+  if (mes) return { montant: mes.prix, source: 'messagerie', mode: 'messagerie', dept, zone: mes.zone };
   const palettes = palettesPourPoids(f.grilleAffretement, poidsKg);
   const aff = palettes ? prixAffretementGrille(f.grilleAffretement, dept, palettes) : null;
   if (aff) {
@@ -240,6 +309,8 @@ export interface Fournisseur {
   paliersPortPoids?: PalierPortPoids[];
   /** Grille d'affrètement par département et nombre de palettes. `null` = retirée (efface la colonne). */
   grilleAffretement?: GrilleAffretement | null;
+  /** Grille messagerie (colis) par zone et tranche de poids. `null` = retirée. */
+  grilleMessagerie?: GrilleMessagerie | null;
   delaiReglement: string;
   dateCreation: string;
   estStockiste?: boolean;
@@ -507,7 +578,7 @@ export function getPfPrixPourQuantite(pf: ProduitFournisseur, qte: number): numb
  *  puis coût fixe. */
 export function getPfTransportPourMontant(
   pf: ProduitFournisseur,
-  fourn: Pick<Fournisseur, 'francoPort' | 'coutTransport' | 'paliersPortPoids' | 'grilleAffretement'>,
+  fourn: Pick<Fournisseur, 'francoPort' | 'coutTransport' | 'paliersPortPoids' | 'grilleAffretement' | 'grilleMessagerie'>,
   montantAchat: number,
   poidsKg = 0,
   dept?: string,
@@ -1048,6 +1119,8 @@ function dbToFournisseur(r: any): Fournisseur {
       ? r.paliers_port_poids : undefined,
     grilleAffretement: r.grille_affretement && Array.isArray(r.grille_affretement.tarifs)
       ? r.grille_affretement : undefined,
+    grilleMessagerie: r.grille_messagerie && Array.isArray(r.grille_messagerie.zones)
+      ? r.grille_messagerie : undefined,
     delaiReglement: normalizeDelaiReglement(r.delai_reglement ? String(r.delai_reglement) : '45J FDM'),
     dateCreation: r.date_creation?.split('T')[0] || '',
     estStockiste: r.est_stockiste ?? false,
@@ -1072,6 +1145,7 @@ function fournisseurToDb(f: Fournisseur, userId: string) {
     cout_transport: f.coutTransport,
     ...(f.paliersPortPoids !== undefined ? { paliers_port_poids: f.paliersPortPoids } : {}),
     ...(f.grilleAffretement !== undefined ? { grille_affretement: f.grilleAffretement } : {}),
+    ...(f.grilleMessagerie !== undefined ? { grille_messagerie: f.grilleMessagerie } : {}),
     delai_reglement: normalizeDelaiReglement(f.delaiReglement || '45J FDM'),
     date_creation: f.dateCreation,
     ...(f.estStockiste !== undefined ? { est_stockiste: f.estStockiste } : {}),

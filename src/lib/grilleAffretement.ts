@@ -34,7 +34,8 @@ const RE_PRIX = /^(\d[\d\s  ]*(?:[.,]\d{1,2})?)\s*€$/;
 const RE_LIBELLE = /^(.*[A-Za-zÀ-ÿ'’])\s*(\d{2,3}|2[AB])((?:\s+\d{1,2})*)$/;
 const RE_SERVICE = /^[A-Z]{1,4}\d?$/;
 
-const prixDe = (s: string): number | undefined => {
+/** « 222 € », « 18,00 € » → nombre ; `undefined` si ce n'est pas un prix. */
+export const prixDe = (s: string): number | undefined => {
   const m = s.trim().match(RE_PRIX);
   if (!m) return undefined;
   const n = parseFloat(m[1].replace(/[\s  ]/g, '').replace(',', '.'));
@@ -68,7 +69,8 @@ export function lireGrilleAffretement(items: ItemPDF[]): Omit<GrilleAffretement,
 
   for (const lib of cellules) {
     const l = libelleDe(lib.str);
-    if (!l || vus.has(l.dept)) continue;
+    /* « Zone 01 » est une ZONE de messagerie, pas le département de l'Ain. */
+    if (!l || vus.has(l.dept) || /^zone$/i.test(l.nom)) continue;
     const page = cellules.filter(c => c.page === lib.page);
 
     /* Ligne de prix : sous le libellé (tableau QRM), sinon sur sa ligne. */
@@ -121,19 +123,26 @@ export function lireGrilleAffretement(items: ItemPDF[]): Omit<GrilleAffretement,
   tarifs.sort((a, b) => a.dept.localeCompare(b.dept, 'fr', { numeric: true }));
 
   const textes = cellules.map(c => c.str);
-  const tout = textes.join(' ');
-  const titre = textes.find(t => /tarif/i.test(t) && /affr[ée]tement|transport/i.test(t));
-  const validite = tout.match(/(\d{2}\/\d{2}\/\d{4}\s*(?:au|-|à)\s*\d{2}\/\d{2}\/\d{4})/i)?.[1];
-  const depart = tout.match(/au d[ée]part d[e'’]\s*([A-ZÀ-Ü][A-ZÀ-Ü' -]*?\s*\(\d{2}\))/i)?.[1]?.trim();
   const conditions = [...new Set(textes.filter(t =>
     /\b(hayon|adr|sg)\s*=|\bhors\s+adr\b|\bau d[ée]part\b/i.test(t)))];
 
   return {
+    ...enteteDuTarif(textes, /affr[ée]tement|transport/i),
+    ...(conditions.length ? { conditions } : {}),
+    tarifs,
+  };
+}
+
+/** Titre, validité et ville de départ d'une grille de transport, tels qu'écrits. */
+export function enteteDuTarif(textes: string[], motTitre: RegExp): { titre?: string; validite?: string; depart?: string } {
+  const tout = textes.join(' ');
+  const titre = textes.find(t => /tarif/i.test(t) && motTitre.test(t));
+  const validite = tout.match(/(\d{2}\/\d{2}\/\d{4}\s*(?:au|-|à)\s*\d{2}\/\d{2}\/\d{4})/i)?.[1];
+  const depart = tout.match(/au d[ée]part d[e'’]\s*([A-ZÀ-Ü][A-ZÀ-Ü' -]*?\s*\(\d{2}\))/i)?.[1]?.trim();
+  return {
     ...(titre ? { titre } : {}),
     ...(depart ? { depart } : {}),
     ...(validite ? { validite } : {}),
-    ...(conditions.length ? { conditions } : {}),
-    tarifs,
   };
 }
 
