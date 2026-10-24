@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart, Printer, AlertTriangle, Save, ExternalLink, Warehouse, PackageCheck, RotateCcw } from 'lucide-react';
-import { type Devis, type Produit, type Fournisseur, type ProduitFournisseur, type CommandeFournisseur, calculerFournisseurPrioritaire, formatMontant, formatDate, generateId, portFournisseur } from '@/lib/store';
+import { type Devis, type Produit, type Fournisseur, type ProduitFournisseur, type CommandeFournisseur, calculerFournisseurPrioritaire, formatMontant, formatDate, generateId, portFournisseur, raisonSansAffretement } from '@/lib/store';
+import { useCRM } from '@/lib/StoreContext';
+import { destinationDuDevis } from '@/lib/portReel';
 import { toast } from 'sonner';
 import { logHistorique } from '@/lib/historique';
 
@@ -25,25 +27,38 @@ interface Props {
   onPriseStock?: (items: { produitId: string; quantite: number }[]) => void;
 }
 
-/* Des paliers de poids sur la fiche commandent le port ; sinon, règle
-   historique franco / coût fixe. */
+/* Une grille d'affrètement (département de livraison × palettes) ou des
+   paliers de poids sur la fiche commandent le port ; sinon, règle historique
+   franco / coût fixe. `detail` dit d'où vient le port — ou pourquoi la grille
+   d'affrètement n'a pas pu le chiffrer. */
 function transportDe(
   fournisseur: Fournisseur,
   lignes: { produit: Produit; quantite: number }[],
   totalAchat: number,
-): number {
-  const parPoids = fournisseur.paliersPortPoids?.length
-    ? portFournisseur(
-        fournisseur,
-        lignes.reduce((acc, l) => acc + (l.produit.poids || 0) * l.quantite, 0),
-        totalAchat)
+  dept?: string,
+): { montant: number; franco: boolean; detail?: string } {
+  const poids = lignes.reduce((acc, l) => acc + (l.produit.poids || 0) * l.quantite, 0);
+  const r = fournisseur.paliersPortPoids?.length || fournisseur.grilleAffretement
+    ? portFournisseur(fournisseur, poids, totalAchat, dept)
     : null;
-  if (parPoids) return parPoids.montant;
-  return totalAchat >= fournisseur.francoPort ? 0 : fournisseur.coutTransport;
+  const sansAffretement = raisonSansAffretement(fournisseur, poids, totalAchat, dept);
+  if (r) {
+    return {
+      montant: r.montant, franco: r.source === 'franco',
+      detail: r.source === 'affretement'
+        ? `Affrètement ${r.palettes} palette${(r.palettes ?? 0) > 1 ? 's' : ''}${r.service ? ` (${r.service})` : ''} · ${poids.toFixed(0)} kg · dépt ${r.dept}`
+        : sansAffretement,
+    };
+  }
+  const franco = totalAchat >= fournisseur.francoPort;
+  return { montant: franco ? 0 : fournisseur.coutTransport, franco, detail: sansAffretement };
 }
 
 export default function CommandeFournisseurDialog({ open, onOpenChange, devis, produits, fournisseurs, produitFournisseurs, onSaveCommandes, onPriseStock }: Props) {
   const navigate = useNavigate();
+  const { clients } = useCRM();
+  /* Département de livraison du devis : choisit le prix de la grille d'affrètement. */
+  const dept = devis ? destinationDuDevis(clients.find(c => c.id === devis.clientId), devis.adresseLivraisonId)?.dept : undefined;
   const [priseStockIds, setPriseStockIds] = useState<Set<string>>(new Set());
 
   // Reset stock selection when dialog opens with a new devis
@@ -157,7 +172,7 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
       if (lignesPourCommande.length === 0) continue; // All taken from stock, skip CF
 
       const totalAchat = lignesPourCommande.reduce((acc, l) => acc + l.produit.prixAchat * l.quantite, 0);
-      const transport = transportDe(fournisseur, lignesPourCommande, totalAchat);
+      const transport = transportDe(fournisseur, lignesPourCommande, totalAchat, dept).montant;
       commandes.push({
         id: generateId(),
         devisId: devis.id,
@@ -279,8 +294,9 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
             {Array.from(commandesParFournisseur.entries()).map(([fournId, { fournisseur, lignes }]) => {
               const lignesActives = lignes.filter(l => !priseStockIds.has(l.produit.id));
               const totalAchat = lignesActives.reduce((acc, l) => acc + l.produit.prixAchat * l.quantite, 0);
-              const francoAtteint = totalAchat >= fournisseur.francoPort;
-              const transport = transportDe(fournisseur, lignesActives, totalAchat);
+              const port = transportDe(fournisseur, lignesActives, totalAchat, dept);
+              const francoAtteint = port.franco;
+              const transport = port.montant;
               const totalCommande = totalAchat + transport;
               const allOnStock = lignesActives.length === 0 && lignes.length > 0;
 
@@ -409,6 +425,9 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
                             <span className="text-muted-foreground">Transport</span>
                             <span>{francoAtteint ? <span className="text-success">Franco ✓</span> : formatMontant(transport)}</span>
                           </div>
+                          {port.detail && (
+                            <p className={`text-xs text-right ${port.detail.startsWith('Affrètement') ? 'text-muted-foreground' : 'text-amber-600 dark:text-amber-400'}`}>{port.detail}</p>
+                          )}
                           {!francoAtteint && (
                             <div className="flex justify-between text-xs">
                               <span className="text-muted-foreground">Franco à partir de</span>

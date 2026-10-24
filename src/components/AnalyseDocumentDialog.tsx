@@ -6144,9 +6144,14 @@ const [contratOdoo, setContratOdoo] = useState<
                       <Button size="sm" disabled={!cible || grilleTransport.enregistree}
                         onClick={() => {
                           if (!cible) return;
-                          updateFournisseurs(prev => prev.map(f => (f.id === cible.id ? { ...f, grilleAffretement: grilleTransport.grille } : f)));
+                          /* Le poids par palette est une saisie de la fiche : une nouvelle grille le garde. */
+                          updateFournisseurs(prev => prev.map(f => (f.id === cible.id ? {
+                            ...f,
+                            grilleAffretement: { ...grilleTransport.grille, ...(existante?.kgParPalette ? { kgParPalette: existante.kgParPalette } : {}) },
+                          } : f)));
                           setGrilleTransport(g => g && { ...g, enregistree: true });
-                          toast.success(`Grille enregistrée sur la fiche ${cible.societe || cible.nom} : ${grilleTransport.grille.tarifs.length} départements (onglet Transport).`);
+                          toast.success(`Grille enregistrée sur la fiche ${cible.societe || cible.nom} : ${grilleTransport.grille.tarifs.length} départements (onglet Transport).`
+                            + (existante?.kgParPalette ? '' : ' Renseignez-y le poids par palette pour qu’elle chiffre le port.'));
                         }}>
                         {grilleTransport.enregistree
                           ? <><CheckCircle2 className="w-4 h-4 mr-1.5" />Enregistrée sur la fiche {cible?.societe || cible?.nom}</>

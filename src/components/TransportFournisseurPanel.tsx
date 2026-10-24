@@ -22,7 +22,8 @@ import {
  *
  * La grille d'AFFRÈTEMENT (prix par département et nombre de palettes) se lit
  * dans l'analyse de document (type « Tarif transport fournisseur ») ; elle
- * s'affiche ici et peut être retirée.
+ * s'affiche ici et peut être retirée. Le poids par palette se saisit ici :
+ * c'est lui qui donne le nombre de palettes, donc le prix (`portFournisseur`).
  */
 interface Valeur {
   francoPort: number;
@@ -197,6 +198,20 @@ export default function TransportFournisseurPanel({ valeur, onChange }: Props) {
             <Button type="button" variant="ghost" size="sm" className="h-7 px-2" title="Retirer la grille"
               onClick={() => onChange({ grilleAffretement: null })}>
               <Trash2 className="w-3.5 h-3.5" /></Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Label className="text-xs">Poids maximal par palette (kg)</Label>
+            <Input type="number" step="1" min="0" className="h-8 w-24" placeholder="à saisir"
+              value={valeur.grilleAffretement.kgParPalette ?? ''}
+              onChange={e => {
+                const kg = parseFloat(e.target.value);
+                onChange({ grilleAffretement: { ...valeur.grilleAffretement!, kgParPalette: kg > 0 ? kg : undefined } });
+              }} />
+            <span className="text-[11px] text-muted-foreground">
+              {valeur.grilleAffretement.kgParPalette
+                ? `Port = prix du dépt de livraison pour (poids de l'envoi ÷ ${valeur.grilleAffretement.kgParPalette} kg) palettes, arrondi au-dessus — franco prioritaire.`
+                : 'Sans ce poids, la grille ne chiffre pas le port des devis et des commandes.'}
+            </span>
           </div>
           <GrilleAffretementTable grille={valeur.grilleAffretement} />
         </div>

@@ -1,4 +1,4 @@
-import type { Fournisseur, GrilleAffretement, TarifAffretementDept } from './store';
+import { prixAffretementGrille, type Fournisseur, type GrilleAffretement, type TarifAffretementDept } from './store';
 import { normaliserDept } from './transportFournisseur';
 
 /**
@@ -138,21 +138,16 @@ export function lireGrilleAffretement(items: ItemPDF[]): Omit<GrilleAffretement,
 }
 
 /**
- * Prix d'affrètement pour un département et un nombre de palettes : le
- * palier égal ou immédiatement supérieur (2,5 palettes → prix de 3).
- * `null` hors grille — département absent ou trop de palettes : rien n'est
- * extrapolé.
+ * Prix d'affrètement pour un département saisi (« 1 », « 01 », « 2a ») et
+ * un nombre de palettes : voir `prixAffretementGrille` (`store.ts`), qui
+ * sert au calcul du port.
  */
 export function prixAffretement(
   grille: Pick<GrilleAffretement, 'tarifs'> | undefined,
   dept: string | undefined,
   palettes: number,
 ): { prix: number; palettes: number; service?: string } | null {
-  const d = normaliserDept(dept);
-  if (!grille || !d || !(palettes > 0)) return null;
-  const t = grille.tarifs.find(x => x.dept === d);
-  const p = t?.paliers.filter(x => x.palettes >= palettes).sort((a, b) => a.palettes - b.palettes)[0];
-  return p ? { prix: p.prix, palettes: p.palettes, ...(t?.service ? { service: t.service } : {}) } : null;
+  return prixAffretementGrille(grille, normaliserDept(dept), palettes);
 }
 
 /** Nombre de palettes le plus grand de la grille (en-tête du tableau). */

@@ -3086,8 +3086,11 @@ export default function Devis() {
         <div key={f.fournisseurId} className="flex justify-between gap-2">
           <span className="truncate" title={f.source ? LIBELLE_SOURCE_PORT[f.source] : 'Port non renseigné sur la fiche du fournisseur'}>
             {f.nom} · {f.poidsKg.toFixed(0)} kg · achat {formatMontant(f.montantAchat)}{f.source ? ` · ${LIBELLE_SOURCE_PORT[f.source]}` : ''}
-            {f.dept ? ` · tarif relevé pour le dépt ${f.dept}` : ''}
+            {f.source === 'affretement'
+              ? ` · ${f.palettes} palette${(f.palettes ?? 0) > 1 ? 's' : ''}${f.service ? ` (${f.service})` : ''} · dépt ${f.dept}`
+              : f.dept ? ` · tarif relevé pour le dépt ${f.dept}` : ''}
             {f.approximatif ? ' — autre destination : estimation' : ''}
+            {f.sansAffretement && <span className="block text-amber-600 dark:text-amber-400">{f.sansAffretement}</span>}
           </span>
           {f.montant === null
             ? <span className="shrink-0 font-medium text-amber-600 dark:text-amber-400">à vérifier</span>

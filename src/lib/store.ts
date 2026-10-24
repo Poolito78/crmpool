@@ -118,12 +118,67 @@ export interface GrilleAffretement {
   /** Fichier d'où la grille a été lue. */
   source?: string;
   dateImport: string;    // YYYY-MM-DD
+  /**
+   * Poids maximal chargé sur une palette, SAISI sur la fiche (jamais lu ni
+   * deviné) : c'est lui qui donne le nombre de palettes d'un envoi
+   * (poids ÷ ce poids, arrondi au-dessus). Absent = la grille ne s'applique pas.
+   */
+  kgParPalette?: number;
   tarifs: TarifAffretementDept[];
+}
+
+/** Palettes d'un envoi d'après le poids par palette de la grille ; `undefined` si on ne peut pas le dire. */
+export function palettesPourPoids(grille: Pick<GrilleAffretement, 'kgParPalette'> | null | undefined, poidsKg: number): number | undefined {
+  const kg = grille?.kgParPalette;
+  return kg && kg > 0 && poidsKg > 0 ? Math.ceil(poidsKg / kg - 1e-9) : undefined;
+}
+
+/**
+ * Prix de la grille pour un département (déjà normalisé : « 01 », « 2A ») et
+ * un nombre de palettes : le palier égal ou immédiatement supérieur. `null`
+ * hors grille — département absent ou plus de palettes que la grille n'en
+ * prévoit : rien n'est extrapolé.
+ */
+export function prixAffretementGrille(
+  grille: Pick<GrilleAffretement, 'tarifs'> | null | undefined,
+  dept: string | undefined,
+  palettes: number,
+): { prix: number; palettes: number; service?: string } | null {
+  if (!grille || !dept || !(palettes > 0)) return null;
+  const t = grille.tarifs.find(x => x.dept === dept);
+  const p = t?.paliers.filter(x => x.palettes >= palettes).sort((a, b) => a.palettes - b.palettes)[0];
+  return p ? { prix: p.prix, palettes: p.palettes, ...(t?.service ? { service: t.service } : {}) } : null;
+}
+
+/**
+ * Pourquoi la grille d'affrètement de la fiche n'a PAS chiffré ce port —
+ * à afficher, pour qu'un port au palier ou au coût fixe ne passe pas pour
+ * le tarif d'affrètement. `undefined` si la fiche n'a pas de grille, ou si
+ * elle s'applique.
+ */
+export function raisonSansAffretement(
+  f: Pick<Fournisseur, 'grilleAffretement' | 'francoPort'>,
+  poidsKg: number,
+  montantHT: number,
+  dept?: string,
+): string | undefined {
+  const g = f.grilleAffretement;
+  if (!g) return undefined;
+  if (f.francoPort > 0 && montantHT >= f.francoPort) return undefined;
+  if (!dept) return 'grille d’affrètement : département de livraison inconnu';
+  if (!(g.kgParPalette && g.kgParPalette > 0)) return 'grille d’affrètement : poids par palette à renseigner sur la fiche (onglet Transport)';
+  if (!(poidsKg > 0)) return 'grille d’affrètement : poids de l’envoi inconnu';
+  const n = palettesPourPoids(g, poidsKg)!;
+  if (!g.tarifs.some(t => t.dept === dept)) return `grille d’affrètement : dépt ${dept} absent de la grille`;
+  if (!prixAffretementGrille(g, dept, n)) return `grille d’affrètement : ${n} palettes, au-delà de la grille`;
+  return undefined;
 }
 
 /**
  * Port d'une commande fournisseur d'après sa fiche : 0 au-delà du franco,
- * sinon le palier de poids atteint, sinon le coût de transport fixe.
+ * sinon la GRILLE D'AFFRÈTEMENT (département de livraison × nombre de
+ * palettes, celui-ci tiré du poids et du poids par palette saisi sur la
+ * fiche), sinon le palier de poids atteint, sinon le coût de transport fixe.
  * `null` = la fiche ne permet pas de le dire (rien n'est deviné).
  *
  * Avec un département de livraison (`dept`), le tarif relevé POUR ce département
@@ -132,12 +187,23 @@ export interface GrilleAffretement {
  * département, pour que l'écran le dise : c'est une estimation, pas un tarif.
  */
 export function portFournisseur(
-  f: Pick<Fournisseur, 'francoPort' | 'coutTransport' | 'paliersPortPoids'>,
+  f: Pick<Fournisseur, 'francoPort' | 'coutTransport' | 'paliersPortPoids' | 'grilleAffretement'>,
   poidsKg: number,
   montantHT: number,
   dept?: string,
-): { montant: number; source: 'franco' | 'palier' | 'fixe'; mode?: ModeTransport; dept?: string; approximatif?: boolean } | null {
+): {
+  montant: number; source: 'franco' | 'affretement' | 'palier' | 'fixe'; mode?: ModeTransport;
+  dept?: string; approximatif?: boolean; palettes?: number; service?: string;
+} | null {
   if (f.francoPort > 0 && montantHT >= f.francoPort) return { montant: 0, source: 'franco' };
+  const palettes = palettesPourPoids(f.grilleAffretement, poidsKg);
+  const aff = palettes ? prixAffretementGrille(f.grilleAffretement, dept, palettes) : null;
+  if (aff) {
+    return {
+      montant: aff.prix, source: 'affretement', mode: 'affretement', dept, palettes: aff.palettes,
+      ...(aff.service ? { service: aff.service } : {}),
+    };
+  }
   const tous = [...(f.paliersPortPoids ?? [])].sort((a, b) => b.poidsMin - a.poidsMin);
   const atteint = (liste: PalierPortPoids[]) => (poidsKg > 0 ? liste.find(x => poidsKg >= x.poidsMin) : undefined);
   const exact = dept ? atteint(tous.filter(p => p.dept === dept)) : undefined;
@@ -441,7 +507,7 @@ export function getPfPrixPourQuantite(pf: ProduitFournisseur, qte: number): numb
  *  puis coût fixe. */
 export function getPfTransportPourMontant(
   pf: ProduitFournisseur,
-  fourn: Pick<Fournisseur, 'francoPort' | 'coutTransport' | 'paliersPortPoids'>,
+  fourn: Pick<Fournisseur, 'francoPort' | 'coutTransport' | 'paliersPortPoids' | 'grilleAffretement'>,
   montantAchat: number,
   poidsKg = 0,
   dept?: string,

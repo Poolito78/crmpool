@@ -139,3 +139,43 @@ describe('port selon la destination', () => {
     expect(destinationDuDevis(undefined)).toBeNull();
   });
 });
+
+describe("grille d'affrètement (QRM : dépt × palettes)", () => {
+  const grille = {
+    dateImport: '2026-10-24', kgParPalette: 1000,
+    tarifs: [{ dept: '13', service: 'T3', paliers: [1, 2, 3].map((n, i) => ({ palettes: n, prix: [246, 375, 495][i] })) }],
+  };
+  const qrm = four('QRM', { coutTransport: 90, paliersPortPoids: [{ poidsMin: 0, coutTransport: 60 }], grilleAffretement: grille });
+
+  it('prend le prix du département pour poids ÷ kg par palette, arrondi au-dessus', () => {
+    expect(portFournisseur(qrm, 1500, 2000, '13')).toMatchObject({ montant: 375, source: 'affretement', palettes: 2, service: 'T3', dept: '13' });
+    expect(portFournisseur(qrm, 1000, 2000, '13')).toMatchObject({ montant: 246, palettes: 1 });
+  });
+
+  it('franco prioritaire ; sans dépt, sans kg par palette ou hors grille : paliers puis fixe, et la raison est dite', () => {
+    expect(portFournisseur({ ...qrm, francoPort: 1000 }, 1500, 2000, '13')).toMatchObject({ montant: 0, source: 'franco' });
+    expect(portFournisseur(qrm, 1500, 2000)).toMatchObject({ source: 'palier', montant: 60 });
+    expect(portFournisseur(qrm, 3500, 2000, '13')).toMatchObject({ source: 'palier' });
+    const sansKg = { ...qrm, grilleAffretement: { ...grille, kgParPalette: undefined } };
+    expect(portFournisseur(sansKg, 1500, 2000, '13')).toMatchObject({ source: 'palier' });
+
+    const r = portReelParFournisseur(base({
+      lignes: [ligne('1', 'a', 50)],
+      produitFournisseurs: [pf('a', 'QRM')],
+      fournisseurs: [sansKg],
+      dept: '13',
+    }));
+    expect(r.fournisseurs[0].sansAffretement).toMatch(/poids par palette/);
+  });
+
+  it('au devis : 50 × 20 kg = 1 000 kg livrés dans le 13 → 1 palette, 246 €', () => {
+    const r = portReelParFournisseur(base({
+      lignes: [ligne('1', 'a', 50)],
+      produitFournisseurs: [pf('a', 'QRM')],
+      fournisseurs: [qrm],
+      dept: '13',
+    }));
+    expect(r.fournisseurs[0]).toMatchObject({ montant: 246, source: 'affretement', palettes: 1 });
+    expect(r.fournisseurs[0].sansAffretement).toBeUndefined();
+  });
+});

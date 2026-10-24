@@ -3,8 +3,8 @@
  *
  * Le port du devis (`fraisPortHT`) est un prix de vente. Son coût n'est pas
  * le même chiffre : chaque fournisseur qui livre une partie des articles
- * facture son propre port, d'après sa fiche (`portFournisseur` — franco, palier
- * de poids, coût fixe) ou d'après les paliers du lien article-fournisseur
+ * facture son propre port, d'après sa fiche (`portFournisseur` — franco,
+ * grille d'affrètement par département et palettes, palier de poids, coût fixe) ou d'après les paliers du lien article-fournisseur
  * (`getPfTransportPourMontant`). Le port est dû PAR COMMANDE : on regroupe
  * donc les lignes par fournisseur, on additionne poids et achat, puis on lit
  * le port de ce total — jamais ligne par ligne.
@@ -18,6 +18,7 @@ import {
   departementDeCodePostal,
   getPfTransportPourMontant,
   portFournisseur,
+  raisonSansAffretement,
   type Client,
   type Fournisseur,
   type LigneDevis,
@@ -35,8 +36,14 @@ export interface PortParFournisseur {
   montantAchat: number;
   /** Port facturé par ce fournisseur ; `null` = la fiche ne le dit pas. */
   montant: number | null;
-  source: 'franco' | 'palier' | 'fixe' | 'lien' | null;
+  source: 'franco' | 'affretement' | 'palier' | 'fixe' | 'lien' | null;
   mode?: ModeTransport;
+  /** Palettes comptées par la grille d'affrètement (palier retenu). */
+  palettes?: number;
+  /** Code service de la grille (« T3 »). */
+  service?: string;
+  /** La fiche a une grille d'affrètement qui n'a pas pu chiffrer ce port, et pourquoi. */
+  sansAffretement?: string;
   /** Département du tarif retenu (relevé sur un devis fournisseur), s'il est propre à une destination. */
   dept?: string;
   /** Tarif relevé pour une AUTRE destination que celle du devis : une estimation, pas un tarif. */
@@ -102,9 +109,11 @@ export function portReelParFournisseur(e: Entree): PortReel {
     const lien = g.pfs.find(p => p.paliersPort?.some(x => x.coutTransport > 0));
     if (lien) return { ...base, montant: getPfTransportPourMontant(lien, f, g.montantAchat, g.poidsKg, e.dept), source: 'lien' };
     const r = portFournisseur(f, g.poidsKg, g.montantAchat, e.dept);
+    const sansAffretement = raisonSansAffretement(f, g.poidsKg, g.montantAchat, e.dept);
+    const extra = sansAffretement ? { sansAffretement } : {};
     return r
-      ? { ...base, montant: r.montant, source: r.source, mode: r.mode, dept: r.dept, approximatif: r.approximatif }
-      : { ...base, montant: null, source: null };
+      ? { ...base, montant: r.montant, source: r.source, mode: r.mode, dept: r.dept, approximatif: r.approximatif, palettes: r.palettes, service: r.service, ...extra }
+      : { ...base, montant: null, source: null, ...extra };
   }).sort((a, b) => b.montantAchat - a.montantAchat);
 
   const connus = fournisseurs.filter(f => f.montant !== null);
@@ -139,6 +148,7 @@ export function destinationDuDevis(
 
 export const LIBELLE_SOURCE_PORT: Record<NonNullable<PortParFournisseur['source']>, string> = {
   franco: 'franco atteint',
+  affretement: 'grille d’affrètement',
   palier: 'palier de poids',
   fixe: 'coût fixe',
   lien: 'paliers de l’article',
