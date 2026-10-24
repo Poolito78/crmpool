@@ -65,13 +65,17 @@ export const MAILS_DEFAUT: Record<TypeMail, DefinitionMail> = {
     corps: `Bonjour[[ {destinataire}]],
 
 Suite à notre échange, tu trouveras ci-joint notre devis {numero}[[ (Réf. {reference})]] d'un montant de {montantHT} HT.[[
-Chantier : {chantier}]]
+Chantier : {chantier}]][[
+Système : {systeme}]][[
+Coût de revient chantier : {coutChantierM2}]]
 Ce devis est valable jusqu'au {validite}.
 
 Restant à ta disposition pour tout complément d'information.`,
     champs: {
       destinataire: DESTINATAIRE, numero: NUMERO, reference: REFERENCE, societe: SOCIETE,
       chantier: { libelle: 'Chantier', exemple: 'BAO BLANCHE 64 ML' },
+      systeme: { libelle: 'Système (nom du système du devis)', exemple: 'FLOWFAST 319 Concrete' },
+      coutChantierM2: { libelle: 'Coût de revient chantier au m² (ou ml)', exemple: '23,45 €/m²' },
       montantHT: { libelle: 'Montant HT', exemple: '846,80 €' },
       montantTTC: { libelle: 'Montant TTC', exemple: '1 016,16 €' },
       validite: { libelle: 'Valable jusqu\'au', exemple: '12/11/2026' },

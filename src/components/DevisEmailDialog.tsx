@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File as FileIcon, FileImage, FileSpreadsheet, ExternalLink, Eye, Copy, Check, Image as ImageIcon, Globe, Layers, BellRing, Save, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { coutChantier } from '@/lib/odooSync';
 import { type Devis, type Client, type Produit, dbToProduitPublic, calculerTotalDevis, formatMontant, formatDate, formatDateISO, useDevisMessageTemplates } from '@/lib/store';
 import {
   type ChampsRelance, type ModeleRelance, MODELES_RELANCE_BASE, LIBELLE_CHAMPS,
@@ -455,9 +456,12 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       ? [contactDevis.prenom, contactDevis.nom].filter(Boolean).join(' ') || client?.nom
       : client?.nom;
     setTo(contactDevis?.email?.trim() || client?.email || '');
+    // Coût de revient chantier au m² (ou ml) : vide sans surface ni article consommé → le passage disparaît.
+    const parM2 = coutChantier(devis.lignes, produits, devis.surfaceGlobaleM2 ?? 0, devis.uniteSurface).parM2;
     const valeursMail = {
+      coutChantierM2: parM2 != null ? `${parM2.toFixed(2).replace('.', ',')} €/${devis.uniteSurface === 'ml' ? 'ml' : 'm²'}` : '',
       destinataire: nomDestinataire, numero: devis.numero, reference: devis.referenceAffaire,
-      societe: client?.societe, chantier: devis.chantier, montantHT: formatMontant(totals.totalHT),
+      societe: client?.societe, chantier: devis.chantier, systeme: devis.systeme, montantHT: formatMontant(totals.totalHT),
       montantTTC: formatMontant(totals.totalTTC), validite: devis.dateValidite ? formatDate(devis.dateValidite) : '',
     };
     const mailType = modeleMail('devis');

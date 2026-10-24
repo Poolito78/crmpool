@@ -19,7 +19,7 @@ describe('remplirMail', () => {
 describe('textes d\'origine', () => {
   it('reprennent le mail de devis écrit en dur jusque-là', () => {
     const d = MAILS_DEFAUT.devis;
-    const v = { destinataire: 'Roger Cheval', numero: 'DEV-2026-138', reference: '', societe: "PRESTA'SERVICE", chantier: 'BAO 64 ML', montantHT: '846,80 €', montantTTC: '1 016,16 €', validite: '12/11/2026' };
+    const v = { destinataire: 'Roger Cheval', numero: 'DEV-2026-138', reference: '', societe: "PRESTA'SERVICE", chantier: 'BAO 64 ML', systeme: '', coutChantierM2: '', montantHT: '846,80 €', montantTTC: '1 016,16 €', validite: '12/11/2026' };
     expect(remplirMail(d.objet, v)).toBe("Devis DEV-2026-138 — PRESTA'SERVICE — BAO 64 ML");
     expect(remplirMail(d.corps, v)).toBe(`Bonjour Roger Cheval,
 
