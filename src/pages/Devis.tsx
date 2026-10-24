@@ -61,6 +61,7 @@ import {
 } from '@/lib/variantesCompo';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
+import TransportFournisseurDialog from '@/components/TransportFournisseurDialog';
 import DevisAssistantDialog from '@/components/DevisAssistantDialog';
 import DevisVoiceAssistantDialog, { type VoiceDevis } from '@/components/DevisVoiceAssistantDialog';
 import { useAssistantVocal } from '@/hooks/useAssistantVocal';
@@ -210,6 +211,8 @@ export default function Devis() {
   /** Odoo ne concerne que les sociétés qui y sont reliées (ISOSIGN). */
   const odooPermis = (d?: { societeId?: string } | null) => societeDuDocument(d, societes)?.odoo ?? true;
   const [societeDoc, setSocieteDoc] = useState<DevisType | null>(null);
+  /** Fournisseur dont l'onglet Transport est ouvert depuis le détail du port (`TransportFournisseurDialog`). */
+  const [transportFournisseurId, setTransportFournisseurId] = useState<string | null>(null);
   const { canAchat, isAdmin, userId } = useCurrentUser();
   const { commercials, nameOf } = useCommercials();
   /* Les mots du client déjà retenus sur un article — pour ne pas réapprendre
@@ -3085,7 +3088,12 @@ export default function Devis() {
       {portReel.fournisseurs.map(f => (
         <div key={f.fournisseurId} className="flex justify-between gap-2">
           <span className="truncate" title={f.source ? LIBELLE_SOURCE_PORT[f.source] : 'Port non renseigné sur la fiche du fournisseur'}>
-            {f.nom} · {f.poidsKg.toFixed(0)} kg · achat {formatMontant(f.montantAchat)}{f.source ? ` · ${LIBELLE_SOURCE_PORT[f.source]}` : ''}
+            {/* Le nom ouvre l'onglet Transport de la fiche, par-dessus le devis. */}
+            {fournisseurs.some(x => x.id === f.fournisseurId)
+              ? <button type="button" className="text-primary hover:underline underline-offset-2"
+                  title="Ouvrir le transport de la fiche fournisseur"
+                  onClick={() => setTransportFournisseurId(f.fournisseurId)}>{f.nom}</button>
+              : f.nom} · {f.poidsKg.toFixed(0)} kg · achat {formatMontant(f.montantAchat)}{f.source ? ` · ${LIBELLE_SOURCE_PORT[f.source]}` : ''}
             {f.source === 'affretement'
               ? ` · ${f.palettes} palette${(f.palettes ?? 0) > 1 ? 's' : ''}${f.service ? ` (${f.service})` : ''} · dépt ${f.dept}`
               : f.source === 'messagerie'
@@ -3095,7 +3103,9 @@ export default function Devis() {
             {f.sansGrille && <span className="block text-amber-600 dark:text-amber-400">{f.sansGrille}</span>}
           </span>
           {f.montant === null
-            ? <span className="shrink-0 font-medium text-amber-600 dark:text-amber-400">à vérifier</span>
+            ? <button type="button" className="shrink-0 font-medium text-amber-600 dark:text-amber-400 hover:underline underline-offset-2"
+                title="Renseigner le port sur la fiche fournisseur"
+                onClick={() => setTransportFournisseurId(f.fournisseurId)}>à vérifier</button>
             : <span className={`shrink-0 whitespace-nowrap ${f.approximatif ? 'text-amber-600 dark:text-amber-400' : ''}`}>{f.approximatif ? '≈ ' : ''}{formatMontant(f.montant)}</span>}
         </div>
       ))}
@@ -6504,6 +6514,7 @@ ${dosage.source}` : ''}`}>
       />
 
       {/* Commande Fournisseur Dialog */}
+      <TransportFournisseurDialog fournisseurId={transportFournisseurId} onClose={() => setTransportFournisseurId(null)} />
       <CommandeFournisseurDialog
         open={!!commandeDevis}
         onOpenChange={(open) => { if (!open) setCommandeDevis(null); }}
