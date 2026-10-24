@@ -5369,12 +5369,18 @@ ${dosage.source}` : ''}`}>
                   return prod?.categorie?.toLowerCase().includes('granulat');
                 });
                 const port = calculerFraisPort(poidsTotal, hasGranulat);
+                /* Franco au MONTANT : en port automatique, un total HT de lignes ≥ au seuil offre le port,
+                   quel que soit le poids (DEV-2026-162 : 6 811,50 € pour 730 kg → champ vide). */
+                const seuilFranco = getStandardBareme().seuilFranco;
+                const totalLignesFranco = calculerTotalDevis(lignes, 0, 0).totalHT;
+                const francoMontant = fraisPortAuto && totalLignesFranco >= seuilFranco;
                 return (
                   <div className="text-xs text-muted-foreground space-y-0.5">
                     <p>Poids total : <span className="font-medium">{poidsTotal.toFixed(2)} kg</span></p>
                     {port === null && <p className="text-amber-600 dark:text-amber-400 font-medium">⚠ &gt;2000 kg avec granulat : tarif hors catégorie</p>}
                     {port === 0 && poidsTotal > 2000 && <p className="text-emerald-600 dark:text-emerald-400 font-medium">Franco de port (&gt;2000 kg)</p>}
-                    <p className="text-[10px]">0-25 kg: 49€ · 26-100 kg: 85€ · 101-700 kg: 178€ · 701-2000 kg: 230€ · &gt;2000 kg: franco</p>
+                    {francoMontant && <p className="text-emerald-600 dark:text-emerald-400 font-medium">Franco de port : total HT des lignes {formatMontant(totalLignesFranco)} ≥ {formatMontant(seuilFranco)}{port ? ` (au poids : ${formatMontant(port)})` : ''}</p>}
+                    <p className="text-[10px]">0-25 kg: 49€ · 26-100 kg: 85€ · 101-700 kg: 178€ · 701-2000 kg: 230€ · &gt;2000 kg: franco · franco dès {formatMontant(seuilFranco)} HT de lignes</p>
                   </div>
                 );
               })()}
