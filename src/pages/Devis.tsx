@@ -3066,8 +3066,8 @@ export default function Devis() {
   /* Coût RÉEL du port : celui des fournisseurs, un port par commande fournisseur (`portReel.ts`). Il remplace
      « achat = vente » pour le transport standard dès qu'un fournisseur a un port connu ; un fournisseur dont la
      fiche ne le dit pas reste « à vérifier » et hors du total. Les autres transporteurs gardent leur barème. */
-  const destinationPort = dialogOpen && canAchat && fraisPortHT > 0 ? destinationDuDevis(clients.find(c => c.id === clientId), adresseLivraisonId) : null;
-  const portReel = dialogOpen && canAchat && fraisPortHT > 0
+  const destinationPort = dialogOpen && canAchat ? destinationDuDevis(clients.find(c => c.id === clientId), adresseLivraisonId) : null;
+  const portReel = dialogOpen && canAchat
     ? portReelParFournisseur({
         lignes, produitParId: id => produitParId(produits, id), produitFournisseurs, fournisseurs,
         choix: selectedFournisseurPerLigne, dept: destinationPort?.dept,
@@ -5407,7 +5407,8 @@ ${dosage.source}` : ''}`}>
               // Même règle que l'onglet comparatif : barème du transporteur, ou tarif standard refacturé au coûtant ;
               // `portAchatManuel` (partagé avec le comparatif) l'emporte.
               const portAchatCalcule = (() => {
-                if (fraisPortHT <= 0) return 0;
+                // Port non facturé : le coût des fournisseurs existe quand même (port offert), il reste compté.
+                if (fraisPortHT <= 0) return portAchatReelDefaut ?? 0;
                 if (transporteur !== 'standard' && BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>]) {
                   const { prix } = calculerFraisPortBareme(BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>].bareme, poidsTotal);
                   return prix ?? 0;
@@ -5418,7 +5419,7 @@ ${dosage.source}` : ''}`}>
                 });
                 return portAchatReelDefaut ?? calculerFraisPort(poidsTotal, hasGranulat) ?? fraisPortHT;
               })();
-              const portAchatApercu = fraisPortHT > 0 ? (portAchatManuel ?? portAchatCalcule) : 0;
+              const portAchatApercu = portAchatManuel ?? portAchatCalcule;
               const totalHTLignes = calculerTotalDevis(lignes, 0, 0).totalHT;
               const totalAchatAvecPort = totalAchat + portAchatApercu;
               const totalVenteAvecPort = totalHTLignes + fraisPortHT;
@@ -5451,13 +5452,13 @@ ${dosage.source}` : ''}`}>
                   )}
                   {/* Le port est refacturé au prix coûtant (achat = vente, coeff 1,00) : il tire le coeff total sous
                       celui de chaque ligne. On montre donc aussi le coeff des seules lignes, port exclu. */}
-                  {canAchat && totalAchat > 0 && fraisPortHT > 0 && (
+                  {canAchat && totalAchat > 0 && (fraisPortHT > 0 || portAchatApercu > 0) && (
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>dont lignes, hors port</span>
                     <span>{formatMontant(totalHTLignes - totalAchat)} · coeff {(totalHTLignes / totalAchat).toFixed(2)}</span>
                   </div>
                   )}
-                  {canAchat && fraisPortHT > 0 && (
+                  {canAchat && (fraisPortHT > 0 || portAchatApercu > 0) && (
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                     <span>dont port</span>
                     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -5484,7 +5485,7 @@ ${dosage.source}` : ''}`}>
                     </div>
                   </div>
                   )}
-                  {canAchat && fraisPortHT > 0 && detailPort}
+                  {canAchat && (fraisPortHT > 0 || portAchatApercu > 0) && detailPort}
                   {canAchat && (() => {
                     // Coût chantier = produits consommés (surface × conso kg/m² × prix/kg).
                     // Même calcul que la note envoyée à Odoo : `coutChantier`.
@@ -5619,6 +5620,9 @@ ${dosage.source}` : ''}`}>
                 // standard : coût réel des fournisseurs ; sans port fournisseur connu, pas de markup → achat = vente
                 portAchatCalcule = portAchatReelDefaut ?? calculerFraisPort(poidsCompa, hasGranulatCompa) ?? fraisPortHT;
               }
+            } else {
+              // Port non facturé (offert) : le coût des fournisseurs reste un coût.
+              portAchatCalcule = portAchatReelDefaut ?? 0;
             }
             const portAchat = portAchatManuel ?? portAchatCalcule;
             const portVente = fraisPortHT;
@@ -5853,7 +5857,7 @@ ${dosage.source}` : ''}`}>
                           </tr>
                         );
                       })}
-                      {portVente > 0 && (() => {
+                      {(portVente > 0 || portAchat > 0) && (() => {
                         const portCoeffColor = portCoeff == null ? '' : portCoeff >= 1.55 ? 'text-emerald-600 dark:text-emerald-400' : portCoeff >= 1.43 ? 'text-orange-500' : 'text-destructive';
                         totalAchat += portAchat;
                         totalVente += portVente;
