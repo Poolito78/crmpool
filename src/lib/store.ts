@@ -95,6 +95,33 @@ export interface PalierPortPoids {
 }
 
 /**
+ * Grille d'AFFRÈTEMENT d'un fournisseur (camion dédié) : un prix HT par
+ * département de livraison et par nombre de palettes — ex. tarif QRM 2026,
+ * « AIN 01 : 1 palette 222 €, 2 palettes 317 € … ». Lue telle quelle sur le
+ * PDF du fournisseur (`grilleAffretement.ts`), rien n'est deviné.
+ */
+export interface TarifAffretementDept {
+  dept: string;          // « 01 », « 2A »
+  nom?: string;          // « AIN »
+  service?: string;      // code de service du transporteur (« T3 », « TPO »)
+  paliers: { palettes: number; prix: number }[];
+}
+
+export interface GrilleAffretement {
+  titre?: string;
+  /** Départ des camions (« ALIZAY (27) »). */
+  depart?: string;
+  /** Période de validité telle qu'écrite (« 01/07/2026 au 31/12/2026 »). */
+  validite?: string;
+  /** Suppléments et réserves écrits sur la grille (hayon, ADR, SG…). */
+  conditions?: string[];
+  /** Fichier d'où la grille a été lue. */
+  source?: string;
+  dateImport: string;    // YYYY-MM-DD
+  tarifs: TarifAffretementDept[];
+}
+
+/**
  * Port d'une commande fournisseur d'après sa fiche : 0 au-delà du franco,
  * sinon le palier de poids atteint, sinon le coût de transport fixe.
  * `null` = la fiche ne permet pas de le dire (rien n'est deviné).
@@ -145,6 +172,8 @@ export interface Fournisseur {
   coutTransport: number;
   /** Port par tranche de poids : le palier le plus haut dont `poidsMin` est atteint s'applique. */
   paliersPortPoids?: PalierPortPoids[];
+  /** Grille d'affrètement par département et nombre de palettes. `null` = retirée (efface la colonne). */
+  grilleAffretement?: GrilleAffretement | null;
   delaiReglement: string;
   dateCreation: string;
   estStockiste?: boolean;
@@ -951,6 +980,8 @@ function dbToFournisseur(r: any): Fournisseur {
     coutTransport: Number(r.cout_transport) || 0,
     paliersPortPoids: Array.isArray(r.paliers_port_poids) && r.paliers_port_poids.length
       ? r.paliers_port_poids : undefined,
+    grilleAffretement: r.grille_affretement && Array.isArray(r.grille_affretement.tarifs)
+      ? r.grille_affretement : undefined,
     delaiReglement: normalizeDelaiReglement(r.delai_reglement ? String(r.delai_reglement) : '45J FDM'),
     dateCreation: r.date_creation?.split('T')[0] || '',
     estStockiste: r.est_stockiste ?? false,
@@ -974,6 +1005,7 @@ function fournisseurToDb(f: Fournisseur, userId: string) {
     franco_port: f.francoPort,
     cout_transport: f.coutTransport,
     ...(f.paliersPortPoids !== undefined ? { paliers_port_poids: f.paliersPortPoids } : {}),
+    ...(f.grilleAffretement !== undefined ? { grille_affretement: f.grilleAffretement } : {}),
     delai_reglement: normalizeDelaiReglement(f.delaiReglement || '45J FDM'),
     date_creation: f.dateCreation,
     ...(f.estStockiste !== undefined ? { est_stockiste: f.estStockiste } : {}),

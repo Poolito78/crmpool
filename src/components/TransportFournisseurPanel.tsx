@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { formatMontant, type ModeTransport, type PalierPortPoids } from '@/lib/store';
+import { formatMontant, type GrilleAffretement, type ModeTransport, type PalierPortPoids } from '@/lib/store';
+import GrilleAffretementTable from '@/components/GrilleAffretementTable';
 import {
   LIBELLE_MODE, analyserTransportFournisseur, fusionnerPaliers, normaliserDept, type TransportLu,
 } from '@/lib/transportFournisseur';
@@ -18,11 +19,16 @@ import {
  * montré, puis intégré aux paliers au clic — un palier lu remplace celui du
  * même poids, les autres restent. Tout reste modifiable à la main, et rien
  * n'est enregistré avant « Modifier » : on édite le formulaire de la fiche.
+ *
+ * La grille d'AFFRÈTEMENT (prix par département et nombre de palettes) se lit
+ * dans l'analyse de document (type « Tarif transport fournisseur ») ; elle
+ * s'affiche ici et peut être retirée.
  */
 interface Valeur {
   francoPort: number;
   coutTransport: number;
   paliersPortPoids?: PalierPortPoids[];
+  grilleAffretement?: GrilleAffretement | null;
 }
 
 interface Props {
@@ -178,6 +184,23 @@ export default function TransportFournisseurPanel({ valeur, onChange }: Props) {
             <Plus className="w-3.5 h-3.5 mr-1" />Ajouter un palier</Button>
         </div>
       </div>
+
+      {valeur.grilleAffretement && (
+        <div className="border border-border rounded-lg p-3 space-y-2 bg-muted/30">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-foreground flex-1">
+              Affrètement — prix par département et nombre de palettes
+            </p>
+            <span className="text-[11px] text-muted-foreground">
+              {valeur.grilleAffretement.source ? `${valeur.grilleAffretement.source} · ` : ''}importée le {valeur.grilleAffretement.dateImport}
+            </span>
+            <Button type="button" variant="ghost" size="sm" className="h-7 px-2" title="Retirer la grille"
+              onClick={() => onChange({ grilleAffretement: null })}>
+              <Trash2 className="w-3.5 h-3.5" /></Button>
+          </div>
+          <GrilleAffretementTable grille={valeur.grilleAffretement} />
+        </div>
+      )}
     </div>
   );
 }

@@ -13,7 +13,7 @@ import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, Pl
 import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
 import { lireBonsPourExecution, pagesEnImages, ensemblesBpe, estTasmanPal, type BonPourExecution } from '@/lib/bonPourExecution';
-import { analyserDocument, extrairePagesPDF, redresserMilliers, type DocumentAnalysis, type LigneAnalysee, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
+import { analyserDocument, extraireItemsPDF, extrairePagesPDF, redresserMilliers, type DocumentAnalysis, type LigneAnalysee, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import {
   estPlanKadri, lirePlanDirectionnel, aLireSurImage, avecPanneauxLus, lignesDuPlan, bilanPlan, titreEnsemble, codificationPal,
   TAUX_PAL_REFERENCE,
@@ -22,6 +22,9 @@ import {
 import PlanDirectionnelEncart from '@/components/PlanDirectionnelEncart';
 import ClasserDocumentFournisseur from '@/components/ClasserDocumentFournisseur';
 import FicheTechniqueArticle from '@/components/FicheTechniqueArticle';
+import GrilleAffretementTable from '@/components/GrilleAffretementTable';
+import { fournisseurNomme, lireGrilleAffretement, ressembleTarifTransport } from '@/lib/grilleAffretement';
+import type { GrilleAffretement } from '@/lib/store';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
 import {
   coupeSignatures, extraireIndices, societeDepuisEmail, adresseGenerique, memePersonne,
@@ -989,6 +992,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
    * type (prix nets d'achat, code du fournisseur).
    */
   const [typeImpose, setTypeImpose] = useState<'' | TypeDocument>('');
+  /* Grille de transport lue (type « tarif_transport ») : à enregistrer sur
+     la fiche du fournisseur retenu — celui que nomme la consigne, le fichier
+     ou le document, sinon à choisir. */
+  const [grilleTransport, setGrilleTransport] = useState<{ grille: GrilleAffretement; fournisseurId: string; enregistree?: boolean } | null>(null);
   const typeImposeRef = useRef<'' | TypeDocument>('');
   typeImposeRef.current = typeImpose;
   /* Le vocabulaire du catalogue sert de contre-épreuve au rapprochement du
@@ -1631,6 +1638,7 @@ const [contratOdoo, setContratOdoo] = useState<
   ) => {
     if (!apiKey) { toast.error('Clé API Groq manquante (VITE_GROQ_API_KEY)'); return; }
     setLoading(true); setResult(null); setMatchedCF(null); setShowCreerCF(false); setShowCreerCC(false);
+    setGrilleTransport(null);
     /* Une nouvelle analyse repart d'une page blanche. Nécessaire depuis que le
        pré-remplissage ne réécrit plus ce qui est déjà renseigné : sans cela, le
        client et le contact du document précédent resteraient en place. */
@@ -1703,9 +1711,19 @@ const [contratOdoo, setContratOdoo] = useState<
            elle se lit sans IA et se compare au devis du CRM. Cherchée avant le
            plan Kadri — le mail qui la transmet joint souvent le plan refait
            par ISOSIGN, qui passerait sinon pour une demande. */
+        /* GRILLE DE TRANSPORT (affrètement QRM : prix par département et par
+           nombre de palettes). Lue sans IA, à la position des cellules : six
+           cents prix ne se confient pas à un modèle. Cherchée en premier — la
+           détection automatique la reconnaît à sa forme. */
+        const grille = !impose || impose === 'tarif_transport'
+          ? lireGrilleAffretement(await extraireItemsPDF(await principal.arrayBuffer()).catch(() => []))
+          : null;
+        if (!grille && impose === 'tarif_transport') {
+          throw new Error('Aucune grille par département lisible dans ce PDF. Un tarif au poids se dépose dans l’onglet Transport de la fiche fournisseur.');
+        }
         /* Un type imposé court-circuite les lectures sans IA qui ne sont pas
            de ce type : notre offre Odoo, le plan Kadri (une demande). */
-        const offre = impose && impose !== 'offre_prix' ? null : await (async () => {
+        const offre = grille || (impose && impose !== 'offre_prix') ? null : await (async () => {
           const sources = pdfsCtx.length > 1
             ? await Promise.all(pdfsCtx.map(x => extrairePagesPDF(x.buffer).catch(() => [] as string[])))
             : [pages];
@@ -1715,7 +1733,18 @@ const [contratOdoo, setContratOdoo] = useState<
           }
           return null;
         })();
-        if (offre) {
+        if (grille) {
+          const fourn = fournisseurNomme(fournisseurs, [texteCtx, principal.name, pages.join('\n')]);
+          setGrilleTransport({
+            grille: { ...grille, source: principal.name, dateImport: new Date().toISOString().split('T')[0] },
+            fournisseurId: fourn?.id ?? '',
+          });
+          analysis = {
+            typeDocument: 'tarif_transport', lignes: [],
+            nomPartenaire: fourn ? (fourn.societe || fourn.nom) : undefined,
+            notes: [grille.titre, grille.validite].filter(Boolean).join(' · ') || undefined,
+          };
+        } else if (offre) {
           analysis = { ...offre, notes: texteCtx.trim() ? texteCtx.trim().slice(0, 1500) : offre.notes };
           toast.success(`Offre de prix ${offre.numeroDocument ?? ''} lue : ${offre.lignes.length} lignes — à comparer au devis du CRM`);
         } else if ((!impose || impose === 'demande_devis') && estPlanKadri(pages)) {
@@ -1791,7 +1820,7 @@ const [contratOdoo, setContratOdoo] = useState<
     } finally {
       setLoading(false);
     }
-  }, [apiKey, commandesFournisseur, documentDuPlan, lirePagesEnImage]);
+  }, [apiKey, commandesFournisseur, fournisseurs, documentDuPlan, lirePagesEnImage]);
 
   /* ── traitement des fichiers pré-chargés depuis le dashboard ── */
   useEffect(() => {
@@ -1961,6 +1990,7 @@ const [contratOdoo, setContratOdoo] = useState<
   const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); }, []);
 
   function reset() {
+    setGrilleTransport(null);
     setTexte(''); setFichier(null); setFichiersOrigine([]); setEmlPdfs([]); setResult(null); setMatchedCF(null); setDragging(false);
     setReceptionOpen(false); setShowCreerCF(false); setShowCreerCC(false);
     setExtractingContact(false); setContactToSave(null); setContactCible(null);
@@ -6001,7 +6031,7 @@ const [contratOdoo, setContratOdoo] = useState<
 
               {/* Une fiche technique n'est pas un document commercial : le bloc
                   n'a rien à faire là quand on a dit ce qu'on traite. */}
-              {!typeImpose && (
+              {!typeImpose && !ressembleTarifTransport(fichier?.name ?? '', texte) && (
                 <FicheTechniqueArticle
                   fichiers={fichiersOrigine.length > 0 ? fichiersOrigine : fichier ? [fichier] : []}
                   produits={produits}
@@ -6082,6 +6112,54 @@ const [contratOdoo, setContratOdoo] = useState<
                 )}
                 {panneauApercu}
 
+                {/* ── Grille de transport du fournisseur (affrètement par département et palettes) ── */}
+                {result.typeDocument === 'tarif_transport' && (grilleTransport ? (() => {
+                  const cible = fournisseurs.find(f => f.id === grilleTransport.fournisseurId);
+                  const existante = cible?.grilleAffretement;
+                  return (
+                    <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Truck className="w-4 h-4 text-primary shrink-0" />
+                        <span className="text-sm font-semibold">Grille de transport à enregistrer sur la fiche</span>
+                        <Select value={grilleTransport.fournisseurId || '__aucun__'}
+                          onValueChange={v => setGrilleTransport(g => g && { ...g, fournisseurId: v === '__aucun__' ? '' : v, enregistree: false })}>
+                          <SelectTrigger className="h-8 text-xs w-auto min-w-[220px]"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__aucun__"><span className="text-xs">Fournisseur à choisir</span></SelectItem>
+                            {[...fournisseurs].sort((a, b) => (a.societe || a.nom).localeCompare(b.societe || b.nom)).map(f => (
+                              <SelectItem key={f.id} value={f.id}><span className="text-xs">{f.societe || f.nom}</span></SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {!grilleTransport.fournisseurId && (
+                        <p className="text-xs text-warning">Aucun fournisseur nommé dans la consigne, le fichier ou le document : choisissez-le.</p>
+                      )}
+                      {existante && !grilleTransport.enregistree && (
+                        <p className="text-xs text-warning">
+                          La fiche porte déjà une grille ({existante.tarifs.length} départements{existante.validite ? `, ${existante.validite}` : ''}, importée le {existante.dateImport}) : elle sera remplacée.
+                        </p>
+                      )}
+                      <GrilleAffretementTable grille={grilleTransport.grille} />
+                      <Button size="sm" disabled={!cible || grilleTransport.enregistree}
+                        onClick={() => {
+                          if (!cible) return;
+                          updateFournisseurs(prev => prev.map(f => (f.id === cible.id ? { ...f, grilleAffretement: grilleTransport.grille } : f)));
+                          setGrilleTransport(g => g && { ...g, enregistree: true });
+                          toast.success(`Grille enregistrée sur la fiche ${cible.societe || cible.nom} : ${grilleTransport.grille.tarifs.length} départements (onglet Transport).`);
+                        }}>
+                        {grilleTransport.enregistree
+                          ? <><CheckCircle2 className="w-4 h-4 mr-1.5" />Enregistrée sur la fiche {cible?.societe || cible?.nom}</>
+                          : <><Truck className="w-4 h-4 mr-1.5" />Enregistrer dans la fiche {cible ? (cible.societe || cible.nom) : 'fournisseur'}</>}
+                      </Button>
+                    </div>
+                  );
+                })() : (
+                  <p className="text-xs text-warning">
+                    Aucune grille lue : choisissez « Tarif transport fournisseur » dans « Document à traiter », puis Analyser.
+                  </p>
+                ))}
+
                 {/* ── Mini-GED : ranger les pièces chez le fournisseur ── */}
                 {/* Pas pour un document CLIENT (demande de devis, devis, commande, facture
                     client, offre de prix, devis concurrent) : il n'a rien à faire chez un
@@ -6091,7 +6169,7 @@ const [contratOdoo, setContratOdoo] = useState<
                     fichiers={fichiersOrigine.length > 0 ? fichiersOrigine : fichier ? [fichier] : []}
                     result={result}
                     fournisseurs={fournisseurs}
-                    fournisseurIdConnu={matchedCF?.fournisseurId || creerCFFournisseurId || dfFournisseurId || undefined}
+                    fournisseurIdConnu={matchedCF?.fournisseurId || creerCFFournisseurId || dfFournisseurId || grilleTransport?.fournisseurId || undefined}
                   />
                 )}
 

@@ -36,6 +36,12 @@ export type TypeDocument =
    * sans IA quand c'est un PDF Odoo (`devisOdooPdf.ts`).
    */
   | 'offre_prix'
+  /**
+   * La grille de TRANSPORT d'un fournisseur (affrètement QRM : un prix par
+   * département et par nombre de palettes). Lue sans IA, à la position des
+   * cellules (`grilleAffretement.ts`), et enregistrée sur sa fiche.
+   */
+  | 'tarif_transport'
   | 'autre';
 
 export const TYPE_LABELS: Record<TypeDocument, { label: string; color: string }> = {
@@ -49,6 +55,7 @@ export const TYPE_LABELS: Record<TypeDocument, { label: string; color: string }>
   devis_fournisseur:    { label: 'Devis fournisseur',     color: 'bg-info/10 text-info' },
   devis_concurrent:     { label: 'Devis concurrent',      color: 'bg-destructive/10 text-destructive' },
   offre_prix:           { label: 'Offre de prix (à comparer au CRM)', color: 'bg-warning/10 text-warning' },
+  tarif_transport:      { label: 'Tarif transport fournisseur', color: 'bg-info/10 text-info' },
   autre:                { label: 'Autre document',        color: 'bg-muted text-muted-foreground' },
 };
 
@@ -397,6 +404,23 @@ export async function extrairePagesPDF(buffer: ArrayBuffer): Promise<string[]> {
       .join(''));
   }
   return pages;
+}
+
+/**
+ * Les cellules du PDF avec leur position (x, y en points, origine en bas à
+ * gauche) : un tableau se relit ligne par ligne là où le texte brut mélange
+ * l'ordre des cellules (`grilleAffretement.ts`).
+ */
+export async function extraireItemsPDF(buffer: ArrayBuffer): Promise<{ str: string; x: number; y: number; page: number }[]> {
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer.slice(0)) }).promise;
+  const items: { str: string; x: number; y: number; page: number }[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const content = await (await pdf.getPage(i)).getTextContent();
+    for (const item of content.items) {
+      if ('str' in item && item.str.trim()) items.push({ str: item.str, x: item.transform[4], y: item.transform[5], page: i });
+    }
+  }
+  return items;
 }
 
 /** Tronque le texte à ~6000 caractères pour rester sous la limite TPM de Groq (free tier) */
