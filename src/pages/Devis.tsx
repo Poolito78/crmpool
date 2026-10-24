@@ -3074,17 +3074,31 @@ export default function Devis() {
      « achat = vente » pour le transport standard dès qu'un fournisseur a un port connu ; un fournisseur dont la
      fiche ne le dit pas reste « à vérifier » et hors du total. Les autres transporteurs gardent leur barème. */
   const destinationPort = dialogOpen && canAchat ? destinationDuDevis(clients.find(c => c.id === clientId), adresseLivraisonId) : null;
-  const portReel = dialogOpen && canAchat
-    ? portReelParFournisseur({
-        lignes, produitParId: id => produitParId(produits, id), produitFournisseurs, fournisseurs,
-        choix: selectedFournisseurPerLigne, dept: destinationPort?.dept, choixTransport,
-        achatDeLigne: l => {
-          const prod = l.produitId ? produitParId(produits, l.produitId) : null;
-          const pu = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
-          return pu * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id));
-        },
-      })
-    : null;
+  const calculerPortReel = (choixT: Record<string, string>) => portReelParFournisseur({
+    lignes, produitParId: id => produitParId(produits, id), produitFournisseurs, fournisseurs,
+    choix: selectedFournisseurPerLigne, dept: destinationPort?.dept, choixTransport: choixT,
+    achatDeLigne: l => {
+      const prod = l.produitId ? produitParId(produits, l.produitId) : null;
+      const pu = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
+      return pu * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id));
+    },
+  });
+  const portReel = dialogOpen && canAchat ? calculerPortReel(choixTransport) : null;
+  /* Un transport choisi (ou rendu au calcul) dans le détail du port : son prix fait le COÛT du port, et le
+     port VENDU le reprend — total des fournisseurs, refacturé au coûtant. Plus aucun choix : le port vendu
+     revient au calcul automatique. Le coût saisi à la main est levé. */
+  function choisirTransport(fournisseurId: string, cle: string) {
+    const autres = Object.fromEntries(Object.entries(choixTransport).filter(([id]) => id !== fournisseurId));
+    const suivant = cle === '__auto' ? autres : { ...autres, [fournisseurId]: cle };
+    setChoixTransport(suivant);
+    setPortAchatManuel(null);
+    if (Object.keys(suivant).length) {
+      setFraisPortAuto(false);
+      setFraisPortHT(Math.round(calculerPortReel(suivant).total * 100) / 100);
+    } else {
+      setFraisPortAuto(true);
+    }
+  }
   const portAchatReelDefaut = portReel?.connu && transporteur === 'standard' ? portReel.total : null;
   const detailPort = portReel && transporteur === 'standard' ? (
     <div className="space-y-0.5 pl-3 text-[11px] text-muted-foreground">
@@ -3107,16 +3121,9 @@ export default function Devis() {
             {f.sansGrille && <span className="block text-amber-600 dark:text-amber-400">{f.sansGrille}</span>}
           </span>
           {/* Transport CHOISI parmi ceux que chiffrent les grilles de la fiche : son prix devient le coût
-              du port (le coût saisi à la main est levé), et la marge après port suit. */}
+              du port ET le port vendu (`choisirTransport`), et la marge après port suit. */}
           {f.options.length > 0 && (
-            <Select value={f.choisi ?? '__auto'}
-              onValueChange={v => {
-                setChoixTransport(prev => {
-                  const autres = Object.fromEntries(Object.entries(prev).filter(([id]) => id !== f.fournisseurId));
-                  return v === '__auto' ? autres : { ...autres, [f.fournisseurId]: v };
-                });
-                setPortAchatManuel(null);
-              }}>
+            <Select value={f.choisi ?? '__auto'} onValueChange={v => choisirTransport(f.fournisseurId, v)}>
               <SelectTrigger className={`h-6 w-auto min-w-[150px] text-[11px] px-2 shrink-0 ${f.choisi ? 'border-primary text-primary' : ''}`}
                 title="Choisir le transport de ce fournisseur">
                 <SelectValue />
