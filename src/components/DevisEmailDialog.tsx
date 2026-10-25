@@ -94,6 +94,33 @@ function encodeHeader(str: string): string {
   return `=?UTF-8?B?${btoa(binary)}?=`;
 }
 
+/**
+ * Le mail en HTML, liens des fiches cliquables sous le NOM de la fiche : le
+ * même pour le .eml (PC) et pour l'envoi par Resend (mobile).
+ */
+function htmlDuMail(params: {
+  body: string;
+  ficheLinks?: Array<{ label: string; url: string }>;
+  images?: ImageMail[];
+}): { html: string; imagesPlacees: ImageMail[] } {
+  const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const imagesPlacees = imagesUtilisees(params.body, params.images);
+  const htmlBody = corpsEnHtml(params.body, imagesPlacees);
+
+  // Section fiches produit avec vrais liens cliquables
+  const ficheHtml = params.ficheLinks && params.ficheLinks.length > 0
+    ? `<br><p style="margin:0 0 4px 0"><strong>Fiches produit :</strong></p>` +
+      params.ficheLinks.map(f =>
+        `<p style="margin:0 0 2px 0">&#8226; <a href="${esc(f.url)}" style="color:#0563C1">${esc(f.label)}</a></p>`
+      ).join('')
+    : '';
+
+  /* Le repère {fiches} du mail type place les liens (avant la signature) ;
+     sans lui, ils suivent le texte. */
+  const html = `<html><body>${placerDansHtml(htmlBody, 'fiches', ficheHtml) ?? htmlBody + ficheHtml}</body></html>`;
+  return { html, imagesPlacees };
+}
+
 function generateEml(params: {
   from: string;
   to: string;
@@ -118,21 +145,7 @@ function generateEml(params: {
   lines.push('');
 
   // Corps HTML — Outlook insère sa signature APRÈS le HTML (pas avant)
-  const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const imagesPlacees = imagesUtilisees(params.body, params.images);
-  const htmlBody = corpsEnHtml(params.body, imagesPlacees);
-
-  // Section fiches produit avec vrais liens cliquables
-  const ficheHtml = params.ficheLinks && params.ficheLinks.length > 0
-    ? `<br><p style="margin:0 0 4px 0"><strong>Fiches produit :</strong></p>` +
-      params.ficheLinks.map(f =>
-        `<p style="margin:0 0 2px 0">&#8226; <a href="${esc(f.url)}" style="color:#0563C1">${esc(f.label)}</a></p>`
-      ).join('')
-    : '';
-
-  /* Le repère {fiches} du mail type place les liens (avant la signature) ;
-     sans lui, ils suivent le texte. */
-  const fullHtml = `<html><body>${placerDansHtml(htmlBody, 'fiches', ficheHtml) ?? htmlBody + ficheHtml}</body></html>`;
+  const { html: fullHtml, imagesPlacees } = htmlDuMail(params);
   lines.push(`--${boundary}`);
   lines.push(...partieHtmlEml(fullHtml, imagesPlacees, toQuotedPrintable));
 
@@ -164,8 +177,54 @@ function generateEml(params: {
   return lines.join('\r\n');
 }
 
+const EXPEDITEUR = 'f.mouhot@isosign.fr';
+
 function isMobile(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+/**
+ * Mobile : le mail part du serveur (fonction `send-devis-email`, Resend), avec
+ * le même HTML que le .eml — mailto: et le partage ne portent que du texte brut,
+ * où un lien s'écrit « nom : https://… ». Une copie est mise en Cci.
+ * Rend `null` si c'est parti, sinon la raison (la fonction n'est pas déployée,
+ * le domaine n'est pas vérifié…) : l'appelant se replie alors sur le mailto.
+ */
+async function envoyerParResend(params: {
+  to: string;
+  subject: string;
+  body: string;
+  pdfBase64: string;
+  pdfFileName: string;
+  extraAttachments: Array<{ filename: string; content: string }>;
+  ficheLinks: Array<{ label: string; url: string }>;
+  images?: ImageMail[];
+}): Promise<string | null> {
+  // Sonde : la nouvelle version est-elle déployée et configurée ? Rien n'est envoyé.
+  const sonde = await supabase.functions.invoke('send-devis-email', { body: { sonde: true } });
+  if (sonde.error || !sonde.data?.pret) {
+    return sonde.data?.raison || 'fonction send-devis-email à déployer (.\\deploy-function.ps1 send-devis-email)';
+  }
+  const { html, imagesPlacees } = htmlDuMail(params);
+  const inlineImages = imagesPlacees.flatMap(img => {
+    const m = img.dataUrl.match(/^data:([^;]+);base64,(.*)$/);
+    if (!m) return [];
+    const ext = (m[1].split('/')[1] || 'png').replace('jpeg', 'jpg');
+    return [{ filename: `${img.id}.${ext}`, content: m[2], contentId: `${img.id}@crmpool` }];
+  });
+  const { data, error } = await supabase.functions.invoke('send-devis-email', {
+    body: {
+      to: params.to, subject: params.subject, html, body: texteDuMail(params.body),
+      pdfBase64: params.pdfBase64, fileName: params.pdfFileName,
+      extraAttachments: params.extraAttachments, inlineImages,
+      fromName: 'François Mouhot', replyTo: EXPEDITEUR, bcc: EXPEDITEUR,
+    },
+  });
+  if (!error && data?.success) return null;
+  // Une réponse 4xx/5xx de la fonction porte son message dans le corps.
+  const ctx = (error as { context?: Response } | null)?.context;
+  const detail = ctx ? await ctx.json().then((j: { error?: string }) => j?.error).catch(() => undefined) : undefined;
+  return detail || data?.error || error?.message || 'envoi impossible';
 }
 
 async function openEmlInOutlook(params: {
@@ -726,9 +785,29 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       ...liensChoisis.map(l => ({ label: l.label, url: l.url })),
       ...pjLinks.filter(l => selectedLinkIds.has(l.id)).map(l => ({ label: l.label, url: l.url })),
     ];
+    /* Mobile : envoi direct par le serveur (liens cliquables sous le nom de la
+       fiche). L'envoi ne laisse plus de brouillon à relire : on confirme. En cas
+       d'échec, repli sur le mailto d'avant, qui ne porte que du texte. */
+    if (isMobile()) {
+      if (!window.confirm(`Envoyer le devis ${devis.numero} à ${to} ?\n(une copie vous est adressée en Cci)`)) {
+        setSending(false);
+        return;
+      }
+      const echec = await envoyerParResend({
+        to, subject, body, pdfBase64: pdfBase64Ref.current!, pdfFileName, extraAttachments, ficheLinks: allLinks, images: imagesMail,
+      });
+      if (!echec) {
+        toast.success(`Devis envoyé à ${to}`, { description: 'Une copie vous est adressée en Cci.', duration: 6000 });
+        onSent(dateEnvoi, relance ? prochaine || undefined : undefined);
+        onOpenChange(false);
+        setSending(false);
+        return;
+      }
+      toast.error(`Envoi direct impossible (${echec}) — ouverture de la messagerie`, { duration: 8000 });
+    }
     try {
       const emlContent = generateEml({
-        from: 'f.mouhot@isosign.fr',
+        from: EXPEDITEUR,
         to,
         subject,
         body,
@@ -1096,7 +1175,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
           <Button onClick={handleSend} disabled={!canSend}>
             {sending
               ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Préparation…</>
-              : <><Send className="w-4 h-4 mr-2" /> {relance ? 'Relancer dans Outlook' : 'Ouvrir dans Outlook'}</>
+              : <><Send className="w-4 h-4 mr-2" /> {isMobile() ? (relance ? 'Envoyer la relance' : 'Envoyer le devis') : relance ? 'Relancer dans Outlook' : 'Ouvrir dans Outlook'}</>
             }
           </Button>
         </DialogFooter>
