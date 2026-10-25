@@ -6,11 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import {
   CrmAction, CrmActionConcurrent, TypeCrmAction, StatutCrmAction, PrioriteCrmAction,
-  TYPE_CRM_ACTION, STATUT_CRM_ACTION, Client,
+  TYPE_CRM_ACTION, STATUT_CRM_ACTION, Client, generateId,
 } from '@/lib/store';
+import { useCRM } from '@/lib/StoreContext';
 import { useConcurrents } from '@/lib/concurrents';
+import ClientCombobox from '@/components/ClientCombobox';
 
 interface Props {
   open: boolean;
@@ -54,6 +57,28 @@ export default function CRMActionDialog({ open, onOpenChange, action, clients, p
   const [saving, setSaving] = useState(false);
   const [concurrentsOpen, setConcurrentsOpen] = useState(false);
   const { concurrents: concurrentsDB } = useConcurrents();
+  const { updateClients } = useCRM();
+  /* Le prospect créé ici n'est pas encore dans `clients` (prop du parent) au
+     rendu suivant : on le garde sous la main pour que le champ l'affiche. */
+  const [crees, setCrees] = useState<Client[]>([]);
+  const listeClients = crees.length ? [...clients, ...crees.filter(n => !clients.some(c => c.id === n.id))] : clients;
+
+  /** Prospect saisi dans le champ : fiche minimale, à compléter dans Clients. */
+  function creerProspect(societe: string): string {
+    const nouveau: Client = {
+      id: generateId(),
+      nom: societe,
+      email: '', telephone: '', adresse: '', ville: '', codePostal: '',
+      societe,
+      dateCreation: new Date().toISOString().split('T')[0],
+      adressesLivraison: [],
+      contacts: [],
+    };
+    updateClients(prev => [...prev, nouveau]);
+    setCrees(prev => [...prev, nouveau]);
+    toast.success(`Prospect « ${societe} » créé — fiche à compléter dans Clients`);
+    return nouveau.id;
+  }
 
   useEffect(() => {
     if (open) {
@@ -160,16 +185,17 @@ export default function CRMActionDialog({ open, onOpenChange, action, clients, p
           {/* Client */}
           <div>
             <Label className="text-xs font-semibold text-muted-foreground">Client / Prospect</Label>
-            <select
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm h-9"
-              value={form.clientId || ''}
-              onChange={e => set('clientId', e.target.value || undefined)}
-            >
-              <option value="">— Aucun client —</option>
-              {clients.map(c => (
-                <option key={c.id} value={c.id}>{c.societe || c.nom}</option>
-              ))}
-            </select>
+            <div className="mt-1">
+              <ClientCombobox
+                clients={listeClients}
+                value={form.clientId || ''}
+                onSelect={id => set('clientId', id || undefined)}
+                onCreateNew={creerProspect}
+                placeholder="— Aucun client — taper pour chercher ou créer"
+                effacable
+                className="h-9 rounded-md px-3"
+              />
+            </div>
           </div>
 
           {/* Dates */}

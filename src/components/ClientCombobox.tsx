@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Check, ChevronsUpDown, Search, Plus } from 'lucide-react';
+import { Check, ChevronsUpDown, Search, Plus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Client } from '@/lib/store';
 
@@ -9,9 +9,17 @@ interface ClientComboboxProps {
   onSelect: (clientId: string) => void;
   /** Création rapide d'une société à partir du texte saisi. Doit renvoyer l'id du nouveau client. */
   onCreateNew?: (societe: string) => string | void;
+  /** Libellé quand rien n'est choisi. */
+  placeholder?: string;
+  /** Croix pour revenir à « aucun » (onSelect('')). */
+  effacable?: boolean;
+  /** Classes du bouton d'ouverture. */
+  className?: string;
 }
 
-export default function ClientCombobox({ clients, value, onSelect, onCreateNew }: ClientComboboxProps) {
+const norm = (s: string) => s.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
+export default function ClientCombobox({ clients, value, onSelect, onCreateNew, placeholder, effacable, className }: ClientComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlightIndex, setHighlightIndex] = useState(0);
@@ -34,6 +42,12 @@ export default function ClientCombobox({ clients, value, onSelect, onCreateNew }
       return false;
     });
   }, [clients, query]);
+
+  /* « Créer » reste proposé tant que le texte ne nomme pas EXACTEMENT une
+     société : taper « Dupont » ne doit pas empêcher de créer « Dupont » parce
+     que « Dupont Frères » existe. */
+  const peutCreer = !!onCreateNew && !!query.trim()
+    && !clients.some(c => norm(c.societe || c.nom) === norm(query));
 
   useEffect(() => { setHighlightIndex(0); }, [filtered]);
 
@@ -65,6 +79,7 @@ export default function ClientCombobox({ clients, value, onSelect, onCreateNew }
       case 'Enter':
         e.preventDefault();
         if (filtered[highlightIndex]) { onSelect(filtered[highlightIndex].id); setOpen(false); setQuery(''); }
+        else if (peutCreer) createNew();
         break;
       case 'Escape': e.preventDefault(); setOpen(false); setQuery(''); break;
     }
@@ -87,19 +102,32 @@ export default function ClientCombobox({ clients, value, onSelect, onCreateNew }
 
   const displayLabel = selected
     ? (selected.societe || selected.nom)
-    : '— Sélectionner une société —';
+    : (placeholder ?? '— Sélectionner une société —');
 
   return (
     <div ref={containerRef} className="relative">
       <button
         type="button"
         onClick={() => { setOpen(!open); setTimeout(() => inputRef.current?.focus(), 50); }}
-        className="flex w-full items-center justify-between rounded border border-input bg-background px-2 py-1.5 text-sm hover:bg-accent/50 transition-colors"
+        className={cn('flex w-full items-center justify-between rounded border border-input bg-background px-2 py-1.5 text-sm hover:bg-accent/50 transition-colors', className)}
       >
         <span className={cn('truncate', !selected && 'text-muted-foreground')}>
           {displayLabel}
         </span>
-        <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <span className="flex items-center shrink-0">
+          {effacable && selected && (
+            <span
+              role="button"
+              aria-label="Retirer le client"
+              title="Retirer le client"
+              className="p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+              onClick={e => { e.stopPropagation(); onSelect(''); setOpen(false); }}
+            >
+              <X className="h-3.5 w-3.5" />
+            </span>
+          )}
+          <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        </span>
       </button>
 
       {open && (
@@ -153,21 +181,21 @@ export default function ClientCombobox({ clients, value, onSelect, onCreateNew }
                 </button>
               );
             })}
-            {filtered.length === 0 && (
-              onCreateNew && query.trim() ? (
-                <button
-                  type="button"
-                  onClick={createNew}
-                  className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-sm cursor-pointer text-left text-primary hover:bg-accent/50"
-                >
-                  <Plus className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">Créer la société « <span className="font-semibold">{query.trim()}</span> »</span>
-                </button>
-              ) : (
-                <p className="py-3 text-center text-xs text-muted-foreground">Aucune société trouvée</p>
-              )
+            {filtered.length === 0 && !peutCreer && (
+              <p className="py-3 text-center text-xs text-muted-foreground">Aucune société trouvée</p>
             )}
           </div>
+          {/* Hors de la liste défilante : toujours visible, même sous cinquante résultats. */}
+          {peutCreer && (
+            <button
+              type="button"
+              onClick={createNew}
+              className="flex w-full items-center gap-2 border-t border-border px-3 py-2 text-sm cursor-pointer text-left text-primary hover:bg-accent/50"
+            >
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Créer la société « <span className="font-semibold">{query.trim()}</span> »</span>
+            </button>
+          )}
         </div>
       )}
     </div>
