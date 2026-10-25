@@ -762,9 +762,10 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
       {/* Main content */}
       <div className={cn('flex-1 flex flex-col min-h-0 min-w-0 transition-[margin] duration-200', collapsed ? 'md:ml-16' : 'md:ml-64')}>
         <BarreOnglets onglets={onglets} libelle={libelleOnglet} />
-        {/* Top bar */}
-        <header className="shrink-0 z-20 h-16 flex items-center px-4 md:px-6 bg-card/80 backdrop-blur-md border-b border-border gap-3">
-          <button className="md:hidden mr-3 p-2 rounded-lg hover:bg-muted" onClick={() => setSidebarOpen(true)}>
+        {/* Top bar — sur mobile elle défile au doigt plutôt que de couper les
+            actions de la page qui ne tiennent pas en portrait. */}
+        <header className="shrink-0 z-20 h-16 flex items-center px-3 md:px-6 bg-card/80 backdrop-blur-md border-b border-border gap-2 md:gap-3 overflow-x-auto md:overflow-x-visible scrollbar-none">
+          <button className="md:hidden shrink-0 p-2 -ml-1 rounded-lg hover:bg-muted" onClick={() => setSidebarOpen(true)}>
             <Menu className="w-5 h-5" />
           </button>
           <h1 className="font-heading font-semibold text-lg truncate shrink-0">

@@ -108,6 +108,13 @@
   .stat-card {
     @apply bg-card rounded-xl border border-border/50 p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
   }
+  /* Défile au doigt sans barre visible (bandeau du haut sur mobile). */
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 /*

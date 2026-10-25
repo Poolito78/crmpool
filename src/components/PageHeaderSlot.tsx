@@ -19,7 +19,9 @@ export function PageHeaderSlotTarget({ onglets, actif }: { onglets: string[]; ac
   return (
     <>
       {onglets.map(id => (
-        <div key={id} id={idEmplacement(id)} className={cn('flex-1 flex items-center gap-3 min-w-0', id !== actif && 'hidden')} />
+        /* Mobile : largeur du contenu (la barre défile) ; à partir de md, le
+           reste de la barre, rétrécissable. */
+        <div key={id} id={idEmplacement(id)} className={cn('flex-auto shrink-0 md:flex-1 md:shrink md:min-w-0 flex items-center gap-2 md:gap-3', id !== actif && 'hidden')} />
       ))}
     </>
   );
