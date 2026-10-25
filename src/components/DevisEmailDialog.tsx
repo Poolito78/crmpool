@@ -179,6 +179,56 @@ function generateEml(params: {
 
 const EXPEDITEUR = 'f.mouhot@isosign.fr';
 
+/**
+ * Envoi du devis depuis le mobile par la fonction `send-devis-email` (Resend) :
+ * EN SOMMEIL (décision du 25/10). À activer une fois le domaine isosign.fr
+ * vérifié chez Resend, les secrets posés et la fonction déployée
+ * (`.\deploy-function.ps1 send-devis-email`). Entre-temps, le mobile ouvre la
+ * messagerie (mailto / partage) avec les fiches en pièces jointes.
+ */
+const RESEND_MOBILE = false;
+
+/** Fiche plus lourde que ça : elle reste un lien (le partage mobile n'aime pas les gros fichiers). */
+const PJ_MOBILE_MAX = 15 * 1024 * 1024;
+
+/**
+ * Mobile : les fiches cochées deviennent des pièces jointes plutôt que des
+ * liens. Une fiche qu'on ne peut pas lire d'ici (SharePoint, lien protégé,
+ * trop lourde) n'est pas jointe et reste un lien. La page publique du CRM
+ * reste un lien, par nature.
+ */
+async function joindreLiens(liens: LienProduit[]): Promise<{
+  pieces: Array<{ filename: string; content: string; mime: string }>;
+  ids: Set<string>;
+}> {
+  const pieces: Array<{ filename: string; content: string; mime: string }> = [];
+  const ids = new Set<string>();
+  const pris = new Set<string>();
+  for (const l of liens) {
+    if (l.cible === 'page') continue;
+    try {
+      const res = await fetch(l.url);
+      if (!res.ok) continue;
+      const blob = await res.blob();
+      if (blob.size === 0 || blob.size > PJ_MOBILE_MAX) continue;
+      // Le nom du fichier d'origine, sans l'horodatage que le stockage lui ajoute.
+      let nom = decodeURIComponent(new URL(l.url).pathname.split('/').pop() || '').replace(/^\d{10,}-/, '');
+      if (!/\.\w{2,4}$/.test(nom)) nom = `${l.label.replace(/[\\/:*?"<>|]+/g, ' ').trim() || 'fiche'}.${blob.type.includes('pdf') ? 'pdf' : (blob.type.split('/')[1] || 'bin').replace('jpeg', 'jpg')}`;
+      while (pris.has(nom)) nom = `${pieces.length + 1}_${nom}`;
+      pris.add(nom);
+      const content = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve((r.result as string).split(',')[1]);
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+      });
+      pieces.push({ filename: nom, content, mime: blob.type || 'application/octet-stream' });
+      ids.add(l.id);
+    } catch { /* illisible d'ici (CORS, réseau) : le lien reste dans le mail */ }
+  }
+  return { pieces, ids };
+}
+
 function isMobile(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
@@ -760,7 +810,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     }
 
     // 2. Préparer les PJs sélectionnées (URL signée fraîche + base64)
-    const extraAttachments: Array<{ filename: string; content: string }> = [];
+    const extraAttachments: Array<{ filename: string; content: string; mime?: string }> = [];
     const pjsToSend = pjFichiers.filter(f => selectedPjIds.has(f.id));
     for (const pj of pjsToSend) {
       try {
@@ -781,14 +831,24 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
 
     // 3. Générer le .eml avec PDF + PJs et l'ouvrir dans Outlook
     // Liens partageables sélectionnés ajoutés comme liens cliquables (avec les fiches produit)
-    const allLinks = [
+    let allLinks = [
       ...liensChoisis.map(l => ({ label: l.label, url: l.url })),
       ...pjLinks.filter(l => selectedLinkIds.has(l.id)).map(l => ({ label: l.label, url: l.url })),
     ];
-    /* Mobile : envoi direct par le serveur (liens cliquables sous le nom de la
-       fiche). L'envoi ne laisse plus de brouillon à relire : on confirme. En cas
-       d'échec, repli sur le mailto d'avant, qui ne porte que du texte. */
+    /* Mobile : les fiches partent en PIÈCES JOINTES plutôt qu'en liens (le mailto
+       ne porte que du texte brut, où un lien s'écrit « nom : https://… »). Une
+       fiche qu'on ne peut pas lire d'ici (SharePoint…) reste un lien. */
     if (isMobile()) {
+      const joints = await joindreLiens(liensChoisis);
+      extraAttachments.push(...joints.pieces);
+      allLinks = [
+        ...liensChoisis.filter(l => !joints.ids.has(l.id)).map(l => ({ label: l.label, url: l.url })),
+        ...pjLinks.filter(l => selectedLinkIds.has(l.id)).map(l => ({ label: l.label, url: l.url })),
+      ];
+      if (joints.pieces.length) toast.info(`${joints.pieces.length} fiche${joints.pieces.length > 1 ? 's' : ''} jointe${joints.pieces.length > 1 ? 's' : ''} au mail`);
+    }
+    /* Envoi direct par le serveur (Resend) : EN SOMMEIL, voir `RESEND_MOBILE`. */
+    if (RESEND_MOBILE && isMobile()) {
       if (!window.confirm(`Envoyer le devis ${devis.numero} à ${to} ?\n(une copie vous est adressée en Cci)`)) {
         setSending(false);
         return;
@@ -1175,7 +1235,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
           <Button onClick={handleSend} disabled={!canSend}>
             {sending
               ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Préparation…</>
-              : <><Send className="w-4 h-4 mr-2" /> {isMobile() ? (relance ? 'Envoyer la relance' : 'Envoyer le devis') : relance ? 'Relancer dans Outlook' : 'Ouvrir dans Outlook'}</>
+              : <><Send className="w-4 h-4 mr-2" /> {RESEND_MOBILE && isMobile() ? (relance ? 'Envoyer la relance' : 'Envoyer le devis') : relance ? 'Relancer dans Outlook' : 'Ouvrir dans Outlook'}</>
             }
           </Button>
         </DialogFooter>
