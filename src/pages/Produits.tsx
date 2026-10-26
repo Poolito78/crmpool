@@ -380,7 +380,7 @@ export default function Produits() {
   /* L'historique de prix se lit à la demande, pour l'article ouvert. Jamais
      au chargement du catalogue : 22 508 articles, on ne rapatrie pas
      l'historique de tous pour en afficher un. */
-  const { mouvements: mvtsPrix, chargement: prixChargement, erreur: prixErreur } =
+  const { mouvements: mvtsPrix, chargement: prixChargement, erreur: prixErreur, recharger: rechargerPrix } =
     useJournalPrix(editing?.id);
   /* Les images du catalogue : une ligne par image réellement ajoutée, pas une
      par article — la table reste petite, on la lit d'un bloc. */
@@ -459,6 +459,13 @@ export default function Produits() {
   const [achatsManuel, setAchatsManuel] = useState<AchatDate[]>([]);
   const [variantes, setVariantes] = useState<VarianteDimension[]>([]);
   const [produitTab, setProduitTab] = useState<'infos' | 'images' | 'stock' | 'fournisseurs' | 'devis' | 'commandes' | 'commandesF' | 'valorisation' | 'prix'>('infos');
+  /* ⚠️ Le journal se relit À CHAQUE affichage de l'onglet Prix. Lu une fois par
+     article, il restait celui de la première ouverture : enregistrer un prix
+     puis rouvrir la MÊME fiche ne changeait pas l'id, et l'onglet disait
+     « aucun changement de prix » sur un article modifié la minute d'avant. */
+  useEffect(() => {
+    if (dialogOpen && produitTab === 'prix') void rechargerPrix();
+  }, [dialogOpen, produitTab, rechargerPrix]);
   const [entrepotStockEdit, setEntrepotStockEdit] = useState<{ id: string; value: string } | null>(null);
 
   // Hook entrepôts (chargé une seule fois)
@@ -4628,8 +4635,11 @@ export default function Produits() {
               dernier. Or ce qu'on cherche en justifiant une hausse, c'est la
               PÉRIODE pendant laquelle un prix a été en vigueur. */}
           {produitTab === 'prix' && (() => {
+            /* Le journal consigne le prix PUBLIC (`prix_ht`) — il était affiché
+               sous le titre « Prix revendeur » — et, depuis la migration
+               20261026170000, le revendeur. Avant elle, revendeur inconnu. */
             const periodes = periodesDePrix(mvtsPrix, editing
-              ? { prixAchat: editing.prixAchat, prixHT: editing.prixRevendeur || editing.prixHT }
+              ? { prixAchat: editing.prixAchat, prixHT: editing.prixHT, prixRevendeur: editing.prixRevendeur || undefined }
               : undefined);
             const dateCourte = (d?: string) => (d ? formatDate(d) : null);
             return (
@@ -4657,16 +4667,17 @@ export default function Produits() {
                       <tr className="bg-muted text-muted-foreground">
                         <th className="px-2 py-1.5 text-left font-medium">Période</th>
                         {canAchat && <th className="px-2 py-1.5 text-right font-medium">Prix achat</th>}
+                        <th className="px-2 py-1.5 text-right font-medium">Prix public</th>
                         <th className="px-2 py-1.5 text-right font-medium">Prix revendeur</th>
-                        {canAchat && <th className="px-2 py-1.5 text-right font-medium">Marge</th>}
+                        {canAchat && <th className="px-2 py-1.5 text-right font-medium">Marge revendeur</th>}
                         <th className="px-2 py-1.5 text-left font-medium">Changement</th>
                       </tr>
                     </thead>
                     <tbody>
                       {periodes.map((p, i) => {
                         const enCours = !p.fin;
-                        const marge = p.prixAchat != null && p.prixVente != null
-                          ? p.prixVente - p.prixAchat : null;
+                        const marge = p.prixAchat != null && p.prixRevendeur != null
+                          ? p.prixRevendeur - p.prixAchat : null;
                         return (
                           <tr key={i} className={`border-t border-border ${enCours ? 'bg-primary/5 font-medium' : ''}`}>
                             <td className="px-2 py-1.5 whitespace-nowrap">
@@ -4675,15 +4686,18 @@ export default function Produits() {
                             </td>
                             {canAchat && (
                               <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
-                                {p.prixAchat != null ? `${formatMontant(p.prixAchat)} €` : '—'}
+                                {p.prixAchat != null ? formatMontant(p.prixAchat) : '—'}
                               </td>
                             )}
                             <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
-                              {p.prixVente != null ? `${formatMontant(p.prixVente)} €` : '—'}
+                              {p.prixVente != null ? formatMontant(p.prixVente) : '—'}
+                            </td>
+                            <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                              {p.prixRevendeur != null ? formatMontant(p.prixRevendeur) : '—'}
                             </td>
                             {canAchat && (
                               <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap text-muted-foreground">
-                                {marge != null ? `${formatMontant(marge)} €` : '—'}
+                                {marge != null ? formatMontant(marge) : '—'}
                               </td>
                             )}
                             <td className="px-2 py-1.5">

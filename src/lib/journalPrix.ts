@@ -24,8 +24,12 @@ export interface MouvementPrix {
   quand: string;
   achatAvant?: number;
   achatApres?: number;
+  /** Prix PUBLIC (`prix_ht`) — pas le revendeur. */
   venteAvant?: number;
   venteApres?: number;
+  /** Prix revendeur : consigné depuis la migration 20261026170000, absent avant. */
+  revendeurAvant?: number;
+  revendeurApres?: number;
 }
 
 /** Ce qui a changé à l'entrée dans une période. */
@@ -37,7 +41,10 @@ export interface PeriodePrix {
   /** Fin de la période. Absent pour celle en cours. */
   fin?: string;
   prixAchat?: number;
+  /** Prix public. */
   prixVente?: number;
+  /** Prix revendeur — inconnu pour les périodes d'avant qu'on le consigne. */
+  prixRevendeur?: number;
   changement: ChangementPrix;
   /**
    * Les prix de la période en cours ne concordent pas avec le dernier
@@ -59,6 +66,8 @@ function dbToMouvement(r: Record<string, unknown>): MouvementPrix {
     achatApres: nb(r.achat_apres),
     venteAvant: nb(r.vente_avant),
     venteApres: nb(r.vente_apres),
+    revendeurAvant: nb(r.revendeur_avant),
+    revendeurApres: nb(r.revendeur_apres),
   };
 }
 
@@ -69,7 +78,8 @@ const proche = (a?: number, b?: number) =>
 
 function quoiAChange(m: MouvementPrix): ChangementPrix {
   const achat = !proche(m.achatAvant, m.achatApres);
-  const vente = !proche(m.venteAvant, m.venteApres);
+  const vente = !proche(m.venteAvant, m.venteApres)
+    || (m.revendeurApres != null && !proche(m.revendeurAvant, m.revendeurApres));
   if (achat && vente) return 'les deux';
   if (achat) return 'achat';
   return 'vente';
@@ -91,7 +101,7 @@ function quoiAChange(m: MouvementPrix): ChangementPrix {
  */
 export function periodesDePrix(
   mouvements: MouvementPrix[],
-  actuel?: { prixAchat?: number; prixHT?: number },
+  actuel?: { prixAchat?: number; prixHT?: number; prixRevendeur?: number },
 ): PeriodePrix[] {
   const tries = [...mouvements].sort(
     (a, b) => new Date(a.quand).getTime() - new Date(b.quand).getTime(),
@@ -101,7 +111,7 @@ export function periodesDePrix(
     if (!actuel) return [];
     return [{
       debut: undefined, fin: undefined,
-      prixAchat: actuel.prixAchat, prixVente: actuel.prixHT,
+      prixAchat: actuel.prixAchat, prixVente: actuel.prixHT, prixRevendeur: actuel.prixRevendeur,
       changement: 'origine',
     }];
   }
@@ -114,6 +124,7 @@ export function periodesDePrix(
     fin: tries[0].quand,
     prixAchat: tries[0].achatAvant,
     prixVente: tries[0].venteAvant,
+    prixRevendeur: tries[0].revendeurAvant,
     changement: 'origine',
   });
 
@@ -123,6 +134,7 @@ export function periodesDePrix(
       fin: tries[i + 1]?.quand,
       prixAchat: m.achatApres,
       prixVente: m.venteApres,
+      prixRevendeur: m.revendeurApres,
       changement: quoiAChange(m),
     });
   });
@@ -130,12 +142,17 @@ export function periodesDePrix(
   const courante = periodes[periodes.length - 1];
   if (actuel) {
     const ecart = !proche(courante.prixAchat, actuel.prixAchat)
-      || !proche(courante.prixVente, actuel.prixHT);
+      || !proche(courante.prixVente, actuel.prixHT)
+      || (courante.prixRevendeur != null && actuel.prixRevendeur != null
+          && !proche(courante.prixRevendeur, actuel.prixRevendeur));
     if (ecart) {
       courante.prixAchat = actuel.prixAchat;
       courante.prixVente = actuel.prixHT;
       courante.ecartAvecFiche = true;
     }
+    /* Le revendeur en cours est toujours celui de la fiche : le journal ne le
+       consignait pas avant la migration 20261026170000. */
+    if (actuel.prixRevendeur != null) courante.prixRevendeur = actuel.prixRevendeur;
   }
 
   return periodes.reverse();

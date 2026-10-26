@@ -2663,6 +2663,41 @@ export function useStore() {
       la relire avant qu'elle n'arrive donnait une fausse alerte, et attendre
       « la dernière connue » pouvait attendre celle d'un enregistrement d'avant. */
   const ecrituresProduits = useRef(new Map<string, { quand: number; ecriture: PromiseLike<unknown> }>());
+
+  /**
+   * LE JUMEAU CHANGEAIT EN BASE, PAS À L'ÉCRAN.
+   *
+   * Un prix enregistré sur FLOWCOATPD passe, par le déclencheur
+   * `synchroniser_jumeaux_odoo`, à FLOWCOATPARKDECK (même référence Odoo) —
+   * dans la même transaction. Mais `produits` n'est plus dans le temps réel
+   * (migration 20261023120000) : la liste gardait l'ancien prix du jumeau
+   * jusqu'au rechargement de la page. On relit donc les jumeaux une fois
+   * l'écriture faite, et on les range par `setProduits` — pas par
+   * `updateProduits`, qui les réécrirait.
+   */
+  const relireJumeaux = useCallback(async (id: string, referenceOdoo: string) => {
+    const cle = referenceOdoo.trim();
+    if (!cle) return;
+    const { data, error } = await supabase.from('produits').select('*')
+      .in('reference_odoo', [...new Set([cle, cle.toUpperCase()])])
+      .neq('id', id);
+    if (error) { console.error('[produits jumeaux]', error.message); return; }
+    if (!data?.length) return;
+    setProduits(prev => {
+      const recus = new Map((data as Record<string, unknown>[]).map(r => [String(r.id), r]));
+      let change = false;
+      const next = prev.map(p => {
+        const row = recus.get(p.id);
+        if (!row) return p;
+        const q = fusionnerColonnesLourdes(p, dbToProduit(row), row);
+        if (JSON.stringify(q) === JSON.stringify(p)) return p;
+        change = true;
+        return q;
+      });
+      return change ? next : prev;
+    });
+  }, []);
+
   const updateProduits = useCallback((fn: (prev: Produit[]) => Produit[]) => {
     setProduits(prev => {
       const next = dater(prev, fn(prev));
@@ -2685,13 +2720,16 @@ export function useStore() {
           updated.forEach(p => {
             const patch = colonnesModifiees(avant.get(p.id)!, p, userId);
             if (!Object.keys(patch).length) return;
-            ecrituresProduits.current.set(p.id, {
-              quand: Date.now(),
-              ecriture: supabase.from('produits')
-                .update(patch as any)
-                .eq('id', p.id)
-                .then(signaler('modification')),
-            });
+            const ecriture = supabase.from('produits')
+              .update(patch as any)
+              .eq('id', p.id)
+              .then(signaler('modification'));
+            ecrituresProduits.current.set(p.id, { quand: Date.now(), ecriture });
+            const prixTouche = ['prix_achat', 'prix_achat_maj', 'prix_ht', 'prix_vente_maj', 'reference_odoo']
+              .some(c => c in patch);
+            if (prixTouche && p.referenceOdoo?.trim()) {
+              void ecriture.then(() => relireJumeaux(p.id, p.referenceOdoo!));
+            }
           });
         }
         if (removed.length) {
@@ -2701,7 +2739,7 @@ export function useStore() {
       }
       return next;
     });
-  }, []);
+  }, [relireJumeaux]);
 
   /**
    * CRÉE DES ARTICLES ET ATTEND LA BASE.

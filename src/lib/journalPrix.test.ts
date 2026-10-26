@@ -88,6 +88,30 @@ describe('périodes de prix', () => {
     expect(p[2].prixAchat).toBe(10);
   });
 
+  /* FLOWCOATPD, 26/10 : achat 131,33 → 156,50, public 300,17 → 372,86,
+     revendeur 261 sur la fiche. Le journal d'avant la migration ne porte pas
+     de revendeur : seule la période en cours en a un, celui de la fiche. */
+  it('porte le revendeur : consigné s’il l’est, celui de la fiche pour la période en cours', () => {
+    const p = periodesDePrix([
+      mvt({ id: 1, quand: '2026-10-26T15:46:09Z', achatAvant: 131.325, achatApres: 156.5, venteAvant: 300.17, venteApres: 357.71 }),
+      mvt({ id: 2, quand: '2026-10-26T15:47:34Z', achatAvant: 156.5, achatApres: 156.5, venteAvant: 357.71, venteApres: 372.86,
+            revendeurAvant: 250.4, revendeurApres: 261 }),
+    ], { prixAchat: 156.5, prixHT: 372.86, prixRevendeur: 261 });
+    expect(p[0].prixRevendeur).toBe(261);
+    expect(p[0].ecartAvecFiche).toBeUndefined();
+    expect(p[1].prixRevendeur).toBeUndefined();   // avant qu'on le consigne
+    expect(p[2].prixAchat).toBeCloseTo(131.325);
+    expect(p[2].prixVente).toBeCloseTo(300.17);
+  });
+
+  it('un changement du seul revendeur est un changement de vente', () => {
+    const p = periodesDePrix([
+      mvt({ id: 1, quand: '2026-11-01T00:00:00Z', achatAvant: 10, achatApres: 10, venteAvant: 20, venteApres: 20,
+            revendeurAvant: 14, revendeurApres: 15 }),
+    ]);
+    expect(p[0].changement).toBe('vente');
+  });
+
   it('tient un écart d’un demi-centime pour un non-changement', () => {
     // Les prix arrivent d'Odoo avec des décimales longues : 9.088000000000001.
     const p = periodesDePrix([
