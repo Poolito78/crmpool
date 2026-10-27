@@ -226,6 +226,12 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
     onOpenChange(false);
   }
 
+  /* Ouvre la fiche de l'article ; elle propose de revenir à cette commande. */
+  function ouvrirFiche(produitId: string) {
+    onOpenChange(false);
+    navigate(`/produits?highlight=${produitId}&from=devis&retour=commande${devis ? `&devisId=${devis.id}` : ''}`);
+  }
+
   if (!devis) return null;
 
   const hasAnything = commandesParFournisseur.size > 0 || produitsSansFournisseur.some(p => p.produit.stock > 0);
@@ -253,7 +259,16 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
                     return (
                       <li key={`${produit.id}-${idx}`} className="flex items-center gap-2 flex-wrap">
                         <span className={surStock ? 'line-through opacity-50' : ''}>
-                          • {produit.reference} — {produit.description} (Qté: {quantite})
+                          •{' '}
+                          <button
+                            type="button"
+                            className="hover:underline text-left"
+                            title="Ouvrir la fiche produit"
+                            onClick={() => ouvrirFiche(produit.id)}
+                          >
+                            {produit.reference} — {produit.description}
+                          </button>{' '}
+                          (Qté: {quantite})
                           {produitParent && <span className="text-amber-500 ml-1">— composant de {produitParent.reference}</span>}
                         </span>
                         {hasStock && !surStock && (
@@ -280,10 +295,7 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
                             variant="link"
                             size="sm"
                             className="h-auto p-0 text-xs text-amber-800 dark:text-amber-300 underline"
-                            onClick={() => {
-                              onOpenChange(false);
-                              navigate(`/produits?highlight=${produit.id}&from=devis&retour=commande${devis ? `&devisId=${devis.id}` : ''}`);
-                            }}
+                            onClick={() => ouvrirFiche(produit.id)}
                           >
                             <ExternalLink className="w-3 h-3 mr-0.5" /> Ajouter fournisseur
                           </Button>
@@ -381,7 +393,11 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
                           const stockInsuffisant = hasStock && (produit.stock ?? 0) < quantite;
                           return (
                             <tr key={produit.id} className={`border-b border-border transition-all ${surStock ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : ''}`}>
-                              <td className={`py-2 ${surStock ? 'opacity-40' : ''}`}>{pf.referenceFournisseur || produit.reference}</td>
+                              <td className={`py-2 ${surStock ? 'opacity-40' : ''}`}>
+                                <button type="button" className="hover:underline text-left" title="Ouvrir la fiche produit" onClick={() => ouvrirFiche(produit.id)}>
+                                  {pf.referenceFournisseur || produit.reference}
+                                </button>
+                              </td>
                               <td className={`py-2 ${surStock ? 'line-through opacity-40' : ''}`}>{produit.description}</td>
                               <td className={`py-2 text-right ${surStock ? 'opacity-40' : ''}`}>{quantite}</td>
                               <td className={`py-2 text-right ${surStock ? 'opacity-40' : ''}`}>{pf.conditionnementMin}</td>
