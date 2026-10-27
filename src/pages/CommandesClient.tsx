@@ -1,7 +1,7 @@
 import { prochainNumero } from '@/lib/numeroDevis';
 import { useSocietes } from '@/hooks/useSocietes';
 import SocieteDocumentDialog from '@/components/SocieteDocumentDialog';
-import { useState, useMemo, Fragment } from 'react';
+import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
@@ -48,7 +48,7 @@ const CC_COLS: { key: CCColKey; label: string; cls: string }[] = [
 
 export default function CommandesClient() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const ccCols = useTableColumns<CCColKey>('commandes_client_table', CC_COLS.map(c => c.key));
   const { commandesClient, updateCommandesClient, clients, devis, produits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, facturesClient, updateFacturesClient } = useCRM();
   const { serieDe } = useSocietes();
@@ -229,6 +229,21 @@ export default function CommandesClient() {
     setArDateLivraison(cmd.dateLivraisonPrevue || '');
     setArDialogOpen(true);
   }
+
+  /* `?ar=<id>` : arrivée depuis le devis (« AR client ») → la fenêtre d'envoi de
+     l'AR s'ouvre sur cette commande, une seule fois. */
+  const arOuvertParUrlRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = searchParams.get('ar');
+    if (!id || arOuvertParUrlRef.current === id) return;
+    const cmd = commandesClient.find(c => c.id === id);
+    if (!cmd) return;
+    arOuvertParUrlRef.current = id;
+    openArDialog(cmd);
+    const reste = new URLSearchParams(searchParams);
+    reste.delete('ar');
+    setSearchParams(reste, { replace: true });
+  }, [commandesClient, searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function saveAr() {
     if (!arCommande) return;

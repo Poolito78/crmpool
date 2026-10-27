@@ -3895,6 +3895,40 @@ export default function Devis() {
                     </DropdownMenu>
                   </div>
                 )}
+                {/* Devis en commande : accès direct à la commande fournisseur, à la commande client et à l'AR. */}
+                {editingId && statut === 'accepté' && (() => {
+                  const cfDuDevis = commandesFournisseur.filter(cf => cf.devisId === editingId);
+                  const ccDuDevis = commandesClient.filter(cc => cc.devisId === editingId);
+                  const ouvert = devis.find(x => x.id === editingId);
+                  return (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" className="px-3 gap-1 text-primary border-primary/40">
+                          <ShoppingCart className="w-4 h-4" /> <span className="hidden sm:inline">Commandes</span> <ChevronDown className="w-3 h-3 opacity-60" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-64">
+                        <DropdownMenuItem onClick={() => { save(true); if (ouvert) setCommandeDevis(ouvert); }}>
+                          <Package className="w-4 h-4 mr-2 text-muted-foreground" />
+                          Commande fournisseur{cfDuDevis.length > 0 ? ` (${cfDuDevis.length} déjà passée${cfDuDevis.length > 1 ? 's' : ''})` : ''}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={ccDuDevis.length === 0}
+                          onClick={() => { save(true); navigate(`/commandes-client?search=${encodeURIComponent(ccDuDevis[0].numero)}`); }}
+                        >
+                          <ShoppingCart className="w-4 h-4 mr-2 text-muted-foreground" />
+                          {ccDuDevis.length > 0 ? `Commande client ${ccDuDevis[0].numero}` : 'Aucune commande client'}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={ccDuDevis.length === 0}
+                          onClick={() => { save(true); navigate(`/commandes-client?search=${encodeURIComponent(ccDuDevis[0].numero)}&ar=${ccDuDevis[0].id}`); }}
+                        >
+                          <Send className="w-4 h-4 mr-2 text-muted-foreground" /> AR client (accusé de réception)
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  );
+                })()}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="px-3 gap-1">Action <ChevronDown className="w-3 h-3 opacity-60" /></Button>
