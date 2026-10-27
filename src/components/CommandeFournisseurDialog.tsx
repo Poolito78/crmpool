@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart, Printer, AlertTriangle, Save, ExternalLink, Warehouse, PackageCheck, RotateCcw } from 'lucide-react';
-import { type Devis, type Produit, type Fournisseur, type ProduitFournisseur, type CommandeFournisseur, calculerFournisseurPrioritaire, formatMontant, formatDate, generateId, palettesDesLignes, portFournisseur, raisonSansGrille } from '@/lib/store';
+import { type Devis, type Produit, type ComposantProduit, type Fournisseur, type ProduitFournisseur, type CommandeFournisseur, calculerFournisseurPrioritaire, formatMontant, formatDate, generateId, palettesDesLignes, portFournisseur, raisonSansGrille } from '@/lib/store';
 import { useCRM } from '@/lib/StoreContext';
 import { destinationDuDevis } from '@/lib/portReel';
 import { toast } from 'sonner';
@@ -14,6 +14,27 @@ interface LigneCommande {
   quantite: number;
   pf: ProduitFournisseur;
   fournisseur: Fournisseur;
+}
+
+/* Quantité du composant POUR UNE pièce du parent — même règle que la fiche
+   produit et le coût d'achat (`calcPrixAchatCompose`). `composant.quantite` ne
+   suffit pas : en mode poids il garde une valeur périmée (SNLR11 : 11,65 pour
+   11,65 kg de SNLR775, qui pèse 775 kg → 0,015), et la commande annonçait
+   7 440 sacs de filler au lieu de 10. */
+function quantiteDuComposant(c: ComposantProduit, comp: Produit | undefined): number {
+  if (c.poidsKg != null) {
+    if (comp?.unite?.toLowerCase() === 'kg') return c.poidsKg;
+    return comp?.poids && comp.poids > 0 ? c.poidsKg / comp.poids : c.poidsKg;
+  }
+  if (c.consommationPct != null) return c.consommationPct / 100;
+  return c.quantite;
+}
+
+/* Un article se commande par unité entière (sacs, seaux…) ; seul un article
+   vendu au kg garde sa fraction. */
+function quantiteACommander(produit: Produit, quantite: number): number {
+  if (produit.unite?.toLowerCase() === 'kg') return Math.round(quantite * 1000) / 1000;
+  return Math.ceil(quantite - 1e-6);
 }
 
 interface Props {
@@ -86,7 +107,10 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
       if (produit.composants && produit.composants.length > 0) {
         const result: { produit: Produit; quantite: number; produitParent?: Produit }[] = [];
         for (const composant of produit.composants) {
-          const lignesComposant = resoudreLigne(composant.produitId, composant.quantite * qteParent, produit);
+          const comp = produits.find(p => p.id === composant.produitId);
+          /* Un forfait par commande se compte UNE fois, pas par pièce du parent. */
+          const facteur = composant.forfaitCommande ? 1 : qteParent;
+          const lignesComposant = resoudreLigne(composant.produitId, quantiteDuComposant(composant, comp) * facteur, produit);
           result.push(...lignesComposant);
         }
         return result;
@@ -118,19 +142,23 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
           parFournisseur.set(fourn.id, { fournisseur: fourn, lignes: [] });
         }
 
+        /* Quantités cumulées brutes ; l'arrondi à l'unité et le conditionnement
+           minimum s'appliquent UNE fois sur le total, ci-dessous. */
         const existant = parFournisseur.get(fourn.id)!.lignes.find(l => l.produit.id === produit.id);
         if (existant) {
-          existant.quantite += Math.max(quantite, Number(pf.conditionnementMin) || 1);
+          existant.quantite += quantite;
         } else {
-          parFournisseur.get(fourn.id)!.lignes.push({
-            produit,
-            quantite: Math.max(quantite, Number(pf.conditionnementMin) || 1),
-            pf,
-            fournisseur: fourn,
-          });
+          parFournisseur.get(fourn.id)!.lignes.push({ produit, quantite, pf, fournisseur: fourn });
         }
       }
     }
+
+    for (const { lignes } of parFournisseur.values()) {
+      for (const l of lignes) {
+        l.quantite = Math.max(quantiteACommander(l.produit, l.quantite), Number(l.pf.conditionnementMin) || 1);
+      }
+    }
+    for (const s of sansFournisseur) s.quantite = quantiteACommander(s.produit, s.quantite);
 
     return { commandesParFournisseur: parFournisseur, produitsSansFournisseur: sansFournisseur };
   }, [devis, produits, fournisseurs, produitFournisseurs]);
