@@ -401,16 +401,17 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
 
                   {/* Desktop table */}
                   <div className="p-4 hidden sm:block">
-                    <table className="w-full text-sm">
+                    {/* Colonnes espacées : sans marge, le « 1 » de Cond. se collait au P.U. (« 1 165,06 € »). */}
+                    <table className="w-full text-sm [&_th]:px-2 [&_td]:px-2 [&_th:first-child]:pl-0 [&_td:first-child]:pl-0">
                       <thead>
                         <tr className="border-b-2 border-primary/30">
                           <th className="text-left py-2 font-semibold">Réf.</th>
                           <th className="text-left py-2 font-semibold">Description</th>
-                          <th className="text-right py-2 font-semibold">Qté</th>
-                          <th className="text-right py-2 font-semibold">Cond.</th>
-                          <th className="text-right py-2 font-semibold">P.U.</th>
-                          <th className="text-right py-2 font-semibold">Total</th>
-                          <th className="text-right py-2 font-semibold">Délai</th>
+                          <th className="text-right py-2 font-semibold whitespace-nowrap">Qté</th>
+                          <th className="text-right py-2 font-semibold whitespace-nowrap">Cond.</th>
+                          <th className="text-right py-2 font-semibold whitespace-nowrap">P.U.</th>
+                          <th className="text-right py-2 font-semibold whitespace-nowrap">Total</th>
+                          <th className="text-right py-2 font-semibold whitespace-nowrap">Délai</th>
                           <th className="text-center py-2 font-semibold w-28">Stock Isofloor</th>
                         </tr>
                       </thead>
@@ -427,11 +428,11 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
                                 </button>
                               </td>
                               <td className={`py-2 ${surStock ? 'line-through opacity-40' : ''}`}>{produit.description}</td>
-                              <td className={`py-2 text-right ${surStock ? 'opacity-40' : ''}`}>{quantite}</td>
-                              <td className={`py-2 text-right ${surStock ? 'opacity-40' : ''}`}>{pf.conditionnementMin}</td>
-                              <td className={`py-2 text-right ${surStock ? 'opacity-40' : ''}`}>{formatMontant(produit.prixAchat)}</td>
-                              <td className={`py-2 text-right font-medium ${surStock ? 'opacity-40' : ''}`}>{formatMontant(produit.prixAchat * quantite)}</td>
-                              <td className={`py-2 text-right text-muted-foreground ${surStock ? 'opacity-40' : ''}`}>{pf.delaiLivraison}j</td>
+                              <td className={`py-2 text-right whitespace-nowrap ${surStock ? 'opacity-40' : ''}`}>{quantite}</td>
+                              <td className={`py-2 text-right whitespace-nowrap ${surStock ? 'opacity-40' : ''}`}>{pf.conditionnementMin}</td>
+                              <td className={`py-2 text-right whitespace-nowrap ${surStock ? 'opacity-40' : ''}`}>{formatMontant(produit.prixAchat)}</td>
+                              <td className={`py-2 text-right whitespace-nowrap font-medium ${surStock ? 'opacity-40' : ''}`}>{formatMontant(produit.prixAchat * quantite)}</td>
+                              <td className={`py-2 text-right whitespace-nowrap text-muted-foreground ${surStock ? 'opacity-40' : ''}`}>{pf.delaiLivraison}j</td>
                               <td className="py-2 text-center">
                                 {hasStock ? (
                                   <button
