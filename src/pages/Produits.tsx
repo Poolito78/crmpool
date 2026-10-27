@@ -362,6 +362,9 @@ export default function Produits() {
   const [importMapping, setImportMapping] = useState<Record<string, string>>({});
   const [fromDevis, setFromDevis] = useState(false);
   const [returnDevisId, setReturnDevisId] = useState<string | null>(null);
+  /* Arrivé depuis la commande fournisseur d'un devis (`retour=commande`) : deux
+     retours distincts — la commande (par défaut) ou le devis. */
+  const [returnCommande, setReturnCommande] = useState(false);
   const [composants, setComposants] = useState<ComposantProduit[]>([]);
   const [composantSearches, setComposantSearches] = useState<string[]>([]);
   const [composantOpenIdx, setComposantOpenIdx] = useState<number | null>(null);
@@ -579,6 +582,7 @@ export default function Produits() {
     } else if (from === 'devis') {
       setFromDevis(true);
       if (devisId) setReturnDevisId(devisId);
+      if (devisId && searchParams.get('retour') === 'commande') setReturnCommande(true);
     }
     /* L'ouverture de l'article (`highlight`) vit dans l'effet ci-dessus, qui
        attend le catalogue. Ici : seulement le retour au devis. */
@@ -1241,7 +1245,16 @@ export default function Produits() {
     });
   }
 
-  function save(andReturnToDevis = false) {
+  /* Retour à l'écran d'origine : le devis ouvert, ou la commande fournisseur
+     de ce devis (la page Devis la rouvre par `?commandeDevis=`). */
+  function retourVers(cible: 'devis' | 'commande') {
+    setFromDevis(false);
+    setReturnCommande(false);
+    if (cible === 'commande' && returnDevisId) navigate(`/devis?commandeDevis=${returnDevisId}`);
+    else navigate(returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis');
+  }
+
+  function save(andReturn: false | 'devis' | 'commande' = false) {
     if (!form.description.trim() || !form.reference.trim()) { toast.error('Référence et description requis'); return; }
     /* Recréer à la main un article supprimé le sort de la liste noire. */
     if (!editing) void retirerDeLaListeNoire(form);
@@ -1367,10 +1380,7 @@ export default function Produits() {
       toast.success('Produit ajouté');
     }
     setDialogOpen(false);
-    if (andReturnToDevis && fromDevis) {
-      setFromDevis(false);
-      navigate(returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis');
-    }
+    if (andReturn && fromDevis) retourVers(andReturn);
   }
 
   /* PLUS D'ENREGISTREMENT AUTOMATIQUE.
@@ -1629,10 +1639,17 @@ export default function Produits() {
     <div className="flex flex-col flex-1 min-h-0 gap-4">
       {fromDevis && (
         <div className="shrink-0 flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-lg px-4 py-3">
-          <Button variant="outline" size="sm" onClick={() => { setFromDevis(false); navigate(returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis'); }}>
+          {returnCommande && (
+            <Button size="sm" onClick={() => retourVers('commande')}>
+              <ArrowLeft className="w-4 h-4 mr-2" /> Retour à la commande
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => retourVers('devis')}>
             <ArrowLeft className="w-4 h-4 mr-2" /> Retour au devis
           </Button>
-          <span className="text-sm text-muted-foreground">Vous consultez la fiche produit depuis l'édition d'un devis</span>
+          <span className="text-sm text-muted-foreground">
+            {returnCommande ? "Vous consultez la fiche produit depuis la commande fournisseur d'un devis" : "Vous consultez la fiche produit depuis l'édition d'un devis"}
+          </span>
         </div>
       )}
       <PageHeaderSlot>
@@ -4730,9 +4747,16 @@ export default function Produits() {
             <div className="sticky bottom-0 bg-background flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
               <Button variant="outline" className="w-full sm:w-auto" onClick={() => setDialogOpen(false)}>Annuler</Button>
               {fromDevis && editing && (
-                <Button variant="secondary" className="w-full sm:w-auto" onClick={() => save(true)}>
-                  <ArrowLeft className="w-4 h-4 mr-2" /> Enregistrer & retour au devis
-                </Button>
+                <>
+                  {returnCommande && (
+                    <Button variant="secondary" className="w-full sm:w-auto" onClick={() => save('commande')}>
+                      <ArrowLeft className="w-4 h-4 mr-2" /> Enregistrer & retour à la commande
+                    </Button>
+                  )}
+                  <Button variant="secondary" className="w-full sm:w-auto" onClick={() => save('devis')}>
+                    <ArrowLeft className="w-4 h-4 mr-2" /> Enregistrer & retour au devis
+                  </Button>
+                </>
               )}
               <Button className="w-full sm:w-auto" onClick={() => save(false)}>{editing ? 'Modifier' : 'Ajouter'}</Button>
             </div>

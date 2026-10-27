@@ -282,7 +282,7 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
                             className="h-auto p-0 text-xs text-amber-800 dark:text-amber-300 underline"
                             onClick={() => {
                               onOpenChange(false);
-                              navigate(`/produits?highlight=${produit.id}&from=devis${devis ? `&devisId=${devis.id}` : ''}`);
+                              navigate(`/produits?highlight=${produit.id}&from=devis&retour=commande${devis ? `&devisId=${devis.id}` : ''}`);
                             }}
                           >
                             <ExternalLink className="w-3 h-3 mr-0.5" /> Ajouter fournisseur

@@ -507,6 +507,15 @@ export default function Devis() {
       setSearchParams({}, { replace: true });
     }
   }, [devis, searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* `?commandeDevis=<id>` : retour de la fiche produit (« Ajouter fournisseur »)
+     à la commande fournisseur du devis, sans rouvrir le devis lui-même. */
+  useEffect(() => {
+    const id = searchParams.get('commandeDevis');
+    if (!id || devis.length === 0) return;
+    const d = devis.find(dv => dv.id === id);
+    if (d) setCommandeDevis(d);
+    setSearchParams({}, { replace: true });
+  }, [devis, searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
   /* `?nouveau=1` : « nouveau devis » dit à l'assistant vocal ouvre un devis vierge. */
   useEffect(() => {
     if (searchParams.get('nouveau') !== '1') return;
