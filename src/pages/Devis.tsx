@@ -262,6 +262,7 @@ export default function Devis() {
   const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [surchargePctOverrides, setSurchargePctOverrides] = useState<Record<string, number>>({});
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [reinitOpen, setReinitOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [emailDevis, setEmailDevis] = useState<DevisType | null>(null);
@@ -1669,6 +1670,18 @@ export default function Devis() {
       { id: subId, type: 'soustotal', description: '',               quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
     ]);
     setNewLigneId(grpId);
+  }
+
+  /* Réinitialiser le devis : les lignes d'article partent, avec les groupes et
+     sous-totaux qui n'auraient plus rien à porter. Les notes (lignes « Note »
+     et champ Notes) restent ou partent au choix. Annulable par Ctrl+Z pour les
+     lignes ; le champ Notes, hors pile d'annulation, n'est vidé que sur demande. */
+  function reinitialiserDevis(supprimerNotes: boolean) {
+    saveSnapshot();
+    setLignes(prev => supprimerNotes ? [] : prev.filter(l => l.type === 'texte'));
+    if (supprimerNotes) setNotes('');
+    setReinitOpen(false);
+    toast.success(supprimerNotes ? 'Devis réinitialisé, notes comprises' : 'Devis réinitialisé — notes conservées');
   }
 
   function addTexte() {
@@ -3999,6 +4012,9 @@ export default function Devis() {
                         </DropdownMenuItem>
                       </>
                     )}
+                    <DropdownMenuItem onClick={() => setReinitOpen(true)} disabled={lignes.length === 0 && !notes.trim()}>
+                      <RotateCcw className="w-4 h-4 mr-2 text-muted-foreground" /> Réinitialiser le devis…
+                    </DropdownMenuItem>
                     {dialogTab === 'devis' && (
                       <>
                         <DropdownMenuItem onClick={() => setLignesView('cartes')} className="border-t border-border mt-1 pt-1.5">
@@ -6486,6 +6502,25 @@ ${dosage.source}` : ''}`}>
           </DialogContent>
         </Dialog>
       )}
+
+      <AlertDialog open={reinitOpen} onOpenChange={setReinitOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Réinitialiser le devis</AlertDialogTitle>
+            <AlertDialogDescription>
+              Toutes les lignes de produit seront effacées, avec leurs groupes et sous-totaux.
+              Client, références et conditions sont conservés.
+              <br /><br />
+              Supprimer aussi les notes ({lignes.filter(l => l.type === 'texte').length} ligne(s) « Note »{notes.trim() ? ' et le champ Notes' : ''}) ?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <Button variant="outline" onClick={() => reinitialiserDevis(false)}>Garder les notes</Button>
+            <AlertDialogAction onClick={() => reinitialiserDevis(true)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Supprimer aussi les notes</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
