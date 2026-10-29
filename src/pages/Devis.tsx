@@ -2858,7 +2858,14 @@ export default function Devis() {
   // Recalcul auto des quantités quand surface globale change — s'applique aux lignes ayant surface+conso
   // Ne s'exécute que si surfaceGlobaleM2 a réellement changé (pas à l'ouverture du formulaire)
   useEffect(() => {
-    if (!dialogOpen || surfaceGlobaleM2 <= 0) {
+    /* ⚠️ Dialogue fermé : le repère NE SE TOUCHE PAS. populateForm / openNew
+       le posent à chaque ouverture. Le réécrire ici le remettait à l'ancienne
+       valeur quand l'ouverture se fait dans un effet (retour par ?editDevis=,
+       page remontée) : cet effet-ci, déclaré plus bas, passait après dans le
+       même cycle, dialogue encore fermé — et au cycle suivant la surface
+       globale écrasait la surface retouchée de chaque ligne. */
+    if (!dialogOpen) return;
+    if (surfaceGlobaleM2 <= 0) {
       prevSurfaceGlobaleRef.current = surfaceGlobaleM2;
       return;
     }
@@ -2871,10 +2878,8 @@ export default function Devis() {
   /* Passage m² ↔ ml : les lignes se recalculent à la surface globale avec la
      conso de leur nouvelle unité (kg/m² et kg/ml retouchés se gardent tous deux). */
   useEffect(() => {
-    if (!dialogOpen || prevUniteSurfaceRef.current === uniteSurface) {
-      prevUniteSurfaceRef.current = uniteSurface;
-      return;
-    }
+    // Dialogue fermé : repère laissé à populateForm / openNew (voir l'effet ci-dessus).
+    if (!dialogOpen || prevUniteSurfaceRef.current === uniteSurface) return;
     prevUniteSurfaceRef.current = uniteSurface;
     appliquerSurfaceGlobale();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4899,6 +4904,15 @@ export default function Devis() {
                                   ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}),
                                 } : li)));
                               };
+                              /* Surface retouchée sur la ligne : elle reste (l'ouverture du devis ne la
+                                 réécrit plus). Ce bouton la ramène à la surface totale, ligne par ligne. */
+                              const boutonSurfaceTotale = surfaceGlobaleM2 > 0 && uniteLigne === uniteSurface && l.surfaceM2 !== surfaceGlobaleM2 ? (
+                                <button type="button" onClick={() => { saveSnapshot(); saisirSurface(surfaceGlobaleM2, uniteSurface); }}
+                                  title={`Reprendre la surface totale du devis (${surfaceGlobaleM2} ${libelleSurface(uniteSurface)})`}
+                                  className="h-8 px-1 shrink-0 rounded text-muted-foreground hover:text-primary hover:bg-muted">
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </button>
+                              ) : null;
                               /* Cellule « Conso. » : en kg/m² dès que la colonne kg/ml est affichée, sinon dans l'unité de la ligne. */
                               const consoCellM2 = colConsoMl || uniteLigne === 'm2';
                               const couvM2 = couvertureM2(prod);
@@ -4929,13 +4943,17 @@ export default function Devis() {
                                   donnees={{ voice: 'ligne-desc', 'ligne-id': l.id }} title={noteEnTexte(l.description)}
                                   className="text-sm text-foreground leading-6 px-3 py-1 border border-input bg-background focus:ring-1 focus:ring-ring" />,
                                 surface: colLineaire ? (
+                                  <div className="flex items-center gap-0.5">
                                   <Input type="number" step="0.01" value={uniteLigne === 'm2' ? (l.surfaceM2 || '') : ''} onFocus={e => e.target.select()}
                                     onChange={e => saisirSurface(parseFloat(e.target.value) || 0, 'm2')}
                                     title={uniteLigne === 'ml' ? 'Ligne au mètre linéaire : saisir une surface la repasse en m²' : undefined}
-                                    className="h-8 text-sm" placeholder={uniteLigne === 'ml' ? '—' : 'm²'} />
+                                    className="h-8 text-sm flex-1 min-w-0" placeholder={uniteLigne === 'ml' ? '—' : 'm²'} />
+                                  {uniteLigne === 'm2' && boutonSurfaceTotale}
+                                  </div>
                                 ) : <div className="flex items-center gap-0.5"><Input type="number" step="0.01" value={l.surfaceM2 || ''} onFocus={e => e.target.select()}
                                   onChange={e => saisirSurface(parseFloat(e.target.value) || 0, uniteLigne)}
                                   className="h-8 text-sm flex-1 min-w-0" placeholder={libelleSurface(uniteLigne)} />
+                                  {boutonSurfaceTotale}
                                   {/* Unité de CETTE ligne : clic = m² ↔ ml (joints au ml sous un sol au m²). */}
                                   <button type="button" onClick={() => changerUniteLigne(l.id)}
                                     title={`Unité de cette ligne : ${libelleSurface(uniteLigne)}${l.uniteSurface ? '' : ' (celle du devis)'} — cliquer pour passer en ${uniteLigne === 'ml' ? 'm²' : 'ml'}`}
@@ -4944,10 +4962,13 @@ export default function Devis() {
                                   </button>
                                 </div>,
                                 lineaire: (
+                                  <div className="flex items-center gap-0.5">
                                   <Input type="number" step="0.01" value={uniteLigne === 'ml' ? (l.surfaceM2 || '') : ''} onFocus={e => e.target.select()}
                                     onChange={e => saisirSurface(parseFloat(e.target.value) || 0, 'ml')}
                                     title={uniteLigne === 'm2' ? 'Ligne au m² : saisir un linéaire la passe au mètre linéaire (conso. en kg/ml)' : undefined}
-                                    className="h-8 text-sm" placeholder={uniteLigne === 'm2' ? '—' : 'ml'} />
+                                    className="h-8 text-sm flex-1 min-w-0" placeholder={uniteLigne === 'm2' ? '—' : 'ml'} />
+                                  {uniteLigne === 'ml' && boutonSurfaceTotale}
+                                  </div>
                                 ),
                                 /* Les deux consos se modifient sur toute ligne ; celle de l'autre unité est grisée :
                                    gardée, elle ne compte qu'une fois la ligne passée dans son unité. */
