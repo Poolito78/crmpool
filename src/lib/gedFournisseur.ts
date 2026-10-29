@@ -36,6 +36,8 @@ export interface DocumentFournisseur {
   fournisseurId: string;
   genre: GenreDocFournisseur;
   libelle: string;
+  /** Note libre saisie à la main, affichée sous le nom du fichier (migration 20261029120000). */
+  annotation: string;
   numero: string;
   dateDocument: string;
   montantHT?: number;
@@ -70,6 +72,12 @@ export function formatTaille(octets: number): string {
 const BUCKET = 'ged-fournisseurs';
 const table = () => supabase.from('documents_fournisseur');
 
+/* Un document classé depuis l'Analyse ne paraissait pas dans une liste déjà
+   lue (fiche fournisseur ouverte, fenêtre Documents) : elle ne se relisait qu'à
+   l'ouverture. Chaque ajout / suppression le signale, les listes se relisent. */
+const EVT_GED = 'ged-fournisseur-change';
+const signalerChangement = () => window.dispatchEvent(new Event(EVT_GED));
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function depuisLigne(r: any): DocumentFournisseur {
   return {
@@ -77,6 +85,7 @@ function depuisLigne(r: any): DocumentFournisseur {
     fournisseurId: r.fournisseur_id,
     genre: r.genre,
     libelle: r.libelle ?? '',
+    annotation: r.annotation ?? '',
     numero: r.numero ?? '',
     dateDocument: r.date_document ?? '',
     montantHT: r.montant_ht != null ? Number(r.montant_ht) : undefined,
@@ -134,13 +143,23 @@ export async function ajouterDocumentFournisseur(file: File, e: EntreeGed): Prom
     await supabase.storage.from(BUCKET).remove([path]);
     throw new Error(`Enregistrement impossible : ${error.message}`);
   }
+  signalerChangement();
   return depuisLigne(data);
+}
+
+/** Écrit (ou efface, chaîne vide) l'annotation d'un document. */
+export async function annoterDocumentFournisseur(id: string, annotation: string): Promise<void> {
+  // `annotation` n'est pas encore dans types.ts (non régénéré) : écriture en `as never`.
+  const { error } = await table().update({ annotation: annotation.trim() || null } as never).eq('id', id);
+  if (error) throw new Error(`Annotation non enregistrée : ${error.message}`);
+  signalerChangement();
 }
 
 export async function supprimerDocumentFournisseur(d: DocumentFournisseur): Promise<void> {
   const { error } = await table().delete().eq('id', d.id);
   if (error) throw new Error(error.message);
   await supabase.storage.from(BUCKET).remove([d.fichierPath]);
+  signalerChangement();
 }
 
 /** Lien signé (10 min) vers le fichier. */
@@ -167,7 +186,12 @@ export function useDocumentsFournisseur(fournisseurId: string | undefined) {
     setDocuments((data ?? []).map(depuisLigne));
   }, [fournisseurId]);
 
-  useEffect(() => { void recharger(); }, [recharger]);
+  useEffect(() => {
+    void recharger();
+    const relire = () => { void recharger(); };
+    window.addEventListener(EVT_GED, relire);
+    return () => window.removeEventListener(EVT_GED, relire);
+  }, [recharger]);
 
   return { documents, chargement, erreur, recharger };
 }
@@ -184,7 +208,12 @@ export function useNombreDocumentsFournisseur() {
     setNombres(n);
   }, []);
 
-  useEffect(() => { void recharger(); }, [recharger]);
+  useEffect(() => {
+    void recharger();
+    const relire = () => { void recharger(); };
+    window.addEventListener(EVT_GED, relire);
+    return () => window.removeEventListener(EVT_GED, relire);
+  }, [recharger]);
 
   return { nombres, recharger };
 }

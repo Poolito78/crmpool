@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react';
-import { Download, FileText, Loader2, Trash2, Upload } from 'lucide-react';
+import { Download, FileText, Loader2, Pencil, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { Fournisseur } from '@/lib/store';
 import {
-  GENRES_DOC_FOURNISSEUR, LIBELLE_GENRE_FOURNISSEUR, ajouterDocumentFournisseur, formatTaille,
+  GENRES_DOC_FOURNISSEUR, LIBELLE_GENRE_FOURNISSEUR, ajouterDocumentFournisseur, annoterDocumentFournisseur, formatTaille,
   lienDocumentFournisseur, supprimerDocumentFournisseur, useDocumentsFournisseur,
   type DocumentFournisseur, type GenreDocFournisseur,
 } from '@/lib/gedFournisseur';
@@ -23,6 +23,8 @@ export function DocumentsFournisseurPanel({ fournisseurId, onChange }: PanelProp
   const [filtre, setFiltre] = useState<GenreDocFournisseur | 'tous'>('tous');
   const [genreAjout, setGenreAjout] = useState<GenreDocFournisseur>('autre');
   const [envoi, setEnvoi] = useState(false);
+  // Document dont l'annotation est en cours de saisie, et le texte saisi.
+  const [annote, setAnnote] = useState<{ id: string; texte: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const visibles = filtre === 'tous' ? documents : documents.filter(d => d.genre === filtre);
@@ -42,6 +44,15 @@ export function DocumentsFournisseurPanel({ fournisseurId, onChange }: PanelProp
   async function ouvrir(d: DocumentFournisseur) {
     try { window.open(await lienDocumentFournisseur(d), '_blank', 'noopener'); }
     catch (err) { toast.error(err instanceof Error ? err.message : 'Ouverture impossible'); }
+  }
+
+  async function validerAnnotation() {
+    if (!annote) return;
+    const d = documents.find(x => x.id === annote.id);
+    setAnnote(null);
+    if (!d || d.annotation === annote.texte.trim()) return;
+    try { await annoterDocumentFournisseur(d.id, annote.texte); }
+    catch (err) { toast.error(err instanceof Error ? err.message : 'Annotation non enregistrée'); }
   }
 
   async function supprimer(d: DocumentFournisseur) {
@@ -93,6 +104,20 @@ export function DocumentsFournisseurPanel({ fournisseurId, onChange }: PanelProp
               <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{d.fichierNom}</p>
+                {annote?.id === d.id ? (
+                  <input autoFocus value={annote.texte} placeholder="Annotation (Entrée pour valider, Échap pour annuler)"
+                    className="w-full my-0.5 rounded border border-input bg-background px-2 py-0.5 text-xs"
+                    onChange={e => setAnnote({ id: d.id, texte: e.target.value })}
+                    onBlur={() => void validerAnnotation()}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); void validerAnnotation(); }
+                      // Échap ferme la saisie, pas la fenêtre.
+                      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAnnote(null); }
+                    }} />
+                ) : d.annotation ? (
+                  <p className="text-xs text-primary italic truncate cursor-text" title={d.annotation}
+                    onClick={() => setAnnote({ id: d.id, texte: d.annotation })}>{d.annotation}</p>
+                ) : null}
                 <p className="text-xs text-muted-foreground">
                   {LIBELLE_GENRE_FOURNISSEUR[d.genre]}
                   {d.numero ? ` · n° ${d.numero}` : ''}
@@ -101,6 +126,7 @@ export function DocumentsFournisseurPanel({ fournisseurId, onChange }: PanelProp
                   {` · ${formatTaille(d.fichierTaille)}`}
                 </p>
               </div>
+              <button onClick={() => setAnnote({ id: d.id, texte: d.annotation })} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground" title={d.annotation ? "Modifier l'annotation" : 'Ajouter une annotation'}><Pencil className="w-4 h-4" /></button>
               <button onClick={() => ouvrir(d)} className="p-1.5 rounded-md hover:bg-muted" title="Ouvrir / télécharger"><Download className="w-4 h-4" /></button>
               <button onClick={() => supprimer(d)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
             </div>
