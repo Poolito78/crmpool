@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File as FileIcon, FileImage, FileSpreadsheet, ExternalLink, Eye, Copy, Check, Image as ImageIcon, Globe, Layers, BellRing, Save, Trash2 } from 'lucide-react';
+import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, AlertTriangle, Paperclip, File as FileIcon, FileImage, FileSpreadsheet, ExternalLink, Eye, Copy, Check, Image as ImageIcon, Globe, Layers, BellRing, Save, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { coutChantier } from '@/lib/odooSync';
 import { type Devis, type Client, type Produit, dbToProduitPublic, calculerTotalDevis, formatMontant, formatDate, formatDateISO, useDevisMessageTemplates } from '@/lib/store';
@@ -14,7 +14,7 @@ import {
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
 import { supabase } from '@/integrations/supabase/client';
-import { liensDesProduits, copierLiens, type LienProduit, type CibleLien } from '@/lib/liensProduit';
+import { liensDesProduits, copierLiens, aUneFiche, designation, type LienProduit, type CibleLien } from '@/lib/liensProduit';
 import { liensDocumentsCategorie, dbToDocumentCategorie } from '@/lib/categorieDocuments';
 import { dbToSysteme, liensFichesSystemes, systemeEstObjet } from '@/lib/systemes';
 import { useIdentiteDocument } from '@/hooks/useSocietes';
@@ -473,6 +473,12 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   // publique du CRM). `selectedLiensIds` dit lesquels partent dans le mail :
   // proposer les trois et n'en cocher que deux vaut mieux que d'en imposer un.
   const [liensProduit, setLiensProduit] = useState<LienProduit[]>([]);
+  /* Articles du devis SANS fiche technique, et liens « Fiche produit » qui
+     mènent à une page vide (ni fiche, ni photo, ni description détaillée) :
+     DEV-2026-168 envoyait « Fiche produit — FLOWCOAT SF41 BLANK » vers une
+     page qui ne montrait que le titre. On prévient, on ne retire rien. */
+  const [sansFiche, setSansFiche] = useState<string[]>([]);
+  const [pagesVides, setPagesVides] = useState<Set<string>>(new Set());
   const [selectedLiensIds, setSelectedLiensIds] = useState<Set<string>>(new Set());
   const [copie, setCopie] = useState(false);
   const [dateEnvoi, setDateEnvoi] = useState(new Date().toISOString().split('T')[0]);
@@ -666,6 +672,10 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
           }
         }
         const liens = liensDesProduits(articles, parProduit, undefined, libelleParProduit);
+        setSansFiche(articles.filter(p => !aUneFiche(p)).map(p => designation(p)));
+        setPagesVides(new Set(articles
+          .filter(p => !aUneFiche(p) && !parProduit[p.id] && !p.descriptionDetaillee?.trim())
+          .map(p => `${p.id}:page`)));
         const liensFamille = liensDocumentsCategorie(articles, (docs ?? []).map(dbToDocumentCategorie));
         const systemes = (sys ?? []).map(dbToSysteme);
         const liensSysteme = liensFichesSystemes(systemes, articles, [devis.systeme]);
@@ -773,6 +783,10 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
 
   async function handleSend() {
     if (!to || !devis || !pdfBase64Ref.current) return;
+    const vides = liensChoisis.filter(l => pagesVides.has(l.id));
+    if (vides.length > 0 && !window.confirm(
+      `Ces liens mènent à une page SANS fiche technique, photo ni description :\n\n${vides.map(l => `• ${l.label}`).join('\n')}\n\nLe client n'y trouvera que le nom de l'article. Envoyer quand même ?`,
+    )) return;
     setSending(true);
 
     const accentMap: Record<string, string> = {
@@ -1003,6 +1017,13 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
                 </Button>
               </div>
 
+              {sansFiche.length > 0 && (
+                <div className="flex items-start gap-1.5 rounded bg-amber-50 dark:bg-amber-900/20 border border-amber-300/60 px-2 py-1.5 text-xs text-amber-800 dark:text-amber-200">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>Sans fiche technique : <strong>{sansFiche.join(', ')}</strong> — à ajouter sur la fiche article (Produits).</span>
+                </div>
+              )}
+
               {/* Cocher/décocher une destination d'un coup — trois articles font
                   déjà neuf lignes, et on veut rarement les neuf. */}
               <div className="flex items-center gap-1.5 flex-wrap pl-6">
@@ -1035,7 +1056,9 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
                     />
                     {l.cible === 'fiche' && <FileText className="w-4 h-4 text-red-500 shrink-0" />}
                     {l.cible === 'image' && <ImageIcon className="w-4 h-4 text-blue-500 shrink-0" />}
-                    {l.cible === 'page' && <Globe className="w-4 h-4 text-violet-500 shrink-0" />}
+                    {l.cible === 'page' && (pagesVides.has(l.id)
+                      ? <span title="Page vide : ni fiche technique, ni photo, ni description — le client n'y verra que le nom de l'article" className="shrink-0"><AlertTriangle className="w-4 h-4 text-amber-500" /></span>
+                      : <Globe className="w-4 h-4 text-violet-500 shrink-0" />)}
                     {l.cible === 'categorie' && <Layers className="w-4 h-4 text-amber-500 shrink-0" />}
                     {l.cible === 'systeme' && <Layers className="w-4 h-4 text-emerald-600 shrink-0" />}
                     {/* Le libellé est modifiable ici : c'est le seul texte que le
