@@ -154,6 +154,31 @@ export function zoneLienSurPage(
   return { yMm: y, hMm: Math.min(lien.hMm, hDispo) };
 }
 
+/**
+ * html2canvas capture une COPIE de la page, qui RECHARGE les feuilles <link>.
+ * Après un déploiement, l'onglet ouvert tourne encore sur l'ancienne version
+ * (service worker en mode « prompt ») : son `index-XXXX.css` n'existe plus sur
+ * Vercel, la réécriture SPA renvoie index.html en text/html, le navigateur la
+ * refuse — et le PDF sortait sans aucun style (logo pleine page, texte en
+ * Times, en-tête du tableau posé sur l'adresse). On recopie donc dans la copie
+ * les règles que la page a DÉJÀ chargées : rien ne repart sur le réseau.
+ */
+function stylesEnLigne(copie: Document) {
+  const liens = Array.from(copie.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'));
+  for (const feuille of Array.from(document.styleSheets)) {
+    const noeud = feuille.ownerNode;
+    // Les <style> sont déjà recopiés par html2canvas.
+    if (!(noeud instanceof HTMLLinkElement)) continue;
+    let regles: string;
+    try { regles = Array.from(feuille.cssRules).map(r => r.cssText).join('\n'); }
+    catch { continue; }   // feuille d'un autre domaine : illisible, laissée telle quelle
+    const style = copie.createElement('style');
+    style.textContent = regles;
+    const lien = liens.find(l => l.getAttribute('href') === noeud.getAttribute('href'));
+    if (lien) lien.replaceWith(style); else copie.head.appendChild(style);
+  }
+}
+
 export async function generatePdfFromElement(
   element: HTMLElement,
   opts?: { devisNumero?: string; devisDate?: string; logoDataUrl?: string; docTitle?: string; legal?: [string, string] },
@@ -209,6 +234,7 @@ export async function generatePdfFromElement(
       backgroundColor: '#ffffff',
       imageTimeout: 15000,
       windowWidth: A4_PX,
+      onclone: stylesEnLigne,
     });
   } catch (err: unknown) {
     // Nettoyage si html2canvas échoue
