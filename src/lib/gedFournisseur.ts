@@ -155,6 +155,14 @@ export async function annoterDocumentFournisseur(id: string, annotation: string)
   signalerChangement();
 }
 
+/** Range des documents déjà classés sous un autre genre (devis, facture…). */
+export async function reclasserDocumentsFournisseur(ids: string[], genre: GenreDocFournisseur): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await table().update({ genre }).in('id', ids);
+  if (error) throw new Error(`Reclassement impossible : ${error.message}`);
+  signalerChangement();
+}
+
 export async function supprimerDocumentFournisseur(d: DocumentFournisseur): Promise<void> {
   const { error } = await table().delete().eq('id', d.id);
   if (error) throw new Error(error.message);
