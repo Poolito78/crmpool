@@ -4906,13 +4906,24 @@ export default function Devis() {
                               };
                               /* Surface retouchée sur la ligne : elle reste (l'ouverture du devis ne la
                                  réécrit plus). Ce bouton la ramène à la surface totale, ligne par ligne. */
-                              const boutonSurfaceTotale = surfaceGlobaleM2 > 0 && uniteLigne === uniteSurface && l.surfaceM2 !== surfaceGlobaleM2 ? (
-                                <button type="button" onClick={() => { saveSnapshot(); saisirSurface(surfaceGlobaleM2, uniteSurface); }}
-                                  title={`Reprendre la surface totale du devis (${surfaceGlobaleM2} ${libelleSurface(uniteSurface)})`}
-                                  className="h-8 px-1 shrink-0 rounded text-muted-foreground hover:text-primary hover:bg-muted">
-                                  <RotateCcw className="w-3.5 h-3.5" />
-                                </button>
-                              ) : null;
+                              const surfaceDifferente = surfaceGlobaleM2 > 0 && uniteLigne === uniteSurface && l.surfaceM2 !== surfaceGlobaleM2;
+                              /* Le bouton se pose DANS le champ, à droite : à côté, il lui prenait sa place
+                                 et la surface s'affichait tronquée (« 91, »). En cartes, la colonne est
+                                 élargie d'autant ; en tableau (largeur réglée à la main), il ne paraît qu'au
+                                 survol, pour ne pas cacher le chiffre. */
+                              const champSurface = (input: ReactNode, avecBouton: boolean) => (
+                                <div className="relative group flex-1 min-w-0">
+                                  {input}
+                                  {avecBouton && surfaceDifferente && (
+                                    <button type="button" onClick={() => { saveSnapshot(); saisirSurface(surfaceGlobaleM2, uniteSurface); }}
+                                      title={`Reprendre la surface totale du devis (${surfaceGlobaleM2} ${libelleSurface(uniteSurface)})`}
+                                      className={`absolute right-0.5 top-1/2 -translate-y-1/2 h-6 w-5 items-center justify-center rounded bg-background text-muted-foreground hover:text-primary ${lignesView === 'tableau' ? 'hidden group-hover:flex' : 'flex'}`}>
+                                      <RotateCcw className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                              const padSurface = (avecBouton: boolean) => avecBouton && surfaceDifferente && lignesView !== 'tableau' ? ' pr-6' : '';
                               /* Cellule « Conso. » : en kg/m² dès que la colonne kg/ml est affichée, sinon dans l'unité de la ligne. */
                               const consoCellM2 = colConsoMl || uniteLigne === 'm2';
                               const couvM2 = couvertureM2(prod);
@@ -4942,18 +4953,18 @@ export default function Devis() {
                                 description: <NoteEditable value={l.description} onChange={v => updateLigne(l.id, 'description', v)}
                                   donnees={{ voice: 'ligne-desc', 'ligne-id': l.id }} title={noteEnTexte(l.description)}
                                   className="text-sm text-foreground leading-6 px-3 py-1 border border-input bg-background focus:ring-1 focus:ring-ring" />,
-                                surface: colLineaire ? (
-                                  <div className="flex items-center gap-0.5">
+                                surface: colLineaire ? champSurface(
                                   <Input type="number" step="0.01" value={uniteLigne === 'm2' ? (l.surfaceM2 || '') : ''} onFocus={e => e.target.select()}
                                     onChange={e => saisirSurface(parseFloat(e.target.value) || 0, 'm2')}
                                     title={uniteLigne === 'ml' ? 'Ligne au mètre linéaire : saisir une surface la repasse en m²' : undefined}
-                                    className="h-8 text-sm flex-1 min-w-0" placeholder={uniteLigne === 'ml' ? '—' : 'm²'} />
-                                  {uniteLigne === 'm2' && boutonSurfaceTotale}
-                                  </div>
-                                ) : <div className="flex items-center gap-0.5"><Input type="number" step="0.01" value={l.surfaceM2 || ''} onFocus={e => e.target.select()}
-                                  onChange={e => saisirSurface(parseFloat(e.target.value) || 0, uniteLigne)}
-                                  className="h-8 text-sm flex-1 min-w-0" placeholder={libelleSurface(uniteLigne)} />
-                                  {boutonSurfaceTotale}
+                                    className={`h-8 text-sm w-full${padSurface(uniteLigne === 'm2')}`} placeholder={uniteLigne === 'ml' ? '—' : 'm²'} />,
+                                  uniteLigne === 'm2',
+                                ) : <div className="flex items-center gap-0.5">{champSurface(
+                                  <Input type="number" step="0.01" value={l.surfaceM2 || ''} onFocus={e => e.target.select()}
+                                    onChange={e => saisirSurface(parseFloat(e.target.value) || 0, uniteLigne)}
+                                    className={`h-8 text-sm w-full${padSurface(true)}`} placeholder={libelleSurface(uniteLigne)} />,
+                                  true,
+                                )}
                                   {/* Unité de CETTE ligne : clic = m² ↔ ml (joints au ml sous un sol au m²). */}
                                   <button type="button" onClick={() => changerUniteLigne(l.id)}
                                     title={`Unité de cette ligne : ${libelleSurface(uniteLigne)}${l.uniteSurface ? '' : ' (celle du devis)'} — cliquer pour passer en ${uniteLigne === 'ml' ? 'm²' : 'ml'}`}
@@ -4961,14 +4972,12 @@ export default function Devis() {
                                     {libelleSurface(uniteLigne)}
                                   </button>
                                 </div>,
-                                lineaire: (
-                                  <div className="flex items-center gap-0.5">
+                                lineaire: champSurface(
                                   <Input type="number" step="0.01" value={uniteLigne === 'ml' ? (l.surfaceM2 || '') : ''} onFocus={e => e.target.select()}
                                     onChange={e => saisirSurface(parseFloat(e.target.value) || 0, 'ml')}
                                     title={uniteLigne === 'm2' ? 'Ligne au m² : saisir un linéaire la passe au mètre linéaire (conso. en kg/ml)' : undefined}
-                                    className="h-8 text-sm flex-1 min-w-0" placeholder={uniteLigne === 'm2' ? '—' : 'ml'} />
-                                  {uniteLigne === 'ml' && boutonSurfaceTotale}
-                                  </div>
+                                    className={`h-8 text-sm w-full${padSurface(uniteLigne === 'ml')}`} placeholder={uniteLigne === 'm2' ? '—' : 'ml'} />,
+                                  uniteLigne === 'ml',
                                 ),
                                 /* Les deux consos se modifient sur toute ligne ; celle de l'autre unité est grisée :
                                    gardée, elle ne compte qu'une fois la ligne passée dans son unité. */
@@ -5095,7 +5104,9 @@ export default function Devis() {
                                   {temperatureEl}
                                   {epaisseurEl}
                                   {TABLE_LIGNE_COLS.filter(c => c.key !== 'ref' && c.key !== 'description' && c.key !== 'total' && colVisible(c)).map(c => (
-                                    <div key={c.key} style={{ width: c.key === 'conso' && (colConsoMl || uniteLigne !== 'ml') && (prod?.consommations?.length ?? 0) > 0 ? c.width + 24 : c.key === 'surface' && !colLineaire ? c.width + 28 : c.width }} className="shrink-0">
+                                    <div key={c.key} style={{ width: (c.key === 'conso' && (colConsoMl || uniteLigne !== 'ml') && (prod?.consommations?.length ?? 0) > 0 ? c.width + 24 : c.key === 'surface' && !colLineaire ? c.width + 28 : c.width)
+                                      /* Place du bouton « surface totale », réservée sur toutes les lignes pour que les colonnes restent alignées. */
+                                      + ((c.key === 'surface' || c.key === 'lineaire') && surfaceGlobaleM2 > 0 ? 20 : 0) }} className="shrink-0">
                                       {c.key === 'qte' && estCata ? (
                                         <button type="button" onClick={() => updateLigne(l.id, 'catalyseManuelle', undefined)}
                                           className="text-xs font-medium text-primary hover:underline text-left"
