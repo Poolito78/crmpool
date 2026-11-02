@@ -958,7 +958,8 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
                                 {c.label}
                               </label>
                             ))}
-                            <button onClick={() => prodCols.reset()} className="mt-2 pt-2 border-t border-border w-full text-left text-xs text-muted-foreground hover:text-foreground">↺ Réinitialiser ordre & largeurs</button>
+                            <button onClick={() => { prodCols.autoFit(prodGearRef.current); setProdGearOpen(false); }} className="mt-2 pt-2 border-t border-border w-full text-left text-xs text-muted-foreground hover:text-foreground">↔ Ajuster les colonnes au contenu</button>
+                            <button onClick={() => prodCols.reset()} className="mt-1 w-full text-left text-xs text-muted-foreground hover:text-foreground">↺ Réinitialiser ordre & largeurs</button>
                           </div>
                         )}
                       </div>

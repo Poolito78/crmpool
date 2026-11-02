@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerTotalDevis, formatDate, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Client, type AdresseLivraison, type Contact } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown, Bot, Loader2, CalendarClock, TrendingUp, ShoppingCart, CheckCircle2, XCircle, Clock, Building2, LayoutList, Table2, Check, Settings, RefreshCw } from 'lucide-react';
+import { Plus, MoveHorizontal, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown, Bot, Loader2, CalendarClock, TrendingUp, ShoppingCart, CheckCircle2, XCircle, Clock, Building2, LayoutList, Table2, Check, Settings, RefreshCw } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -761,7 +761,11 @@ export default function Clients() {
                   </th>
                 );
               })}
-              <th className="px-4 py-2 sticky top-0 z-10 bg-muted"></th>
+              <th className="px-4 py-2 sticky top-0 z-10 bg-muted text-right">
+                <button onClick={e => cCols.autoFit(e.currentTarget)} title="Ajuster les colonnes au contenu" className="p-1.5 rounded hover:bg-muted-foreground/10 text-muted-foreground hover:text-foreground transition-colors">
+                  <MoveHorizontal className="w-4 h-4" />
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>

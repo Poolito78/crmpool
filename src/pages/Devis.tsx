@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type React
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Building2, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat } from 'lucide-react';
+import { Building2, MoveHorizontal, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, getOdooPartnerId, setOdooPartnerId, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, type OdooPayload } from '@/lib/odooSync';
 import { motsRechercheOdoo, classerClientsOdoo, natureFicheOdoo, type CandidatOdoo } from '@/lib/clientOdoo';
 import { compterBrides } from '@/lib/bridesDevis';
@@ -387,6 +387,8 @@ export default function Devis() {
   });
   useEffect(() => { try { localStorage.setItem('devis_table_cols', JSON.stringify([...visDevisTableCols])); } catch {} }, [visDevisTableCols]);
   const devisCols = useTableColumns<DevisTableColKey>('devis_table', DEVIS_TABLE_COLS_DEF.map(c => c.key));
+  // Roue de la vue tableau : point d'ancrage de « Ajuster les colonnes » (le menu est en portail).
+  const devisGearRef = useRef<HTMLButtonElement>(null);
   // Colonnes de la vue tableau éditable des lignes (resize + ordre persistés)
   const ligneTableCols = useTableColumns<TLCKey>('devis_lignes_table', TABLE_LIGNE_COLS.map(c => c.key));
 
@@ -3500,7 +3502,7 @@ export default function Devis() {
                   <th className="px-2 py-2 sticky top-0 z-10 bg-muted text-right whitespace-nowrap">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button title="Colonnes & export" className="p-1.5 rounded hover:bg-muted-foreground/10 text-muted-foreground hover:text-foreground transition-colors">
+                        <button ref={devisGearRef} title="Colonnes & export" className="p-1.5 rounded hover:bg-muted-foreground/10 text-muted-foreground hover:text-foreground transition-colors">
                           <Settings className="w-4 h-4" />
                         </button>
                       </DropdownMenuTrigger>
@@ -3516,7 +3518,10 @@ export default function Devis() {
                             {c.label}
                           </DropdownMenuCheckboxItem>
                         ))}
-                        <DropdownMenuItem className="border-t border-border mt-1" onClick={() => { exportToExcel(devis.map(d => { const client = clients.find(c => c.id === d.clientId); const totals = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': totals.totalHT, 'Total TVA': totals.totalTVA, 'Total TTC': totals.totalTTC, Notes: d.notes || '' }; }), 'devis', 'Devis'); }}>
+                        <DropdownMenuItem className="border-t border-border mt-1" onClick={() => devisCols.autoFit(devisGearRef.current)}>
+                          <MoveHorizontal className="w-4 h-4 mr-2 text-muted-foreground" /> Ajuster les colonnes
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { exportToExcel(devis.map(d => { const client = clients.find(c => c.id === d.clientId); const totals = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': totals.totalHT, 'Total TVA': totals.totalTVA, 'Total TTC': totals.totalTTC, Notes: d.notes || '' }; }), 'devis', 'Devis'); }}>
                           <Download className="w-4 h-4 mr-2 text-muted-foreground" /> Exporter (Excel)
                         </DropdownMenuItem>
                       </DropdownMenuContent>

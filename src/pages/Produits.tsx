@@ -29,7 +29,7 @@ import { designationProduit, generateId, formatMontant, formatDate, calculerTota
 import { supabase } from '@/integrations/supabase/client';
 import { inscrireDansLaListeNoire, retirerDeLaListeNoire } from '@/lib/produitsSupprimes';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
-import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check, History, AlertTriangle, Image as ImageIcon, Star, Link2, Loader2, FolderOpen } from 'lucide-react';
+import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, MoveHorizontal, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check, History, AlertTriangle, Image as ImageIcon, Star, Link2, Loader2, FolderOpen } from 'lucide-react';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import ColResizeHandle from '@/components/ColResizeHandle';
@@ -1816,7 +1816,14 @@ export default function Produits() {
                             </label>
                           ))}
                           <button
-                            className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground border-t border-border pt-2 text-left"
+                            className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground border-t border-border pt-2 text-left flex items-center gap-1"
+                            onClick={() => { prodCols.autoFit(colChooserRef.current); setColChooserOpen(false); }}
+                            title="Chaque colonne prend la largeur de son texte le plus long"
+                          >
+                            <MoveHorizontal className="w-3 h-3" /> Ajuster les colonnes au contenu
+                          </button>
+                          <button
+                            className="mt-1 w-full text-xs text-muted-foreground hover:text-foreground text-left"
                             onClick={() => setVisibleCols(new Set(DEFAULT_VISIBLE_COLS))}
                           >
                             Réinitialiser les colonnes visibles

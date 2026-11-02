@@ -516,7 +516,7 @@ export default function CommandesClient() {
                 );
               })}
               <th className="text-right py-2 px-2 font-medium text-muted-foreground sticky top-0 z-10 bg-muted whitespace-nowrap">
-                <TableGearMenu cols={CC_COLS} visible={visCols} onToggle={toggleVisCol} onExport={exportCC} />
+                <TableGearMenu cols={CC_COLS} visible={visCols} onToggle={toggleVisCol} onExport={exportCC} onAutoFit={ccCols.autoFit} />
               </th>
             </tr>
           </thead>

@@ -518,7 +518,7 @@ export default function FacturesClient() {
                 );
               })}
               <th className="text-right py-2 px-2 font-medium text-muted-foreground sticky top-0 z-10 bg-muted whitespace-nowrap">
-                <TableGearMenu cols={FC_COLS} visible={visCols} onToggle={toggleVisCol} onExport={exportFC} />
+                <TableGearMenu cols={FC_COLS} visible={visCols} onToggle={toggleVisCol} onExport={exportFC} onAutoFit={fcCols.autoFit} />
               </th>
             </tr>
           </thead>

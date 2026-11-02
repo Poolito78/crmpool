@@ -183,7 +183,7 @@ const merged = [...new Set([...DEFAULT_VISIBLE_COLS, ...saved.filter(k => ALL_CO
 **Toute vue en tableau (desktop) DOIT** utiliser l'infrastructure partagée
 plutôt que des `<th>`/`<td>` codés en dur.
 
-- **`useTableColumns<K>(storageKey, allKeys)`** (`src/hooks/useTableColumns.tsx`) : largeur (resize) + ordre (drag) des colonnes, persistés en localStorage (`${storageKey}_widths`, `${storageKey}_order`). API : `ordered(allCols, isVisible?)`, `widthStyle(key)`, `thProps(key)`, `resizeHandleProps(key)`, `dragKey`, `dragOverKey`.
+- **`useTableColumns<K>(storageKey, allKeys)`** (`src/hooks/useTableColumns.tsx`) : largeur (resize) + ordre (drag) des colonnes, persistés en localStorage (`${storageKey}_widths`, `${storageKey}_order`). API : `ordered(allCols, isVisible?)`, `widthStyle(key)`, `thProps(key)`, `resizeHandleProps(key)`, `dragKey`, `dragOverKey`, `autoFit(el)` (« Ajuster les colonnes » : chaque colonne visible prend la largeur de son contenu, bornée 50–480 px, enregistrée comme un resize manuel ; `el` = le `<table>` ou un élément dedans, repéré par le `data-col` que pose `thProps`).
 - **`<ColResizeHandle {...cols.resizeHandleProps(key)} />`** : poignée de redimensionnement, dans un `<th class="relative">`.
 - En-tête, ligne de filtres ET corps doivent tous itérer via `cols.ordered(...)` (même ordre partout, sinon colonnes désalignées).
 
@@ -198,7 +198,7 @@ plutôt que des `<th>`/`<td>` codés en dur.
 - En-tête = libellé + flèche de tri + **icône filtre**. Clic sur l'icône → contrôle affiché **inline dans l'en-tête** (pas de ligne dédiée qui pousse le contenu).
 - Fermé **sans** valeur → la colonne se replie sur l'icône seule (`onClose` retire la clé de `openFilterCols`). Avec valeur → le contrôle reste visible.
 - Une barre **« Filtres actifs »** au-dessus du tableau (chips avec ✕) + bouton « Effacer ».
-- **Roue crantée (`Settings`) dans la dernière cellule d'en-tête** : composant partagé **`TableGearMenu`** = colonnes visibles + export Excel. (Produits/Devis ont leur variante inline ; `Produits` ajoute `Columns2` + reset via `cols.reset()`.)
+- **Roue crantée (`Settings`) dans la dernière cellule d'en-tête** : composant partagé **`TableGearMenu`** = colonnes visibles + « Ajuster les colonnes » (`onAutoFit={cols.autoFit}`) + export Excel. (Produits/Devis ont leur variante inline ; `Produits` ajoute `Columns2` + reset via `cols.reset()`.)
 
 **Bandeau titre fixe + en-tête sticky + pleine page** :
 - **Coquille `CRMLayout`** : racine en **`h-screen overflow-hidden`**. Le bandeau titre (`<header>`) est `shrink-0`. **C'est l'ONGLET qui défile**, plus `<main>` : chaque page vit dans son `PageOnglet` (`relative flex flex-col min-h-0 overflow-x-hidden`, padding de l'ancien `<main>`), et `<main>` est en `overflow-hidden`. → un seul scrollbar, une position par onglet. Les marges négatives des pages (CRM) s'alignent sur ce padding.

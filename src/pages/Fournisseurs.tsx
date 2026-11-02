@@ -480,7 +480,7 @@ export default function Fournisseurs() {
                 );
               })}
               <th className="px-2 py-2 text-right sticky top-0 z-10 bg-muted whitespace-nowrap">
-                <TableGearMenu cols={FOURN_COLS} visible={visCols} onToggle={toggleVisCol} onExport={exportFournisseurs} />
+                <TableGearMenu cols={FOURN_COLS} visible={visCols} onToggle={toggleVisCol} onExport={exportFournisseurs} onAutoFit={fCols.autoFit} />
               </th>
             </tr>
           </thead>

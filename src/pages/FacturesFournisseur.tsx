@@ -346,7 +346,7 @@ export default function FacturesFournisseur() {
                 );
               })}
               <th className="text-right py-2 px-2 font-medium text-muted-foreground sticky top-0 z-10 bg-muted whitespace-nowrap">
-                <TableGearMenu cols={FF_COLS} visible={visCols} onToggle={toggleVisCol} onExport={exportFF} />
+                <TableGearMenu cols={FF_COLS} visible={visCols} onToggle={toggleVisCol} onExport={exportFF} onAutoFit={ffCols.autoFit} />
               </th>
             </tr>
           </thead>
