@@ -48,7 +48,7 @@ import {
 import VarianteCompoDialog from '@/components/VarianteCompoDialog';
 import EpaisseurInput from '@/components/EpaisseurInput';
 import {
-  calculerDosage, consoMlEpaisseur, copierLignes, epaisseurMinimale, kgGranulat, libelleGranulat, libelleGranulatAuto, palierPour, quantiteGranulat, usageEpaisseur,
+  calculerDosage, consoMlEpaisseur, copierLignes, dosagePourRatio, ratioRetenu, epaisseurMinimale, kgGranulat, libelleGranulat, libelleGranulatAuto, palierPour, quantiteGranulat, usageEpaisseur,
   type AjoutDosage,
 } from '@/lib/dosageEpaisseur';
 import {
@@ -1483,18 +1483,22 @@ export default function Devis() {
    * l'on a décochés. Un granulat qui reste (le 2-8 de 25 à 50 mm) garde sa
    * ligne et son prix ; seuls sa quantité et son libellé automatique suivent.
    */
-  function changerEpaisseur(id: string, epaisseurMm: number | undefined) {
+  /** `ratioCharge` : le ratio de charge choisi (1:5…) ; absent, la ligne garde le sien. */
+  function changerEpaisseur(id: string, epaisseurMm: number | undefined, ratioCharge?: string) {
     saveSnapshot();
     const estRev = clients.find(c => c.id === clientId)?.estRevendeur;
     setLignes(prev => {
       const l = prev.find(x => x.id === id);
       const mortier = l?.produitId ? produitParId(produits, l.produitId) : undefined;
-      const d = mortier?.dosageEpaisseur;
-      if (!l || !mortier || !d) return prev;
+      const base = mortier?.dosageEpaisseur;
+      if (!l || !mortier || !base) return prev;
+      // Ratio de charge : celui choisi, sinon celui de la ligne, sinon le premier de la fiche.
+      const ratio = ratioRetenu(base, ratioCharge ?? l.ratioCharge)?.libelle;
+      const d = dosagePourRatio(base, ratio);
       const calc = epaisseurMm ? calculerDosage(d, mortier.poids, epaisseurMm) : null;
       const consoMl = epaisseurMm ? consoMlEpaisseur(d, epaisseurMm) : null;
-      let parent: LigneDevis = { ...l, epaisseurMm };
-      if (calc) parent = { ...parent, consommation: calc.consoKitKgM2, consoUsage: usageEpaisseur(calc) };
+      let parent: LigneDevis = { ...l, epaisseurMm, ratioCharge: ratio };
+      if (calc) parent = { ...parent, consommation: calc.consoKitKgM2, consoUsage: usageEpaisseur(calc, ratio) };
       if (consoMl != null) parent = { ...parent, consommationMl: consoMl };
       // Seule la conso de l'unité de la ligne (m² ou ml) recalcule la quantité, comme `appliquerConso`.
       const u = uniteL(l);
@@ -4763,9 +4767,26 @@ export default function Devis() {
 
                     /* DOSÉ SELON L'ÉPAISSEUR (dosageEpaisseur.ts) : l'épaisseur fixe la conso
                        (par mm × épaisseur) et, pour un mortier chargé, les granulats proposés sous la ligne. */
-                    const dosage = prod?.dosageEpaisseur;
+                    const ratioLigne = prod?.dosageEpaisseur ? ratioRetenu(prod.dosageEpaisseur, l.ratioCharge) : undefined;
+                    const dosage = prod?.dosageEpaisseur ? dosagePourRatio(prod.dosageEpaisseur, ratioLigne?.libelle) : undefined;
                     const calcDosage = dosage && l.epaisseurMm ? calculerDosage(dosage, prod?.poids, l.epaisseurMm) : null;
-                    const epaisseurEl = dosage ? (
+                    const epaisseurEl = dosage ? (<>
+                      {/* Ratio de charge (1:5, 1:7…) : chacun sa conso par mm (fiche article). */}
+                      {prod?.dosageEpaisseur?.ratios?.length ? (
+                        <div className="shrink-0 w-[88px]">
+                          <span className="text-xs truncate block text-muted-foreground">Ratio charge</span>
+                          <Select value={ratioLigne?.libelle} onValueChange={r => changerEpaisseur(l.id, l.epaisseurMm, r)}>
+                            <SelectTrigger className="h-8 text-sm" title="Ratio de charge : il fixe la conso par mm d'épaisseur"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {prod.dosageEpaisseur.ratios.map(r => (
+                                <SelectItem key={r.libelle} value={r.libelle}>
+                                  {r.libelle} — {String(r.kgM2ParMm).replace('.', ',')} kg/m²/mm
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ) : null}
                       <div className="shrink-0 w-[96px]">
                         <span className="text-xs truncate block text-muted-foreground">Épaisseur mm</span>
                         <EpaisseurInput value={l.epaisseurMm} onCommit={mm => changerEpaisseur(l.id, mm)} className="h-8 text-sm"
@@ -4774,7 +4795,7 @@ export default function Devis() {
                             dosage.kgMlParMm ? `${String(dosage.kgMlParMm).replace('.', ',')} kg/ml` : '',
                           ].filter(Boolean).join(' ou ')} par mm)${dosage.paliers.some(p => p.ajouts.length) ? " et les granulats à ajouter, d'après le tableau de la fiche" : ''}.${epaisseurMinimale(dosage) ? ` Minimum ${epaisseurMinimale(dosage)} mm.` : ''}`} />
                       </div>
-                    ) : null;
+                    </>) : null;
 
                     // Sélecteurs de variantes (rendus inline en cartes, en sous-ligne en tableau)
                     /* LES TEINTES DES COMPOSANTS, TOUJOURS VISIBLES. Le pigment d'un kit (PIGMENTKG…)
@@ -5194,7 +5215,7 @@ export default function Devis() {
                               <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 pl-9 flex-wrap">
                                 {/* Mortier dosé : le mélange de l'épaisseur, et ses granulats à cocher. */}
                                 {dosage && (!l.epaisseurMm ? (
-                                  <span className="text-amber-600">Épaisseur à saisir : la conso du kit et les granulats en dépendent (tableau de la fiche)</span>
+                                  <span className="text-amber-600">{dosage.paliers.length ? 'Épaisseur à saisir : la conso du kit et les granulats en dépendent (tableau de la fiche)' : 'Épaisseur à saisir : la conso en dépend (kg/m² par mm)'}</span>
                                 ) : !calcDosage ? (
                                   <span className="text-amber-600">
                                     {!(prod?.poids && prod.poids > 0)
@@ -5204,14 +5225,16 @@ export default function Devis() {
                                 ) : (
                                   <>
                                     <span className="font-medium text-foreground"
-                                      title={`${String(dosage.kgM2ParMm).replace('.', ',')} kg/m²/mm × ${String(l.epaisseurMm).replace('.', ',')} mm = ${String(calcDosage.kgM2Melange).replace('.', ',')} kg/m² de mélange, dont la part du kit (${prod?.poids} kg sur ${(prod?.poids ?? 0) + calcDosage.palier.ajouts.reduce((s, x) => s + x.kgParKit, 0)} kg)${dosage.source ? `
+                                      title={`${String(dosage.kgM2ParMm).replace('.', ',')} kg/m²/mm${ratioLigne ? ` (ratio ${ratioLigne.libelle})` : ''} × ${String(l.epaisseurMm).replace('.', ',')} mm = ${String(calcDosage.kgM2Melange).replace('.', ',')} kg/m²${dosage.paliers.length ? ` de mélange, dont la part du kit (${prod?.poids} kg sur ${(prod?.poids ?? 0) + calcDosage.palier.ajouts.reduce((s, x) => s + x.kgParKit, 0)} kg)` : ''}${dosage.source ? `
 ${dosage.source}` : ''}`}>
-                                      Mélange {calcDosage.palier.epaisseurMinMm} mm : {String(calcDosage.consoKitKgM2).replace('.', ',')} kg/m² de kit
+                                      {dosage.paliers.length
+                                        ? <>Mélange {calcDosage.palier.epaisseurMinMm} mm : {String(calcDosage.consoKitKgM2).replace('.', ',')} kg/m² de kit</>
+                                        : <>{String(dosage.kgM2ParMm).replace('.', ',')} kg/m²/mm{ratioLigne ? ` (ratio ${ratioLigne.libelle})` : ''} × {String(l.epaisseurMm).replace('.', ',')} mm = {String(calcDosage.consoKitKgM2).replace('.', ',')} kg/m²</>}
                                       {l.consommation != null && Math.abs(l.consommation - calcDosage.consoKitKgM2) > 0.001 && (
                                         <span className="text-orange-500 font-normal"> (conso. de la ligne retouchée : {String(l.consommation).replace('.', ',')})</span>
                                       )}
                                     </span>
-                                    {calcDosage.ajouts.length === 0 && <span>kit seul, sans granulat</span>}
+                                    {calcDosage.ajouts.length === 0 && dosage.paliers.length > 0 && <span>kit seul, sans granulat</span>}
                                     {calcDosage.ajouts.map(a => {
                                       const present = lignes.some(x => x.granulatDe?.ligneId === l.id && x.granulatDe.libelle === a.libelle);
                                       return (

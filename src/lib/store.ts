@@ -845,6 +845,8 @@ export interface LigneDevis {
    * granulats à ajouter (`dosageEpaisseur.ts`).
    */
   epaisseurMm?: number;
+  /** Ratio de charge retenu (« 1:5 ») quand la fiche en propose plusieurs (`DosageEpaisseur.ratios`). */
+  ratioCharge?: string;
   /** Granulats du mélange que l'utilisateur a décochés (par libellé) : on ne les repropose pas d'office. */
   granulatsExclus?: string[];
   /**

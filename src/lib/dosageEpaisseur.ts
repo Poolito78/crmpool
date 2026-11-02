@@ -29,6 +29,11 @@
  * l'épaisseur — au m² (`kgM2ParMm`) et/ou au ml (`kgMlParMm`), sans poids de
  * kit nécessaire. Le palier implicite part de 0 mm.
  *
+ * RATIO DE CHARGE (1:5, 1:7…) : la conso par mm dépend de la charge gâchée
+ * avec le produit. Chaque ratio porte sa conso par mm (m², ml) ; la ligne du
+ * devis choisit le sien (`LigneDevis.ratioCharge`, le premier par défaut), qui
+ * remplace la conso par mm de base.
+ *
  * Le dosage vit sur l'article (`Produit.dosageEpaisseur`, colonne jsonb
  * `dosage_epaisseur`), l'épaisseur sur la ligne du devis
  * (`LigneDevis.epaisseurMm`) ; une ligne de granulat se rattache à sa ligne
@@ -49,11 +54,22 @@ export interface PalierDosage {
   ajouts: AjoutDosage[];
 }
 
+export interface RatioCharge {
+  /** « 1:5 » — clé du choix retenu sur la ligne du devis. */
+  libelle: string;
+  /** Conso du produit à ce ratio, en kg/m² par mm. */
+  kgM2ParMm: number;
+  /** Idem au mètre linéaire, kg/ml par mm. */
+  kgMlParMm?: number;
+}
+
 export interface DosageEpaisseur {
   /** Consommation du mélange, en kg/m² par mm d'épaisseur. */
   kgM2ParMm: number;
   /** Consommation au mètre linéaire, en kg/ml par mm d'épaisseur (lignes au ml). */
   kgMlParMm?: number;
+  /** Ratios de charge : chacun sa conso par mm, qui remplace celle de base. */
+  ratios?: RatioCharge[];
   /** Vide : produit simple, conso par mm seule (palier implicite à 0 mm). */
   paliers: PalierDosage[];
   /** D'où viennent les chiffres (fiche, date) — affiché, jamais calculé. */
@@ -79,10 +95,18 @@ export function lireDosage(v: unknown): DosageEpaisseur | undefined {
   const d = o as Partial<DosageEpaisseur>;
   const kgM2ParMm = Number(d.kgM2ParMm) > 0 ? Number(d.kgM2ParMm) : 0;
   const kgMlParMm = Number(d.kgMlParMm) > 0 ? Number(d.kgMlParMm) : 0;
-  if (!kgM2ParMm && !kgMlParMm) return undefined;
+  const ratios = (Array.isArray(d.ratios) ? d.ratios : [])
+    .filter(r => r?.libelle?.trim() && (Number(r.kgM2ParMm) > 0 || Number(r.kgMlParMm) > 0))
+    .map(r => ({
+      libelle: r.libelle.trim(),
+      kgM2ParMm: Number(r.kgM2ParMm) > 0 ? Number(r.kgM2ParMm) : 0,
+      ...(Number(r.kgMlParMm) > 0 ? { kgMlParMm: Number(r.kgMlParMm) } : {}),
+    }));
+  if (!kgM2ParMm && !kgMlParMm && !ratios.length) return undefined;
   return {
     kgM2ParMm,
     ...(kgMlParMm ? { kgMlParMm } : {}),
+    ...(ratios.length ? { ratios } : {}),
     paliers: (Array.isArray(d.paliers) ? d.paliers : [])
       .filter(p => p && Number(p.epaisseurMinMm) > 0)
       .map(p => ({
@@ -93,6 +117,20 @@ export function lireDosage(v: unknown): DosageEpaisseur | undefined {
       .sort((a, b) => a.epaisseurMinMm - b.epaisseurMinMm),
     ...(d.source ? { source: d.source } : {}),
   };
+}
+
+/** Le ratio de charge retenu : celui de la ligne, sinon le premier de la fiche. */
+export function ratioRetenu(d: DosageEpaisseur, ratio?: string): RatioCharge | undefined {
+  if (!d.ratios?.length) return undefined;
+  return d.ratios.find(r => r.libelle === ratio) ?? d.ratios[0];
+}
+
+/** Le dosage au ratio retenu : sa conso par mm remplace celle de base. */
+export function dosagePourRatio(d: DosageEpaisseur, ratio?: string): DosageEpaisseur {
+  const r = ratioRetenu(d, ratio);
+  if (!r) return d;
+  const { kgMlParMm: _base, ...reste } = d;
+  return { ...reste, kgM2ParMm: r.kgM2ParMm, ...(r.kgMlParMm ? { kgMlParMm: r.kgMlParMm } : {}) };
 }
 
 const PALIER_SEUL: PalierDosage = { epaisseurMinMm: 0, ajouts: [] };
@@ -144,11 +182,12 @@ export function kgGranulat(kits: number, kgParKit: number): number {
 }
 
 /** L'usage affiché sur la ligne du mortier (info-bulle de la conso). */
-export function usageEpaisseur(c: Pick<CalculDosage, 'epaisseurMm' | 'palier'>): string {
+export function usageEpaisseur(c: Pick<CalculDosage, 'epaisseurMm' | 'palier'>, ratio?: string): string {
   const mm = (n: number) => String(n).replace('.', ',');
-  return c.palier.epaisseurMinMm === c.epaisseurMm || !c.palier.epaisseurMinMm
+  const ep = c.palier.epaisseurMinMm === c.epaisseurMm || !c.palier.epaisseurMinMm
     ? `Épaisseur ${mm(c.epaisseurMm)} mm`
     : `Épaisseur ${mm(c.epaisseurMm)} mm (mélange ${mm(c.palier.epaisseurMinMm)} mm)`;
+  return ratio ? `${ep}, ratio ${ratio}` : ep;
 }
 
 /** Désignation d'une ligne de granulat sans article. */

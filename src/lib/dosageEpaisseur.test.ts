@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  calculerDosage, consoMlEpaisseur, consommationsParPalier, copierLignes, kgGranulat, lireDosage, palierPour, usageEpaisseur,
+  calculerDosage, consoMlEpaisseur, dosagePourRatio, ratioRetenu, consommationsParPalier, copierLignes, kgGranulat, lireDosage, palierPour, usageEpaisseur,
   type DosageEpaisseur,
 } from './dosageEpaisseur';
 
@@ -123,5 +123,30 @@ describe("produit simple dosé à l'épaisseur (Flowbuild Cove F)", () => {
   it('conso au ml', () => {
     expect(consoMlEpaisseur(COVE, 4)).toBe(0.6);
     expect(consoMlEpaisseur({ kgM2ParMm: 2, paliers: [] }, 4)).toBeNull();
+  });
+});
+
+describe('ratio de charge', () => {
+  const D = lireDosage({ kgM2ParMm: 0, paliers: [], ratios: [
+    { libelle: '1:5', kgM2ParMm: 0.35, kgMlParMm: 0.05 },
+    { libelle: ' 1:7 ', kgM2ParMm: 0.26 },
+    { libelle: '', kgM2ParMm: 1 },
+  ] })!;
+
+  it('se lit sans conso de base, ratios vides écartés', () => {
+    expect(D.ratios!.map(r => r.libelle)).toEqual(['1:5', '1:7']);
+  });
+
+  it('le ratio de la ligne fixe la conso par mm, le premier par défaut', () => {
+    expect(ratioRetenu(D)?.libelle).toBe('1:5');
+    expect(calculerDosage(dosagePourRatio(D, '1:7'), undefined, 10)!.consoKitKgM2).toBe(2.6);
+    expect(calculerDosage(dosagePourRatio(D, 'inconnu'), undefined, 10)!.consoKitKgM2).toBe(3.5);
+    expect(consoMlEpaisseur(dosagePourRatio(D, '1:5'), 10)).toBe(0.5);
+    expect(consoMlEpaisseur(dosagePourRatio(D, '1:7'), 10)).toBeNull();
+  });
+
+  it("l'usage cite le ratio", () => {
+    const c = calculerDosage(dosagePourRatio(D, '1:7'), undefined, 10)!;
+    expect(usageEpaisseur(c, '1:7')).toBe('Épaisseur 10 mm, ratio 1:7');
   });
 });
