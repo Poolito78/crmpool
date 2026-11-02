@@ -48,7 +48,7 @@ import {
 import VarianteCompoDialog from '@/components/VarianteCompoDialog';
 import EpaisseurInput from '@/components/EpaisseurInput';
 import {
-  calculerDosage, copierLignes, epaisseurMinimale, kgGranulat, libelleGranulat, libelleGranulatAuto, palierPour, quantiteGranulat, usageEpaisseur,
+  calculerDosage, consoMlEpaisseur, copierLignes, epaisseurMinimale, kgGranulat, libelleGranulat, libelleGranulatAuto, palierPour, quantiteGranulat, usageEpaisseur,
   type AjoutDosage,
 } from '@/lib/dosageEpaisseur';
 import {
@@ -1492,15 +1492,17 @@ export default function Devis() {
       const d = mortier?.dosageEpaisseur;
       if (!l || !mortier || !d) return prev;
       const calc = epaisseurMm ? calculerDosage(d, mortier.poids, epaisseurMm) : null;
+      const consoMl = epaisseurMm ? consoMlEpaisseur(d, epaisseurMm) : null;
       let parent: LigneDevis = { ...l, epaisseurMm };
-      if (calc) {
-        parent = { ...parent, consommation: calc.consoKitKgM2, consoUsage: usageEpaisseur(calc) };
-        const surface = surfaceL(l);
-        // La conso est au m² : une ligne au ml la garde, sans recalcul (comme `appliquerConso`).
-        if (uniteL(l) === 'm2' && surface > 0) {
-          const quantite = calcQuantiteSurface(mortier, surface, calc.consoKitKgM2, l.unite, 'm2');
-          parent = { ...parent, quantite, prixUnitaireHT: prixConserve(l, getPrixLigne(mortier, quantite, l.variantesChoisies, estRev)), ...(l.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}) };
-        }
+      if (calc) parent = { ...parent, consommation: calc.consoKitKgM2, consoUsage: usageEpaisseur(calc) };
+      if (consoMl != null) parent = { ...parent, consommationMl: consoMl };
+      // Seule la conso de l'unité de la ligne (m² ou ml) recalcule la quantité, comme `appliquerConso`.
+      const u = uniteL(l);
+      const consoLigne = u === 'ml' ? consoMl : calc?.consoKitKgM2;
+      const surface = surfaceL(l);
+      if (consoLigne != null && surface > 0) {
+        const quantite = calcQuantiteSurface(mortier, surface, consoLigne, l.unite, u);
+        parent = { ...parent, quantite, prixUnitaireHT: prixConserve(l, getPrixLigne(mortier, quantite, l.variantesChoisies, estRev)), ...(l.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}) };
       }
       const ajouts = calc?.ajouts ?? [];
       const exclus = new Set(l.granulatsExclus ?? []);
@@ -4759,15 +4761,18 @@ export default function Devis() {
                       </div>
                     ) : null;
 
-                    /* MORTIER DOSÉ SELON L'ÉPAISSEUR (Flowfast F1 Mortar, dosageEpaisseur.ts) :
-                       l'épaisseur fixe la conso du kit et les granulats proposés sous la ligne. */
+                    /* DOSÉ SELON L'ÉPAISSEUR (dosageEpaisseur.ts) : l'épaisseur fixe la conso
+                       (par mm × épaisseur) et, pour un mortier chargé, les granulats proposés sous la ligne. */
                     const dosage = prod?.dosageEpaisseur;
                     const calcDosage = dosage && l.epaisseurMm ? calculerDosage(dosage, prod?.poids, l.epaisseurMm) : null;
                     const epaisseurEl = dosage ? (
                       <div className="shrink-0 w-[96px]">
                         <span className="text-xs truncate block text-muted-foreground">Épaisseur mm</span>
                         <EpaisseurInput value={l.epaisseurMm} onCommit={mm => changerEpaisseur(l.id, mm)} className="h-8 text-sm"
-                          title={`Épaisseur du mortier : elle fixe la conso du kit (${String(dosage.kgM2ParMm).replace('.', ',')} kg/m² par mm de mélange) et les granulats à ajouter, d'après le tableau de la fiche. Minimum ${epaisseurMinimale(dosage)} mm.`} />
+                          title={`Épaisseur en mm : elle fixe la conso (${[
+                            dosage.kgM2ParMm > 0 ? `${String(dosage.kgM2ParMm).replace('.', ',')} kg/m²` : '',
+                            dosage.kgMlParMm ? `${String(dosage.kgMlParMm).replace('.', ',')} kg/ml` : '',
+                          ].filter(Boolean).join(' ou ')} par mm)${dosage.paliers.some(p => p.ajouts.length) ? " et les granulats à ajouter, d'après le tableau de la fiche" : ''}.${epaisseurMinimale(dosage) ? ` Minimum ${epaisseurMinimale(dosage)} mm.` : ''}`} />
                       </div>
                     ) : null;
 

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Plus, Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,10 +7,11 @@ import { consommationsParPalier, type DosageEpaisseur, type PalierDosage } from 
 import type { ConsoUsage } from '@/lib/store';
 
 /**
- * Le tableau « quantités selon l'épaisseur » d'un mortier (fiche Flowfast F1
- * Mortar) : conso du mélange par mm, puis un palier par épaisseur minimale,
- * avec les granulats à ajouter par kit. Le devis en tire la conso du kit et
- * propose les granulats (`dosageEpaisseur.ts`).
+ * La conso selon l'épaisseur : conso par mm (kg/m², et kg/ml pour les lignes
+ * au mètre linéaire). Un produit simple (Flowbuild Cove F) s'arrête là ; un
+ * mortier chargé (Flowfast F1 Mortar) ajoute un palier par épaisseur minimale,
+ * avec les granulats à ajouter par kit. Le devis demande l'épaisseur sur la
+ * ligne et en tire la conso (`dosageEpaisseur.ts`).
  */
 interface Props {
   value?: DosageEpaisseur;
@@ -22,24 +24,40 @@ interface Props {
 
 export default function DosageEpaisseurEditor({ value, onChange, kitKg, onConsommations }: Props) {
   const d = value;
+  // Ouvert dès qu'il y a quelque chose à montrer ; « Retirer » vide le dosage (enregistré à null).
+  const [ouvert, setOuvert] = useState(() => !!d && (d.kgM2ParMm > 0 || !!d.kgMlParMm || d.paliers.length > 0));
+  const vide: DosageEpaisseur = { kgM2ParMm: 0, paliers: [] };
   const majPaliers = (f: (ps: PalierDosage[]) => PalierDosage[]) =>
-    onChange({ kgM2ParMm: d?.kgM2ParMm ?? 0, ...(d?.source ? { source: d.source } : {}), paliers: f(d?.paliers ?? []) });
+    onChange({ ...(d ?? vide), paliers: f(d?.paliers ?? []) });
   const majPalier = (i: number, f: (p: PalierDosage) => PalierDosage) => majPaliers(ps => ps.map((p, j) => (j === i ? f(p) : p)));
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <Label className="text-xs">Dosage selon l'épaisseur (mortier chargé)</Label>
-        <button type="button" onClick={() => majPaliers(ps => [...ps, { epaisseurMinMm: 0, ajouts: [] }])}
-          className="text-xs text-primary hover:underline flex items-center gap-1"><Plus className="h-3 w-3" /> Ajouter un palier</button>
+        <Label className="text-xs">Consommation selon l'épaisseur (kg/m²/mm)</Label>
+        {ouvert ? (
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={() => majPaliers(ps => [...ps, { epaisseurMinMm: 0, ajouts: [] }])}
+              className="text-xs text-primary hover:underline flex items-center gap-1"
+              title="Mortier chargé : granulats ajoutés par kit à partir d'une épaisseur"><Plus className="h-3 w-3" /> Palier de granulats</button>
+            <button type="button" onClick={() => { onChange(vide); setOuvert(false); }}
+              className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1"><Trash className="h-3 w-3" /> Retirer</button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => { if (!d) onChange(vide); setOuvert(true); }}
+            className="text-xs text-primary hover:underline flex items-center gap-1"
+            title="La conso dépend de l'épaisseur : le devis demandera l'épaisseur en mm sur la ligne"><Plus className="h-3 w-3" /> Conso. par mm d'épaisseur</button>
+        )}
       </div>
-      {d && (
+      {ouvert && d && (
         <div className="rounded-lg border border-border p-2 space-y-2">
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-muted-foreground shrink-0">Conso. du mélange</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground shrink-0">Conso.{d.paliers.length ? ' du mélange' : ''}</span>
             <div className="w-24"><InputNombre decimales={3} value={d.kgM2ParMm} onChange={v => onChange({ ...d, kgM2ParMm: v })} /></div>
             <span className="text-muted-foreground shrink-0">kg/m² par mm</span>
-            <Input value={d.source ?? ''} onChange={e => onChange({ ...d, source: e.target.value || undefined })} placeholder="Source (fiche, date)" className="h-8 text-xs flex-1" />
+            <div className="w-24"><InputNombre decimales={3} value={d.kgMlParMm} onChange={v => onChange({ ...d, kgMlParMm: v || undefined })} placeholder="facultatif" /></div>
+            <span className="text-muted-foreground shrink-0" title="Pour les lignes au mètre linéaire (gorges, plinthes…)">kg/ml par mm</span>
+            <Input value={d.source ?? ''} onChange={e => onChange({ ...d, source: e.target.value || undefined })} placeholder="Source (fiche, date)" className="h-8 text-xs flex-1 min-w-[140px]" />
           </div>
           {d.paliers.map((p, i) => (
             <div key={i} className="flex gap-2 items-start border-t border-border pt-2">
@@ -66,7 +84,7 @@ export default function DosageEpaisseurEditor({ value, onChange, kitKg, onConsom
                 className="text-muted-foreground hover:text-destructive mt-5"><Trash className="w-4 h-4" /></button>
             </div>
           ))}
-          <div className="flex items-center justify-between border-t border-border pt-1.5 text-[11px]">
+          {d.paliers.length > 0 && <div className="flex items-center justify-between border-t border-border pt-1.5 text-[11px]">
             <span className="text-muted-foreground">
               {kitKg && kitKg > 0 ? `Kit de ${String(kitKg).replace('.', ',')} kg (poids de la fiche)` : 'Renseignez le poids du kit : sans lui, la part du kit ne se calcule pas'}
             </span>
@@ -77,7 +95,7 @@ export default function DosageEpaisseurEditor({ value, onChange, kitKg, onConsom
                 Recalculer les consommations par usage
               </button>
             )}
-          </div>
+          </div>}
         </div>
       )}
     </div>

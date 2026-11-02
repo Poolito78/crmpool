@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  calculerDosage, consommationsParPalier, copierLignes, kgGranulat, lireDosage, palierPour, usageEpaisseur,
+  calculerDosage, consoMlEpaisseur, consommationsParPalier, copierLignes, kgGranulat, lireDosage, palierPour, usageEpaisseur,
   type DosageEpaisseur,
 } from './dosageEpaisseur';
 
@@ -87,7 +87,7 @@ describe('lireDosage', () => {
   });
   it('écarte un dosage sans conso ou sans palier', () => {
     expect(lireDosage({ kgM2ParMm: 0, paliers: F1.paliers })).toBeUndefined();
-    expect(lireDosage({ kgM2ParMm: 2, paliers: [] })).toBeUndefined();
+    expect(lireDosage({ kgM2ParMm: 0, paliers: [] })).toBeUndefined();
     expect(lireDosage(null)).toBeUndefined();
   });
 });
@@ -101,5 +101,27 @@ describe('copierLignes', () => {
     ], () => `n${++n}`);
     expect(out.map(l => l.id)).toEqual(['n1', 'n2']);
     expect(out[1].granulatDe).toEqual({ ligneId: 'n1', libelle: 'Sable de quartz 2-8 mm' });
+  });
+});
+
+describe("produit simple dosé à l'épaisseur (Flowbuild Cove F)", () => {
+  const COVE = lireDosage({ kgM2ParMm: 2, kgMlParMm: 0.15, paliers: [] })!;
+
+  it('se lit sans palier', () => {
+    expect(COVE).toEqual({ kgM2ParMm: 2, kgMlParMm: 0.15, paliers: [] });
+    expect(lireDosage({ kgM2ParMm: 0, kgMlParMm: 0.2 })).toEqual({ kgM2ParMm: 0, kgMlParMm: 0.2, paliers: [] });
+  });
+
+  it('conso = conso par mm × épaisseur, sans poids de kit', () => {
+    const c = calculerDosage(COVE, undefined, 5)!;
+    expect(c.consoKitKgM2).toBe(10);
+    expect(c.ajouts).toEqual([]);
+    expect(usageEpaisseur(c)).toBe('Épaisseur 5 mm');
+    expect(calculerDosage(COVE, undefined, 0)).toBeNull();
+  });
+
+  it('conso au ml', () => {
+    expect(consoMlEpaisseur(COVE, 4)).toBe(0.6);
+    expect(consoMlEpaisseur({ kgM2ParMm: 2, paliers: [] }, 4)).toBeNull();
   });
 });

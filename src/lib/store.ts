@@ -499,7 +499,7 @@ export interface Produit {
   surfaceUniteM2?: number;
   /** Autres consommations, chacune avec son usage — proposées au choix sur la ligne de devis. */
   consommations?: ConsoUsage[];
-  /** Mortier dosé selon l'épaisseur (Flowfast F1 Mortar) : conso par mm et granulats par kit (`dosageEpaisseur.ts`). */
+  /** Dosé selon l'épaisseur : conso par mm (kg/m², kg/ml), et granulats par kit pour un mortier chargé (`dosageEpaisseur.ts`). */
   dosageEpaisseur?: DosageEpaisseur;
   stock: number;
   stockMin: number;
@@ -1368,7 +1368,7 @@ function produitToDb(p: Produit, userId: string) {
     /* Seulement si la fiche porte des notes (ou vient d'en vider) : sans la colonne, PostgREST rejetterait la ligne. */
     ...(p.consommations !== undefined ? { consommations: p.consommations.filter(c => c.valeur > 0).length ? p.consommations.filter(c => c.valeur > 0) : null } : {}),
     ...(p.notes !== undefined ? { notes: p.notes.trim() ? p.notes : null } : {}),
-    ...(p.dosageEpaisseur !== undefined ? { dosage_epaisseur: p.dosageEpaisseur.paliers.length ? p.dosageEpaisseur : null } : {}),
+    ...(p.dosageEpaisseur !== undefined ? { dosage_epaisseur: lireDosage(p.dosageEpaisseur) ?? null } : {}),
     ...(p.consoUnite !== undefined || p.surfaceUniteM2 ? { conso_unite: p.consoUnite ?? 'kg', surface_unite_m2: p.surfaceUniteM2 ?? null } : {}),
     ...(p.consommationMl !== undefined ? { consommation_ml: p.consommationMl > 0 ? p.consommationMl : null } : {}),
     stock: p.stock,
