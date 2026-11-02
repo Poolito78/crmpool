@@ -1241,7 +1241,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right">{poidsComp && l.quantite ? Math.round(l.quantite * poidsComp * 10) / 10 : ''}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKgComp != null ? `(${formatMontant(prixKgComp)})` : ''}</td>
-                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(compDatas.reduce((sum, c) => sum + (c.totalKgComp != null && c.prixKg != null ? c.totalKgComp * c.prixKg : 0), 0))}</td>
+                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT !== 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(compDatas.reduce((sum, c) => sum + (c.totalKgComp != null && c.prixKg != null ? c.totalKgComp * c.prixKg : 0), 0))}</td>
                           </>
                         );
                       })() : (() => {
@@ -1263,7 +1263,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className={`py-1.5 px-1 text-right${auKg ? ' font-semibold text-primary' : ''}`}>{auKg ? (l.quantite ? fmt(l.quantite, 2) : '') : poidsC && l.quantite ? Math.round(l.quantite * poidsC * 10) / 10 : ''}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKg != null ? `(${formatMontant(prixKg)})` : ''}</td>
-                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutLigneDevis(l, surfaceLigne))}</td>
+                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT !== 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutLigneDevis(l, surfaceLigne))}</td>
                           </>
                         );
                       })()}
@@ -1475,7 +1475,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         {showRemise && <td className="py-2 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT) : ''}</td>}
                         {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : ''}</td>}
                         <td className="py-2 text-right">{prixNet > 0 ? formatMontant(prixNet) : ''}</td>
-                        <td className="py-2 text-right font-medium">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutLigneDevis(l, getSurfaceLigne(l.id)))}</td>
+                        <td className="py-2 text-right font-medium">{t.totalHT !== 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutLigneDevis(l, getSurfaceLigne(l.id)))}</td>
                       </tr>
                       {showComposants && composants && composants.length > 0 && composants.map(comp => {
                         const compProd = produits.find(p => p.id === comp.produitId);
