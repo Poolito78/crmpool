@@ -267,7 +267,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
        coût chantier ne serait que le sous-total répété : il ne s'affiche pas. */
     if (!g || !(g.total > 0) || g.parUnite == null) return null;
     return (
-      <span className="font-normal not-italic text-[10px] text-muted-foreground mr-3 whitespace-nowrap">
+      <span className="font-normal not-italic normal-case tracking-normal text-[10px] text-muted-foreground whitespace-nowrap">
         Coût chantier {formatMontant(g.total)}{g.parUnite != null && <> · {g.parUnite.toFixed(2).replace('.', ',')} €/{libelleSurface(g.unite)}</>}
       </span>
     );
@@ -1038,9 +1038,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <col style={{ width: '30px' }} />{/* kg cond */}
                 <col style={{ width: '28px' }} />{/* Unité cond */}
                 <col style={{ width: '42px' }} />{/* Total KG cond */}
-                <col style={{ width: '64px' }} />{/* Unité prix */}
-                <col style={{ width: '50px' }} />{/* (Kg) */}
-                <col style={{ width: showCoutLigne ? '84px' : '76px' }} />{/* Total HT */}
+                <col style={{ width: '58px' }} />{/* Unité prix */}
+                <col style={{ width: '52px' }} />{/* (Kg) */}
+                <col style={{ width: showCoutLigne ? '80px' : '74px' }} />{/* Total HT */}
               </colgroup>
               <thead>
                 {/* Centrage vertical : texte directement dans <th>, align-middle Tailwind.
@@ -1149,8 +1149,14 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   <Fragment key={l.id}>
                     {showHeader && (
                       <tr className="bg-primary/[0.03] border-t border-[#CC0000]" data-pdf-no-break-after="true">
-                        <td colSpan={8} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">{grpTitles[myGrp!]}</td>
-                        <td className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right whitespace-nowrap">{coutGroupeEl(myGrp)}{formatMontant(grpSub[myGrp!] || 0)}</td>
+                        {/* Le coût chantier du groupe va dans la cellule du titre : dans celle du sous-total
+                            (en nowrap), il élargissait la colonne Total HT au détriment de la désignation. */}
+                        <td colSpan={8} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' }}>
+                            <span>{grpTitles[myGrp!]}</span>{coutGroupeEl(myGrp)}
+                          </div>
+                        </td>
+                        <td className="py-1.5 px-1 text-xs font-bold text-[#CC0000] text-right whitespace-nowrap">{formatMontant(grpSub[myGrp!] || 0)}</td>
                       </tr>
                     )}
                     {/* Ligne produit principal */}
@@ -1397,8 +1403,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     <Fragment key={l.id}>
                       {showHeaderS && (
                         <tr className="bg-primary/[0.03] border-t border-[#CC0000]" data-pdf-no-break-after="true">
-                          <td colSpan={colSpan - 1} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">{grpTitlesS[myGrpS!]}</td>
-                          <td className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right whitespace-nowrap">{coutGroupeEl(myGrpS)}{formatMontant(grpSubS[myGrpS!] || 0)}</td>
+                          <td colSpan={colSpan - 1} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' }}>
+                              <span>{grpTitlesS[myGrpS!]}</span>{coutGroupeEl(myGrpS)}
+                            </div>
+                          </td>
+                          <td className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right whitespace-nowrap">{formatMontant(grpSubS[myGrpS!] || 0)}</td>
                         </tr>
                       )}
                       <tr className="border-b border-border">
