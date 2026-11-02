@@ -3,8 +3,9 @@ import { Plus, Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { InputNombre } from '@/components/InputNombre';
-import { consommationsParPalier, type DosageEpaisseur, type PalierDosage, type RatioCharge } from '@/lib/dosageEpaisseur';
-import type { ConsoUsage } from '@/lib/store';
+import ProduitCombobox from '@/components/ProduitCombobox';
+import { consommationsParPalier, partsDeCharge, type DosageEpaisseur, type PalierDosage, type RatioCharge } from '@/lib/dosageEpaisseur';
+import { designationProduit, type ConsoUsage, type Produit } from '@/lib/store';
 
 /**
  * La conso selon l'épaisseur : conso par mm (kg/m², et kg/ml pour les lignes
@@ -21,9 +22,11 @@ interface Props {
   kitKg?: number;
   /** Remplace les consommations par usage par celles du tableau. */
   onConsommations: (c: ConsoUsage[]) => void;
+  /** Catalogue, pour désigner l'article de la charge (sable…). */
+  produits?: Produit[];
 }
 
-export default function DosageEpaisseurEditor({ value, onChange, kitKg, onConsommations }: Props) {
+export default function DosageEpaisseurEditor({ value, onChange, kitKg, onConsommations, produits }: Props) {
   const d = value;
   // Ouvert dès qu'il y a quelque chose à montrer ; « Retirer » vide le dosage (enregistré à null).
   const [ouvert, setOuvert] = useState(() => !!d && (d.kgM2ParMm > 0 || !!d.kgMlParMm || d.paliers.length > 0 || !!d.ratios?.length));
@@ -82,10 +85,36 @@ export default function DosageEpaisseurEditor({ value, onChange, kitKg, onConsom
                   <span className="text-muted-foreground shrink-0">kg/m² par mm</span>
                   <div className="w-24"><InputNombre decimales={3} value={r.kgMlParMm} onChange={v => majRatio(i, { kgMlParMm: v || undefined })} placeholder="facultatif" /></div>
                   <span className="text-muted-foreground shrink-0" title="Pour les lignes au mètre linéaire (gorges, plinthes…)">kg/ml par mm</span>
+                  {d.charge && (
+                    <span className={`text-[11px] ${partsDeCharge(r.libelle) == null ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                      {partsDeCharge(r.libelle) == null
+                        ? 'ratio illisible (attendu 1:5) : pas de charge'
+                        : kitKg && kitKg > 0 ? `→ ${String(Math.round(kitKg * partsDeCharge(r.libelle)! * 100) / 100).replace('.', ',')} kg de charge par kit` : ''}
+                    </span>
+                  )}
                   <button type="button" title="Retirer ce ratio" onClick={() => majRatios(rs => rs.filter((_, j) => j !== i))}
                     className="text-muted-foreground hover:text-destructive"><Trash className="w-3.5 h-3.5" /></button>
                 </div>
               ))}
+              {/* La charge du ratio (1:5 = 5 kg par kg de produit) : ligne ajoutée sous le produit dans le devis. */}
+              <div className="flex flex-wrap items-center gap-2 text-xs border-t border-border pt-1.5">
+                <span className="text-muted-foreground shrink-0" title="1:5 = 5 kg de charge par kg de produit (en poids), par kit gâché">Charge ajoutée au devis</span>
+                <Input value={d.charge?.libelle ?? ''} placeholder="Sable de quartz (vide = pas de ligne)"
+                  onChange={e => onChange({ ...d, charge: e.target.value ? { ...d.charge, libelle: e.target.value } : (d.charge?.produitId ? { ...d.charge, libelle: '' } : undefined) })}
+                  className="h-8 text-sm flex-1 min-w-[160px]" />
+                {produits && (
+                  <div className="w-64">
+                    <ProduitCombobox produits={produits} value={d.charge?.produitId ?? ''}
+                      onSelect={id => {
+                        const p = produits.find(x => x.id === id);
+                        onChange({ ...d, charge: id ? { libelle: d.charge?.libelle || (p ? designationProduit(p) : ''), produitId: id } : (d.charge?.libelle ? { libelle: d.charge.libelle } : undefined) });
+                      }} />
+                  </div>
+                )}
+              </div>
+              {d.charge && !(kitKg && kitKg > 0) && (
+                <span className="text-[11px] text-amber-600">Renseignez le poids du kit : la charge se calcule par kit (poids × ratio)</span>
+              )}
             </div>
           )}
           {d.paliers.map((p, i) => (

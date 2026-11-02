@@ -34,6 +34,11 @@
  * devis choisit le sien (`LigneDevis.ratioCharge`, le premier par défaut), qui
  * remplace la conso par mm de base.
  *
+ * LA CHARGE DU RATIO (`DosageEpaisseur.charge`) : 1:5 = 5 kg de charge par kg
+ * de produit, en poids. Elle suit les kits comme un granulat (kit gâché
+ * entier) : kits × poids du kit × 5. Ligne rattachée par `granulatDe`, sous
+ * le libellé de la charge — changer de ratio garde la ligne, sa quantité suit.
+ *
  * Le dosage vit sur l'article (`Produit.dosageEpaisseur`, colonne jsonb
  * `dosage_epaisseur`), l'épaisseur sur la ligne du devis
  * (`LigneDevis.epaisseurMm`) ; une ligne de granulat se rattache à sa ligne
@@ -46,6 +51,8 @@ export interface AjoutDosage {
   kgParKit: number;
   /** Article du catalogue, s'il existe. Absent = ligne libre, prix à saisir. */
   produitId?: string;
+  /** Charge d'un ratio (« 1:5 ») plutôt que granulat d'un palier : seul le libellé de la ligne libre change. */
+  ratio?: string;
 }
 
 export interface PalierDosage {
@@ -70,6 +77,8 @@ export interface DosageEpaisseur {
   kgMlParMm?: number;
   /** Ratios de charge : chacun sa conso par mm, qui remplace celle de base. */
   ratios?: RatioCharge[];
+  /** La charge gâchée selon le ratio (sable…) : ajoutée en ligne sous le produit. */
+  charge?: { libelle: string; produitId?: string };
   /** Vide : produit simple, conso par mm seule (palier implicite à 0 mm). */
   paliers: PalierDosage[];
   /** D'où viennent les chiffres (fiche, date) — affiché, jamais calculé. */
@@ -103,10 +112,14 @@ export function lireDosage(v: unknown): DosageEpaisseur | undefined {
       ...(Number(r.kgMlParMm) > 0 ? { kgMlParMm: Number(r.kgMlParMm) } : {}),
     }));
   if (!kgM2ParMm && !kgMlParMm && !ratios.length) return undefined;
+  const charge = d.charge?.libelle?.trim()
+    ? { libelle: d.charge.libelle.trim(), ...(d.charge.produitId ? { produitId: d.charge.produitId } : {}) }
+    : undefined;
   return {
     kgM2ParMm,
     ...(kgMlParMm ? { kgMlParMm } : {}),
     ...(ratios.length ? { ratios } : {}),
+    ...(charge ? { charge } : {}),
     paliers: (Array.isArray(d.paliers) ? d.paliers : [])
       .filter(p => p && Number(p.epaisseurMinMm) > 0)
       .map(p => ({
@@ -131,6 +144,25 @@ export function dosagePourRatio(d: DosageEpaisseur, ratio?: string): DosageEpais
   if (!r) return d;
   const { kgMlParMm: _base, ...reste } = d;
   return { ...reste, kgM2ParMm: r.kgM2ParMm, ...(r.kgMlParMm ? { kgMlParMm: r.kgMlParMm } : {}) };
+}
+
+/** Parts de charge par part de produit : « 1:5 » → 5, « 1 : 7,5 » → 7,5, « 2/7 » → 3,5. `null` si illisible. */
+export function partsDeCharge(ratio: string | undefined): number | null {
+  const m = ratio?.trim().match(/^(\d+(?:[.,]\d+)?)\s*[:/]\s*(\d+(?:[.,]\d+)?)$/);
+  if (!m) return null;
+  const [a, b] = [m[1], m[2]].map(x => Number(x.replace(',', '.')));
+  return a > 0 && b > 0 ? b / a : null;
+}
+
+/**
+ * La charge à gâcher au ratio retenu, en kg par kit : `[]` sans charge sur la
+ * fiche, sans ratio lisible, ou sans poids de kit (on ne devine pas).
+ */
+export function ajoutsCharge(d: DosageEpaisseur, ratio: string | undefined, kitKg: number | undefined): AjoutDosage[] {
+  const r = ratioRetenu(d, ratio);
+  const parts = partsDeCharge(r?.libelle);
+  if (!d.charge || !r || parts == null || !(kitKg && kitKg > 0)) return [];
+  return [{ ...d.charge, kgParKit: arrondi(kitKg * parts, 2), ratio: r.libelle }];
 }
 
 const PALIER_SEUL: PalierDosage = { epaisseurMinMm: 0, ajouts: [] };
@@ -190,15 +222,16 @@ export function usageEpaisseur(c: Pick<CalculDosage, 'epaisseurMm' | 'palier'>, 
   return ratio ? `${ep}, ratio ${ratio}` : ep;
 }
 
-/** Désignation d'une ligne de granulat sans article. */
+/** Désignation d'une ligne de granulat (ou de charge) sans article. */
 export function libelleGranulat(a: AjoutDosage, epaisseurMm: number): string {
   const n = (x: number) => String(x).replace('.', ',');
+  if (a.ratio) return `${a.libelle} (charge ratio ${a.ratio} : ${n(a.kgParKit)} kg par kit)`;
   return `${a.libelle} (charge du mortier ép. ${n(epaisseurMm)} mm : ${n(a.kgParKit)} kg par kit)`;
 }
 
 /** Le libellé a-t-il été posé par `libelleGranulat` (donc à suivre quand l'épaisseur change) ? */
 export const libelleGranulatAuto = (description: string, a: Pick<AjoutDosage, 'libelle'>) =>
-  description.startsWith(`${a.libelle} (charge du mortier ép. `);
+  description.startsWith(`${a.libelle} (charge du mortier ép. `) || description.startsWith(`${a.libelle} (charge ratio `);
 
 /** Quantité d'une ligne de granulat : kilos (ligne libre) ou contenants entiers de l'article. */
 export function quantiteGranulat(kits: number, a: AjoutDosage, poidsArticle?: number): number {

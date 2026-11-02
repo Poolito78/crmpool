@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  calculerDosage, consoMlEpaisseur, dosagePourRatio, ratioRetenu, consommationsParPalier, copierLignes, kgGranulat, lireDosage, palierPour, usageEpaisseur,
+  ajoutsCharge, calculerDosage, consoMlEpaisseur, dosagePourRatio, libelleGranulat, libelleGranulatAuto, partsDeCharge, ratioRetenu, consommationsParPalier, copierLignes, kgGranulat, lireDosage, palierPour, usageEpaisseur,
   type DosageEpaisseur,
 } from './dosageEpaisseur';
 
@@ -148,5 +148,35 @@ describe('ratio de charge', () => {
   it("l'usage cite le ratio", () => {
     const c = calculerDosage(dosagePourRatio(D, '1:7'), undefined, 10)!;
     expect(usageEpaisseur(c, '1:7')).toBe('Épaisseur 10 mm, ratio 1:7');
+  });
+});
+
+describe('charge du ratio', () => {
+  const D = lireDosage({ kgM2ParMm: 0, paliers: [], charge: { libelle: ' Sable de quartz ' }, ratios: [
+    { libelle: '1:5', kgM2ParMm: 0.35 }, { libelle: '1:7', kgM2ParMm: 0.26 }, { libelle: 'fin', kgM2ParMm: 0.5 },
+  ] })!;
+
+  it('lit le ratio', () => {
+    expect(partsDeCharge('1:5')).toBe(5);
+    expect(partsDeCharge(' 1 : 7,5 ')).toBe(7.5);
+    expect(partsDeCharge('2/7')).toBe(3.5);
+    expect(partsDeCharge('fin')).toBeNull();
+    expect(partsDeCharge(undefined)).toBeNull();
+  });
+
+  it('kg de charge par kit = poids du kit × parts', () => {
+    expect(D.charge).toEqual({ libelle: 'Sable de quartz' });
+    expect(ajoutsCharge(D, '1:7', 10)).toEqual([{ libelle: 'Sable de quartz', kgParKit: 70, ratio: '1:7' }]);
+    expect(ajoutsCharge(D, undefined, 10)[0].kgParKit).toBe(50);
+    expect(ajoutsCharge(D, 'fin', 10)).toEqual([]);
+    expect(ajoutsCharge(D, '1:5', undefined)).toEqual([]);
+    expect(ajoutsCharge({ ...D, charge: undefined }, '1:5', 10)).toEqual([]);
+  });
+
+  it('libellé de la ligne libre, suivi au changement de ratio', () => {
+    const [a] = ajoutsCharge(D, '1:5', 10);
+    const lib = libelleGranulat(a, 6);
+    expect(lib).toBe('Sable de quartz (charge ratio 1:5 : 50 kg par kit)');
+    expect(libelleGranulatAuto(lib, a)).toBe(true);
   });
 });

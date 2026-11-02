@@ -2723,7 +2723,7 @@ export default function Produits() {
               ))}
             </div>
             {/* Mortier chargé selon l'épaisseur (Flowfast F1 Mortar) : le devis en tire la conso du kit et propose les granulats. */}
-            <DosageEpaisseurEditor value={form.dosageEpaisseur} kitKg={form.poids || undefined}
+            <DosageEpaisseurEditor value={form.dosageEpaisseur} kitKg={form.poids || undefined} produits={produits}
               onChange={d => setForm(p => ({ ...p, dosageEpaisseur: d }))}
               onConsommations={c => setForm(p => ({ ...p, consommations: c }))} />
             {/* Article consommé au m² (toile de verre…) : une unité de vente couvre N m², le devis en déduit la quantité à la surface. */}
