@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ajoutsCharge, calculerDosage, consoMlEpaisseur, dosagePourRatio, libelleGranulat, libelleGranulatAuto, partsDeCharge, ratioRetenu, consommationsParPalier, copierLignes, kgGranulat, lireDosage, palierPour, usageEpaisseur,
+  ajoutsCharge, calculerDosage, consoProduitRatio, consoMlEpaisseur, dosagePourRatio, libelleGranulat, libelleGranulatAuto, partsDeCharge, ratioRetenu, consommationsParPalier, copierLignes, kgGranulat, lireDosage, palierPour, usageEpaisseur,
   type DosageEpaisseur,
 } from './dosageEpaisseur';
 
@@ -178,5 +178,25 @@ describe('charge du ratio', () => {
     const lib = libelleGranulat(a, 6);
     expect(lib).toBe('Sable de quartz (charge ratio 1:5 : 50 kg par kit)');
     expect(libelleGranulatAuto(lib, a)).toBe(true);
+  });
+});
+
+describe('conso saisie pour la charge ou le mélange (Protop 1000 + ISGB1)', () => {
+  it('conso de la charge : ÷ parts', () => {
+    expect(consoProduitRatio({ libelle: '1:5', kgM2ParMm: 1.77, consoDe: 'charge' })).toEqual({ kgM2ParMm: 0.354 });
+  });
+  it('conso du mélange : ÷ (1 + parts)', () => {
+    expect(consoProduitRatio({ libelle: '1:7', kgM2ParMm: 2, kgMlParMm: 0.4, consoDe: 'melange' })).toEqual({ kgM2ParMm: 0.25, kgMlParMm: 0.05 });
+  });
+  it('ratio illisible : rien ne se calcule', () => {
+    expect(consoProduitRatio({ libelle: 'fin', kgM2ParMm: 1.77, consoDe: 'charge' })).toEqual({ kgM2ParMm: 0 });
+    expect(consoProduitRatio({ libelle: 'fin', kgM2ParMm: 1.77 })).toEqual({ kgM2ParMm: 1.77 });
+  });
+  it('au devis : 100 m² à 5 mm, 1:5 → Protop 177 kg, la charge suit les kits (75 kg par kit de 15 kg)', () => {
+    const D = lireDosage({ kgM2ParMm: 0, paliers: [], charge: { libelle: 'ISGB1' },
+      ratios: [{ libelle: '1:5', kgM2ParMm: 1.77, consoDe: 'charge' }] })!;
+    expect(D.ratios![0].consoDe).toBe('charge');
+    expect(calculerDosage(dosagePourRatio(D, '1:5'), 15, 5)!.consoKitKgM2).toBe(1.77);
+    expect(ajoutsCharge(D, '1:5', 15)[0].kgParKit).toBe(75);
   });
 });

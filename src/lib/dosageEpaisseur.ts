@@ -32,7 +32,9 @@
  * RATIO DE CHARGE (1:5, 1:7…) : la conso par mm dépend de la charge gâchée
  * avec le produit. Chaque ratio porte sa conso par mm (m², ml) ; la ligne du
  * devis choisit le sien (`LigneDevis.ratioCharge`, le premier par défaut), qui
- * remplace la conso par mm de base.
+ * remplace la conso par mm de base. La fiche technique la donne parfois pour
+ * la CHARGE (ISGB1 à 1:5 : 1,77 kg/m²/mm) ou pour le MÉLANGE : `consoDe` le
+ * dit, et la conso du produit s'en déduit par les parts (÷ 5, ÷ 6 à 1:5).
  *
  * LA CHARGE DU RATIO (`DosageEpaisseur.charge`) : 1:5 = 5 kg de charge par kg
  * de produit, en poids. Elle suit les kits comme un granulat (kit gâché
@@ -61,13 +63,18 @@ export interface PalierDosage {
   ajouts: AjoutDosage[];
 }
 
+/** De quoi est la conso saisie pour un ratio : du produit (défaut), de la charge, ou du mélange des deux. */
+export type ConsoDe = 'produit' | 'charge' | 'melange';
+
 export interface RatioCharge {
   /** « 1:5 » — clé du choix retenu sur la ligne du devis. */
   libelle: string;
-  /** Conso du produit à ce ratio, en kg/m² par mm. */
+  /** Conso à ce ratio, en kg/m² par mm — du produit, sauf `consoDe`. */
   kgM2ParMm: number;
   /** Idem au mètre linéaire, kg/ml par mm. */
   kgMlParMm?: number;
+  /** Absent : la conso saisie est celle du produit. */
+  consoDe?: Exclude<ConsoDe, 'produit'>;
 }
 
 export interface DosageEpaisseur {
@@ -110,6 +117,7 @@ export function lireDosage(v: unknown): DosageEpaisseur | undefined {
       libelle: r.libelle.trim(),
       kgM2ParMm: Number(r.kgM2ParMm) > 0 ? Number(r.kgM2ParMm) : 0,
       ...(Number(r.kgMlParMm) > 0 ? { kgMlParMm: Number(r.kgMlParMm) } : {}),
+      ...(r.consoDe === 'charge' || r.consoDe === 'melange' ? { consoDe: r.consoDe } : {}),
     }));
   if (!kgM2ParMm && !kgMlParMm && !ratios.length) return undefined;
   const charge = d.charge?.libelle?.trim()
@@ -138,12 +146,24 @@ export function ratioRetenu(d: DosageEpaisseur, ratio?: string): RatioCharge | u
   return d.ratios.find(r => r.libelle === ratio) ?? d.ratios[0];
 }
 
-/** Le dosage au ratio retenu : sa conso par mm remplace celle de base. */
+/**
+ * La conso par mm DU PRODUIT à ce ratio, déduite de celle saisie : ÷ parts
+ * pour la charge, ÷ (1 + parts) pour le mélange. 0 si le ratio est illisible
+ * alors qu'il faudrait le lire — rien ne se calcule plutôt qu'un faux chiffre.
+ */
+export function consoProduitRatio(r: RatioCharge): { kgM2ParMm: number; kgMlParMm?: number } {
+  const parts = partsDeCharge(r.libelle);
+  const f = !r.consoDe ? 1 : parts == null ? 0 : r.consoDe === 'charge' ? 1 / parts : 1 / (1 + parts);
+  const ml = r.kgMlParMm ? arrondi(r.kgMlParMm * f, 4) : 0;
+  return { kgM2ParMm: arrondi(r.kgM2ParMm * f, 4), ...(ml ? { kgMlParMm: ml } : {}) };
+}
+
+/** Le dosage au ratio retenu : la conso par mm du produit à ce ratio remplace celle de base. */
 export function dosagePourRatio(d: DosageEpaisseur, ratio?: string): DosageEpaisseur {
   const r = ratioRetenu(d, ratio);
   if (!r) return d;
   const { kgMlParMm: _base, ...reste } = d;
-  return { ...reste, kgM2ParMm: r.kgM2ParMm, ...(r.kgMlParMm ? { kgMlParMm: r.kgMlParMm } : {}) };
+  return { ...reste, ...consoProduitRatio(r) };
 }
 
 /** Parts de charge par part de produit : « 1:5 » → 5, « 1 : 7,5 » → 7,5, « 2/7 » → 3,5. `null` si illisible. */

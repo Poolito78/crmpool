@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { InputNombre } from '@/components/InputNombre';
 import ProduitCombobox from '@/components/ProduitCombobox';
-import { consommationsParPalier, partsDeCharge, type DosageEpaisseur, type PalierDosage, type RatioCharge } from '@/lib/dosageEpaisseur';
+import { consommationsParPalier, consoProduitRatio, partsDeCharge, type ConsoDe, type DosageEpaisseur, type PalierDosage, type RatioCharge } from '@/lib/dosageEpaisseur';
 import { designationProduit, type ConsoUsage, type Produit } from '@/lib/store';
 
 /**
@@ -85,6 +85,21 @@ export default function DosageEpaisseurEditor({ value, onChange, kitKg, onConsom
                   <span className="text-muted-foreground shrink-0">kg/m² par mm</span>
                   <div className="w-24"><InputNombre decimales={3} value={r.kgMlParMm} onChange={v => majRatio(i, { kgMlParMm: v || undefined })} placeholder="facultatif" /></div>
                   <span className="text-muted-foreground shrink-0" title="Pour les lignes au mètre linéaire (gorges, plinthes…)">kg/ml par mm</span>
+                  {/* La fiche donne la conso du produit, de la charge ou du mélange : celle du produit s'en déduit par le ratio. */}
+                  <select value={r.consoDe ?? 'produit'} title="De quoi est cette conso sur la fiche technique"
+                    onChange={e => majRatio(i, { consoDe: e.target.value === 'produit' ? undefined : e.target.value as Exclude<ConsoDe, 'produit'> })}
+                    className="h-8 rounded-md border border-input bg-background px-1 text-xs">
+                    <option value="produit">du produit</option>
+                    <option value="charge">de la charge</option>
+                    <option value="melange">du mélange</option>
+                  </select>
+                  {r.consoDe && r.kgM2ParMm > 0 && (
+                    <span className={`text-[11px] ${partsDeCharge(r.libelle) == null ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                      {partsDeCharge(r.libelle) == null
+                        ? 'ratio illisible (attendu 1:5)'
+                        : `= ${String(consoProduitRatio(r).kgM2ParMm).replace('.', ',')} kg/m²/mm de produit`}
+                    </span>
+                  )}
                   {d.charge && (
                     <span className={`text-[11px] ${partsDeCharge(r.libelle) == null ? 'text-amber-600' : 'text-muted-foreground'}`}>
                       {partsDeCharge(r.libelle) == null

@@ -48,7 +48,7 @@ import {
 import VarianteCompoDialog from '@/components/VarianteCompoDialog';
 import EpaisseurInput from '@/components/EpaisseurInput';
 import {
-  ajoutsCharge, calculerDosage, consoMlEpaisseur, copierLignes, dosagePourRatio, ratioRetenu, epaisseurMinimale, kgGranulat, libelleGranulat, libelleGranulatAuto, palierPour, quantiteGranulat, usageEpaisseur,
+  ajoutsCharge, calculerDosage, consoMlEpaisseur, consoProduitRatio, copierLignes, dosagePourRatio, ratioRetenu, epaisseurMinimale, kgGranulat, libelleGranulat, libelleGranulatAuto, palierPour, quantiteGranulat, usageEpaisseur,
   type AjoutDosage,
 } from '@/lib/dosageEpaisseur';
 import {
@@ -4787,7 +4787,7 @@ export default function Devis() {
                             <SelectContent>
                               {prod.dosageEpaisseur.ratios.map(r => (
                                 <SelectItem key={r.libelle} value={r.libelle}>
-                                  {r.libelle} — {String(r.kgM2ParMm).replace('.', ',')} kg/m²/mm
+                                  {r.libelle} — {String(consoProduitRatio(r).kgM2ParMm).replace('.', ',')} kg/m²/mm
                                 </SelectItem>
                               ))}
                             </SelectContent>
