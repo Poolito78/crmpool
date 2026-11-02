@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  ajoutsCharge, calculerDosage, consoProduitRatio, consoMlEpaisseur, dosagePourRatio, libelleGranulat, libelleGranulatAuto, partsDeCharge, ratioRetenu, consommationsParPalier, copierLignes, kgGranulat, lireDosage, palierPour, usageEpaisseur,
+  ajoutsCharge, calculerDosage, consoGranulat, consoProduitRatio, consoMlEpaisseur, dosagePourRatio, libelleGranulat, libelleGranulatAuto, partsDeCharge, ratioRetenu, consommationsParPalier, copierLignes, kgGranulat, lireDosage, palierPour, usageEpaisseur,
   type DosageEpaisseur,
 } from './dosageEpaisseur';
 
@@ -198,5 +198,16 @@ describe('conso saisie pour la charge ou le mélange (Protop 1000 + ISGB1)', () 
     expect(D.ratios![0].consoDe).toBe('charge');
     expect(calculerDosage(dosagePourRatio(D, '1:5'), 15, 5)!.consoKitKgM2).toBe(1.77);
     expect(ajoutsCharge(D, '1:5', 15)[0].kgParKit).toBe(75);
+  });
+});
+
+describe('conso de la charge, déduite du kit', () => {
+  it('Protop 1000 22,3 kg à 1:5, 4 mm : 1,414 kg/m² de produit → 7,07 kg/m² de charge', () => {
+    expect(consoGranulat({ consommation: 1.414 }, 22.3 * 5, 22.3)).toEqual({ consommation: 7.07 });
+  });
+  it('au ml aussi, rien sans poids de kit ni conso', () => {
+    expect(consoGranulat({ consommationMl: 0.2 }, 75, 15)).toEqual({ consommationMl: 1 });
+    expect(consoGranulat({ consommation: 1.4 }, 75, undefined)).toEqual({});
+    expect(consoGranulat({}, 75, 15)).toEqual({});
   });
 });

@@ -49,7 +49,7 @@ import {
 import VarianteCompoDialog from '@/components/VarianteCompoDialog';
 import EpaisseurInput from '@/components/EpaisseurInput';
 import {
-  ajoutsCharge, calculerDosage, consoMlEpaisseur, consoProduitRatio, copierLignes, dosagePourRatio, ratioRetenu, epaisseurMinimale, kgGranulat, libelleGranulat, libelleGranulatAuto, palierPour, quantiteGranulat, usageEpaisseur,
+  ajoutsCharge, calculerDosage, consoGranulat, consoMlEpaisseur, consoProduitRatio, copierLignes, dosagePourRatio, ratioRetenu, epaisseurMinimale, kgGranulat, libelleGranulat, libelleGranulatAuto, palierPour, quantiteGranulat, usageEpaisseur,
   type AjoutDosage,
 } from '@/lib/dosageEpaisseur';
 import {
@@ -1434,21 +1434,29 @@ export default function Devis() {
 
   /* LES GRANULATS D'UN MORTIER DOSÉ SUIVENT SES KITS (dosageEpaisseur.ts) :
      kits de la ligne du mortier × kg par kit du mélange de son épaisseur. Une
-     quantité forcée à la main (`qteMode: 'manuel'`) n'est plus réécrite. */
+     quantité forcée à la main (`qteMode: 'manuel'`) n'est plus réécrite.
+     SA CONSO SUIT CELLE DU KIT (`consoGranulat`), même forcée : elle s'affiche
+     sur la ligne et compte au coût chantier. */
   useEffect(() => {
     if (calculsAOuverture(lignes)) return;   // devis rouvert, rien touché : il reste tel quel
     let change = false;
     const estRev = clients.find(c => c.id === clientId)?.estRevendeur;
     const suivantes = lignes.map(l => {
-      if (!l.granulatDe || l.qteMode === 'manuel') return l;
+      if (!l.granulatDe) return l;
       const a = ajoutDeGranulat(lignes, l);
       const parent = lignes.find(x => x.id === l.granulatDe!.ligneId);
       if (!a || !parent) return l;
+      const kitKg = parent.produitId ? produitParId(produits, parent.produitId)?.poids : undefined;
+      const conso = consoGranulat(parent, a.kgParKit, kitKg);
+      const consoChange = conso.consommation !== l.consommation || conso.consommationMl !== l.consommationMl;
       const art = l.produitId ? produitParId(produits, l.produitId) : undefined;
-      const q = quantiteGranulat(parent.quantite, a, art?.poids);
-      if (q === l.quantite) return l;
+      const q = l.qteMode === 'manuel' ? l.quantite : quantiteGranulat(parent.quantite, a, art?.poids);
+      if (q === l.quantite && !consoChange) return l;
       change = true;
-      return { ...l, quantite: q, ...(art && q > 0 ? { prixUnitaireHT: prixConserve(l, getPrixLigne(art, q, l.variantesChoisies, estRev)) } : {}) };
+      return {
+        ...l, consommation: conso.consommation, consommationMl: conso.consommationMl, quantite: q,
+        ...(q !== l.quantite && art && q > 0 ? { prixUnitaireHT: prixConserve(l, getPrixLigne(art, q, l.variantesChoisies, estRev)) } : {}),
+      };
     });
     if (change) setLignes(suivantes);
   }, [lignes, produits]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -5304,7 +5312,15 @@ ${dosage.source}` : ''}`}>
                                           Quantité forcée à la main — recalculer ({String(kgGranulat(parent.quantite, a.kgParKit)).replace('.', ',')} kg)
                                         </button>
                                       ) : (
-                                        <span>Suit les kits de la ligne #{ligneNums[parent.id]} : {parent.quantite || 0} × {String(a.kgParKit).replace('.', ',')} kg</span>
+                                        <span>
+                                          Suit les kits de la ligne #{ligneNums[parent.id]} : {parent.quantite || 0} × {String(a.kgParKit).replace('.', ',')} kg
+                                          {/* La conso se déduit de celle du kit (consoGranulat) : charge 1:5 = 5 × la conso du produit. */}
+                                          {l.consommation != null && parent.consommation != null && (
+                                            <span title="Conso du kit × kg de charge par kit ÷ poids du kit : la quantité suit les kits gâchés entiers, d'où l'écart avec surface × conso">
+                                              {' · conso '}{String(l.consommation).replace('.', ',')} kg/m² ({String(parent.consommation).replace('.', ',')} kg/m² × {String(a.kgParKit).replace('.', ',')} ÷ {String(produitParId(produits, parent.produitId!)?.poids ?? '').replace('.', ',')} kg)
+                                            </span>
+                                          )}
+                                        </span>
                                       )}
                                       {!l.produitId && !(l.prixUnitaireHT > 0) && (
                                         <span className="text-amber-600">Pas d'article au catalogue : prix à saisir</span>

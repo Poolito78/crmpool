@@ -253,6 +253,24 @@ export function libelleGranulat(a: AjoutDosage, epaisseurMm: number): string {
 export const libelleGranulatAuto = (description: string, a: Pick<AjoutDosage, 'libelle'>) =>
   description.startsWith(`${a.libelle} (charge du mortier ép. `) || description.startsWith(`${a.libelle} (charge ratio `);
 
+/**
+ * LA CONSO D'UN GRANULAT OU D'UNE CHARGE, déduite de celle du kit : le mélange
+ * se fait par kit, donc kg du granulat par kit × conso du kit ÷ poids du kit
+ * (charge 1:5 : 5 × la conso du produit). Au m² comme au ml. Elle s'affiche
+ * sur sa ligne et compte au coût chantier ; la quantité, elle, suit les kits
+ * gâchés entiers (`quantiteGranulat`). Rien sans poids de kit ni conso.
+ */
+export function consoGranulat(
+  parent: { consommation?: number; consommationMl?: number }, kgParKit: number, kitKg: number | undefined,
+): { consommation?: number; consommationMl?: number } {
+  if (!(kitKg && kitKg > 0) || !(kgParKit > 0)) return {};
+  const f = kgParKit / kitKg;
+  return {
+    ...(parent.consommation && parent.consommation > 0 ? { consommation: arrondi(parent.consommation * f) } : {}),
+    ...(parent.consommationMl && parent.consommationMl > 0 ? { consommationMl: arrondi(parent.consommationMl * f) } : {}),
+  };
+}
+
 /** Quantité d'une ligne de granulat : kilos (ligne libre) ou contenants entiers de l'article. */
 export function quantiteGranulat(kits: number, a: AjoutDosage, poidsArticle?: number): number {
   const kg = kgGranulat(kits, a.kgParKit);
