@@ -1254,8 +1254,28 @@ export default function Produits() {
     else navigate(returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis');
   }
 
-  function save(andReturn: false | 'devis' | 'commande' = false) {
+  async function save(andReturn: false | 'devis' | 'commande' = false) {
     if (!form.description.trim() || !form.reference.trim()) { toast.error('Référence et description requis'); return; }
+    /* UNE RÉFÉRENCE DÉJÀ PRISE EST REFUSÉE ICI, pas par la base après coup :
+       « Produit modifié » s'affichait, puis la base rejetait TOUTE la ligne
+       (index unique `idx_produits_reference_unique`) — la référence Odoo
+       saisie en même temps comprise. Deux articles identiques se lient par
+       la RÉFÉRENCE ODOO (jumeaux), jamais par la même référence MonCRM.
+       Vérifié en base : le catalogue en mémoire peut être partiel. */
+    if (!editing || form.reference !== editing.reference) {
+      let q = supabase.from('produits').select('id, reference, description, description_variante').eq('reference', form.reference);
+      if (editing) q = q.neq('id', editing.id);
+      const { data: pris } = await q.limit(1);
+      const autre = (pris as { reference: string; description: string; description_variante?: string }[] | null)?.[0];
+      if (autre) {
+        toast.error(
+          `La référence ${form.reference} est déjà utilisée par l'article « ${designationProduit({ description: autre.description, descriptionVariante: autre.description_variante ?? undefined })} ». `
+            + 'Choisissez une autre référence ; pour lier deux articles identiques, renseignez la Référence Odoo.',
+          { duration: 15000 },
+        );
+        return;
+      }
+    }
     /* Recréer à la main un article supprimé le sort de la liste noire. */
     if (!editing) void retirerDeLaListeNoire(form);
     const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');

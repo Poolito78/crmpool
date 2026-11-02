@@ -2715,6 +2715,21 @@ export function useStore() {
     });
   }, []);
 
+  /**
+   * UNE MODIFICATION REFUSÉE PAR LA BASE NE RESTE PAS À L'ÉCRAN.
+   *
+   * La liste gardait la valeur refusée (PROTOP1000223 renommé en
+   * PROTOP100022, référence déjà prise) : chaque enregistrement suivant la
+   * renvoyait, et la base refusait toute la ligne — la référence Odoo saisie
+   * ensuite avec. On relit donc l'article tel qu'il est en base.
+   */
+  const relireProduit = useCallback(async (id: string) => {
+    const { data, error } = await supabase.from('produits').select('*').eq('id', id).maybeSingle();
+    if (error || !data) return;
+    const row = data as Record<string, unknown>;
+    setProduits(prev => prev.map(p => (p.id === id ? fusionnerColonnesLourdes(p, dbToProduit(row), row) : p)));
+  }, []);
+
   const updateProduits = useCallback((fn: (prev: Produit[]) => Produit[]) => {
     setProduits(prev => {
       const next = dater(prev, fn(prev));
@@ -2723,7 +2738,9 @@ export function useStore() {
         const signaler = (quoi: string) => ({ error }: { error: { message: string } | null }) => {
           if (!error) return;
           console.error(`[produits ${quoi}]`, error.message);
-          toast.error(`Enregistrement du produit refusé : ${error.message}`);
+          toast.error(error.message.includes('idx_produits_reference_unique')
+            ? 'Enregistrement du produit refusé : cette référence est déjà utilisée par un autre article. La fiche revient à ce qui est enregistré.'
+            : `Enregistrement du produit refusé : ${error.message}`, { duration: 15000 });
         };
         const { added, removed, updated } = diffArrays(prev, next);
         if (added.length) {
@@ -2740,7 +2757,10 @@ export function useStore() {
             const ecriture = supabase.from('produits')
               .update(patch as any)
               .eq('id', p.id)
-              .then(signaler('modification'));
+              .then(r => {
+                signaler('modification')(r);
+                if (r.error) void relireProduit(p.id);
+              });
             ecrituresProduits.current.set(p.id, { quand: Date.now(), ecriture });
             const prixTouche = ['prix_achat', 'prix_achat_maj', 'prix_ht', 'prix_vente_maj', 'reference_odoo',
               'type_options', 'lignes_options', 'variantes', 'dosage_epaisseur', 'consommations', 'consommation', 'consommation_ml']
@@ -2757,7 +2777,7 @@ export function useStore() {
       }
       return next;
     });
-  }, [relireJumeaux]);
+  }, [relireJumeaux, relireProduit]);
 
   /**
    * CRÉE DES ARTICLES ET ATTEND LA BASE.
