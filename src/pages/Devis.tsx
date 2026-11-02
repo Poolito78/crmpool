@@ -37,6 +37,7 @@ import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDi
 import RelanceDevisDialogs, { DateRelanceInput, type ModeRelanceOuvert } from '@/components/RelanceDevisDialogs';
 import { estRelance, etatRelance, prochaineRelance, devisARelancer, derniereRelance, ajouterJours, RELANCE_AVANT_REALISATION_JOURS } from '@/lib/relanceDevis';
 import OptionsArticleDialog, { type OptionChoisie } from '@/components/OptionsArticleDialog';
+import { quantiteOption, quantitePourTeinte } from '@/lib/optionsQuantite';
 import TeintesCompoDialog from '@/components/TeintesCompoDialog';
 import DetailCompoLigne from '@/components/DetailCompoLigne';
 import ChampSysteme from '@/components/ChampSysteme';
@@ -1450,6 +1451,24 @@ export default function Devis() {
     if (change) setLignes(suivantes);
   }, [lignes, produits]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* UNE OPTION RÉGLÉE PAR KIT OU PAR TEINTE SUIT SON ARTICLE (optionsQuantite.ts) :
+     quantité de l'article × quantité par kit, celle de la teinte choisie sur la
+     ligne s'il y en a une. Forcée à la main, elle n'est plus réécrite. */
+  useEffect(() => {
+    if (calculsAOuverture(lignes)) return;
+    let change = false;
+    const suivantes = lignes.map(l => {
+      if (!l.optionDe || l.qteMode === 'manuel') return l;
+      const parent = lignes.find(x => x.id === l.optionDe!.ligneId);
+      if (!parent) return l;
+      const q = quantiteOption(l.optionDe, l.variantesChoisies, parent.quantite);
+      if (q === l.quantite) return l;
+      change = true;
+      return { ...l, quantite: q };
+    });
+    if (change) setLignes(suivantes);
+  }, [lignes]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** Le granulat du tableau que porte cette ligne, au mélange de l'épaisseur de son mortier — ou la charge de son ratio. */
   function ajoutDeGranulat(ls: LigneDevis[], l: LigneDevis): AjoutDosage | undefined {
     const parent = l.granulatDe ? ls.find(x => x.id === l.granulatDe!.ligneId) : undefined;
@@ -2055,14 +2074,21 @@ export default function Devis() {
        la ligne en plus, en clair dans la désignation de l'option incluse. */
     const enPlus = choisies.filter(lk => !lk.inclusALaLigne);
     const incluses = choisies.filter(lk => lk.inclusALaLigne);
+    /* QUANTITÉ PAR KIT ET PAR TEINTE (optionsQuantite.ts) : 1 kg de pigment par kit,
+       2 kg en RAL 1023. La règle reste sur la ligne : elle suit l'article et la teinte. */
+    const qteArticle = lignes.find(l => l.id === ligneId)?.quantite ?? 1;
     const nouvelles: LigneDevis[] = enPlus.map(lk => {
       const prod = lk.produitId ? produitParId(produits, lk.produitId) : undefined;
       const diff = prod && lk.variantesChoisies ? getVarianteDiff(prod, lk.variantesChoisies) : 0;
+      const regle = lk.parUnite || lk.quantitesParTeinte?.length
+        ? { ligneId, quantite: lk.quantite, ...(lk.parUnite ? { parUnite: true } : {}), ...(lk.quantitesParTeinte?.length ? { quantitesParTeinte: lk.quantitesParTeinte } : {}) }
+        : undefined;
       return {
         id: generateId(),
         produitId: lk.produitId || undefined,
         description: lk.description,
-        quantite: lk.quantite,
+        quantite: quantiteOption(lk, lk.variantesChoisies, qteArticle),
+        ...(regle ? { optionDe: regle } : {}),
         unite: lk.unite,
         prixUnitaireHT: Math.round((lk.prixUnitaireHT + diff) * 100) / 100,
         tva: 20,
@@ -5055,7 +5081,7 @@ export default function Devis() {
                                   // Catalyseur forcé à la main : le calcul à la température ne le réécrit plus.
                                   if (estCata) updateLigne(l.id, 'catalyseManuelle', true);
                                   // Granulat forcé à la main : il ne suit plus les kits du mortier.
-                                  if (l.granulatDe) updateLigne(l.id, 'qteMode', 'manuel');
+                                  if (l.granulatDe || l.optionDe) updateLigne(l.id, 'qteMode', 'manuel');
                                   // Saisie forcée sur une ligne chiffrée à la surface : on le retient, le besoin chantier des autres lignes en tient compte.
                                   if (hasAutoCalc) setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, qteMode: 'manuel' as const } : li)));
                                 }} className="h-8 text-sm" title={hasAutoCalc ? 'Quantité modifiable : la forcer passe la ligne en « Qté manuel » ; cliquer sur le libellé la recalcule.' : undefined} />,
@@ -5218,7 +5244,7 @@ export default function Devis() {
                               />
                             )}
                             {/* Infos marges, stock Odoo, teinte */}
-                            {((canAchat && (tauxMarque !== null || coeff !== null)) || prixKg !== null || kgReel !== null || !!prod || teintesLigne.length > 0 || !!l.granulatDe) && (
+                            {((canAchat && (tauxMarque !== null || coeff !== null)) || prixKg !== null || kgReel !== null || !!prod || teintesLigne.length > 0 || !!l.granulatDe || !!l.optionDe) && (
                               <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 pl-9 flex-wrap">
                                 {/* Mortier dosé : le mélange de l'épaisseur, et ses granulats à cocher. */}
                                 {dosage && (!l.epaisseurMm ? (
@@ -5279,6 +5305,23 @@ ${dosage.source}` : ''}`}>
                                         <span className="text-amber-600">Pas d'article au catalogue : prix à saisir</span>
                                       )}
                                     </>
+                                  );
+                                })()}
+                                {l.optionDe && (() => {
+                                  const parent = lignes.find(x => x.id === l.optionDe!.ligneId);
+                                  if (!parent) return null;
+                                  const parKit = quantitePourTeinte(l.optionDe.quantite, l.optionDe.quantitesParTeinte, l.variantesChoisies);
+                                  const calcul = quantiteOption(l.optionDe, l.variantesChoisies, parent.quantite);
+                                  const n = (x: number) => String(x).replace('.', ',');
+                                  return l.qteMode === 'manuel' ? (
+                                    <button type="button" onClick={() => updateLigne(l.id, 'qteMode', undefined)} className="text-orange-500 hover:underline"
+                                      title="Cliquer pour revenir au calcul de l'option (par kit, selon la teinte)">
+                                      Quantité forcée à la main — recalculer ({n(calcul)} {l.unite})
+                                    </button>
+                                  ) : l.optionDe.parUnite ? (
+                                    <span>Option de la ligne #{ligneNums[parent.id]} : {parent.quantite || 0} × {n(parKit)} {l.unite}{parKit !== l.optionDe.quantite ? ' (quantité de la teinte)' : ''}</span>
+                                  ) : (
+                                    <span>Option de la ligne #{ligneNums[parent.id]} : {n(parKit)} {l.unite}{parKit !== l.optionDe.quantite ? ' (quantité de la teinte)' : ''}</span>
                                   );
                                 })()}
                                 {compoLigne && (

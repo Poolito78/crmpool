@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { estTypeFiche, type TypeFiche } from './liensProduit';
 import type { VarianteCompo } from './variantesCompo';
 import { lireDosage, type DosageEpaisseur } from './dosageEpaisseur';
+import type { QteTeinte } from './optionsQuantite';
 import { cederLaMain } from './prioriteLecture';
 import {
   lireCacheCatalogue, ecrireCacheCatalogue, lireDeltaCatalogue, appliquerDelta, curseurDe,
@@ -395,6 +396,10 @@ export interface LigneKit {
   prixFige?: boolean;
   /** Options : `true` = incluse à la ligne de l'article, NON chiffrée ; absent = ligne en plus, chiffrée. */
   inclusALaLigne?: boolean;
+  /** Options : `quantite` vaut PAR UNITÉ (kit) de l'article — la ligne suit sa quantité (`optionsQuantite.ts`). */
+  parUnite?: boolean;
+  /** Options : quantité propre à une teinte (RAL 1023 : 2 kg de pigment au lieu de 1). */
+  quantitesParTeinte?: QteTeinte[];
 }
 
 /** Une consommation d'un article pour un usage précis (« Primaire », « Finition »…), en plus de la consommation par défaut. */
@@ -855,6 +860,12 @@ export interface LigneDevis {
    * du mortier × le dosage par kit du palier.
    */
   granulatDe?: { ligneId: string; libelle: string };
+  /**
+   * Ligne d'OPTION dont la quantité suit l'article (`LigneKit.parUnite`) ou la
+   * teinte (`quantitesParTeinte`) : la règle de la fiche, recopiée à l'insertion
+   * (`optionsQuantite.ts`). Forcée à la main (`qteMode: 'manuel'`), elle ne suit plus.
+   */
+  optionDe?: { ligneId: string; quantite: number; parUnite?: boolean; quantitesParTeinte?: QteTeinte[] };
   /**
    * Ligne de CATALYSEUR (CATALYST2) : température du chantier, en °C, parmi
    * celles du tableau ISOFLOOR (`catalyseur.ts`). Absente = 20 °C. La quantité

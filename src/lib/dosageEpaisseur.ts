@@ -278,7 +278,7 @@ export function consommationsParPalier(d: DosageEpaisseur, kitKg: number): { val
  * sans cela, `granulatDe.ligneId` désignerait la ligne du devis d'origine et
  * le granulat ne suivrait plus les kits.
  */
-export function copierLignes<L extends { id: string; granulatDe?: { ligneId: string; libelle: string } }>(
+export function copierLignes<L extends { id: string; granulatDe?: { ligneId: string; libelle: string }; optionDe?: { ligneId: string } }>(
   lignes: L[], nouvelId: () => string,
 ): L[] {
   const ids = new Map(lignes.map(l => [l.id, nouvelId()]));
@@ -286,5 +286,6 @@ export function copierLignes<L extends { id: string; granulatDe?: { ligneId: str
     ...l,
     id: ids.get(l.id)!,
     ...(l.granulatDe ? { granulatDe: { ...l.granulatDe, ligneId: ids.get(l.granulatDe.ligneId) ?? l.granulatDe.ligneId } } : {}),
+    ...(l.optionDe ? { optionDe: { ...l.optionDe, ligneId: ids.get(l.optionDe.ligneId) ?? l.optionDe.ligneId } } : {}),
   }));
 }

@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { InputNombre } from '@/components/InputNombre';
 import ProduitCombobox from '@/components/ProduitCombobox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { consommationsParPalier, consoProduitRatio, partsDeCharge, type ConsoDe, type DosageEpaisseur, type PalierDosage, type RatioCharge } from '@/lib/dosageEpaisseur';
 import { designationProduit, type ConsoUsage, type Produit } from '@/lib/store';
 
@@ -86,13 +87,15 @@ export default function DosageEpaisseurEditor({ value, onChange, kitKg, onConsom
                   <div className="w-24"><InputNombre decimales={3} value={r.kgMlParMm} onChange={v => majRatio(i, { kgMlParMm: v || undefined })} placeholder="facultatif" /></div>
                   <span className="text-muted-foreground shrink-0" title="Pour les lignes au mètre linéaire (gorges, plinthes…)">kg/ml par mm</span>
                   {/* La fiche donne la conso du produit, de la charge ou du mélange : celle du produit s'en déduit par le ratio. */}
-                  <select value={r.consoDe ?? 'produit'} title="De quoi est cette conso sur la fiche technique"
-                    onChange={e => majRatio(i, { consoDe: e.target.value === 'produit' ? undefined : e.target.value as Exclude<ConsoDe, 'produit'> })}
-                    className="h-8 rounded-md border border-input bg-background px-1 text-xs">
-                    <option value="produit">du produit</option>
-                    <option value="charge">de la charge</option>
-                    <option value="melange">du mélange</option>
-                  </select>
+                  {/* Select du projet : un <select> natif dans le dialogue Radix de la fiche annule le choix. */}
+                  <Select value={r.consoDe ?? 'produit'} onValueChange={v => majRatio(i, { consoDe: v === 'produit' ? undefined : v as Exclude<ConsoDe, 'produit'> })}>
+                    <SelectTrigger className="h-8 w-36 text-xs" title="De quoi est cette conso sur la fiche technique"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="produit">conso du produit</SelectItem>
+                      <SelectItem value="charge">conso de la charge</SelectItem>
+                      <SelectItem value="melange">conso du mélange</SelectItem>
+                    </SelectContent>
+                  </Select>
                   {r.consoDe && r.kgM2ParMm > 0 && (
                     <span className={`text-[11px] ${partsDeCharge(r.libelle) == null ? 'text-amber-600' : 'text-muted-foreground'}`}>
                       {partsDeCharge(r.libelle) == null

@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { formatMontant, type LigneKit, type Produit, type VarianteDimension } from '@/lib/store';
 import { getRalInfo } from '@/lib/ralColors';
+import { resumeQuantiteOption } from '@/lib/optionsQuantite';
 import { cn } from '@/lib/utils';
 
 /**
@@ -124,7 +125,7 @@ export default function OptionsArticleDialog({ produit, trouver, onConfirm, onCa
                   <span className="flex-1 min-w-0">
                     <span className="block text-sm font-medium truncate">{o.description || 'Option'}</span>
                     <span className="block text-xs text-muted-foreground">
-                      {inclus.has(i) ? 'incluse à la ligne, non chiffrée' : `${o.quantite} ${o.unite} · ${formatMontant(o.prixUnitaireHT)} HT${o.remise ? ` · remise ${o.remise} %` : ''}`}
+                      {inclus.has(i) ? 'incluse à la ligne, non chiffrée' : `${resumeQuantiteOption(o)} · ${formatMontant(o.prixUnitaireHT)} HT${o.remise ? ` · remise ${o.remise} %` : ''}`}
                     </span>
                   </span>
                   {cochees.has(i) && (
