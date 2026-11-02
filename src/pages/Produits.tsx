@@ -213,7 +213,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 }
 
 export default function Produits() {
-  const { produits, produitsCharges, assurerProduits, updateProduits, attendreEcritureProduit, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, commandesClient, commandesFournisseur, clients } = useCRM();
+  const { produits, produitsCharges, assurerProduits, updateProduits, attendreEcritureProduit, relireJumeaux, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, commandesClient, commandesFournisseur, clients } = useCRM();
   const { canAchat } = useCurrentUser();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -1298,6 +1298,8 @@ export default function Produits() {
       // Écriture directe Supabase pour garantir la persistance
       supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, type_options: isTypeOptions, lignes_options: lignesOptionsToSave as any, type_variantes_compo: isTypeVariantesCompo, variantes_compo: variantesCompoToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', editing.id).then(({ error }) => {
         if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes/achats:', error);
+        // Options et variantes passent aux jumeaux (même référence Odoo) en base : on les relit.
+        else if (form.referenceOdoo?.trim()) void relireJumeaux(editing.id, form.referenceOdoo);
       });
       /* ⚠️ **ENREGISTRER UN ARTICLE NE TOUCHE À AUCUN DEVIS.**
        *

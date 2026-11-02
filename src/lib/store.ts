@@ -2687,6 +2687,10 @@ export function useStore() {
    * jusqu'au rechargement de la page. On relit donc les jumeaux une fois
    * l'écriture faite, et on les range par `setProduits` — pas par
    * `updateProduits`, qui les réécrirait.
+   *
+   * Même chose pour les RÉGLAGES DE DEVIS (options, variantes, consos,
+   * dosage selon l'épaisseur), que `synchroniser_jumeaux_reglages` recopie
+   * (migration 20261102200000) : PROTOP1000223 réglé, PROTOP100022 suit.
    */
   const relireJumeaux = useCallback(async (id: string, referenceOdoo: string) => {
     const cle = referenceOdoo.trim();
@@ -2738,7 +2742,8 @@ export function useStore() {
               .eq('id', p.id)
               .then(signaler('modification'));
             ecrituresProduits.current.set(p.id, { quand: Date.now(), ecriture });
-            const prixTouche = ['prix_achat', 'prix_achat_maj', 'prix_ht', 'prix_vente_maj', 'reference_odoo']
+            const prixTouche = ['prix_achat', 'prix_achat_maj', 'prix_ht', 'prix_vente_maj', 'reference_odoo',
+              'type_options', 'lignes_options', 'variantes', 'dosage_epaisseur', 'consommations', 'consommation', 'consommation_ml']
               .some(c => c in patch);
             if (prixTouche && p.referenceOdoo?.trim()) {
               void ecriture.then(() => relireJumeaux(p.id, p.referenceOdoo!));
@@ -2927,7 +2932,7 @@ export function useStore() {
     }
   }, []);
 
-  return { clients, fournisseurs, produits, produitsCharges, nbProduits, assurerProduits, devis, numerosLiberes, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, attendreEcritureProduit, creerProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading, etatQuota };
+  return { clients, fournisseurs, produits, produitsCharges, nbProduits, assurerProduits, devis, numerosLiberes, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, attendreEcritureProduit, relireJumeaux, creerProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading, etatQuota };
 }
 
 // ── Entrepôts DB mapping ────────────────────────────────────────────────────
