@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { FileText, FolderOpen, Layers, Loader2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -39,8 +39,6 @@ export default function FichesSystemesArticle({ produitId, systemes, onChange }:
   const [envoi, setEnvoi] = useState(false);
   const [enAttente, setEnAttente] = useState<File | null>(null);
   const [cible, setCible] = useState('');
-  const [recapPour, setRecapPour] = useState<string | null>(null);
-  const recapInput = useRef<HTMLInputElement>(null);
 
   const liees = systemesDeLArticle(systemes, produitId);
   const liste = [
@@ -187,8 +185,18 @@ export default function FichesSystemesArticle({ produitId, systemes, onChange }:
               />
             </div>
             <div className="sm:col-span-2">
+              {/* Un champ par système : le fichier choisi sait à quel système il revient. */}
+              <input
+                id={`recap-${s.id}`} type="file" accept="application/pdf,.pdf" className="hidden"
+                aria-label={`Fiche récap PDF — ${s.nom}`}
+                onChange={e => {
+                  const f = e.target.files?.[0];
+                  if (f) void deposerRecap(f, s.id);
+                  e.target.value = '';
+                }}
+              />
               <Button type="button" size="sm" variant="outline" className="h-9 text-xs" disabled={envoi}
-                onClick={() => { setRecapPour(s.id); recapInput.current?.click(); }}>
+                onClick={() => document.getElementById(`recap-${s.id}`)?.click()}>
                 <FileText className="w-3.5 h-3.5 mr-1" />Déposer la fiche récap (PDF)
               </Button>
             </div>
@@ -202,15 +210,6 @@ export default function FichesSystemesArticle({ produitId, systemes, onChange }:
           />
         </div>
       ))}
-
-      <input
-        ref={recapInput} type="file" accept="application/pdf,.pdf" className="hidden"
-        onChange={e => {
-          const f = e.target.files?.[0];
-          if (f && recapPour) void deposerRecap(f, recapPour);
-          e.target.value = '';
-        }}
-      />
 
       {autres.length > 0 && (
         <div className="flex items-center gap-2">
