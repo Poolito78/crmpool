@@ -295,9 +295,14 @@ export function articlesLiesDuDevis<P extends ProduitLiable>(
     vus.add(p.id);
     const photo = photoDe(p.id);
     if (!aUneFiche(p) && !photo?.url?.trim()) continue;
+    const nom = designation(p);
+    /* Le nom de l'article ouvre déjà la ligne du PDF : un libellé qui le
+       reprend en suffixe (« Fiche technique — <désignation> ») le perd. */
+    const suffixe = ` — ${nom}`;
     const liens = liensDuProduit(p, { imageUrl: photo?.url, imageLibelle: photo?.libelle })
-      .filter(x => x.cible !== 'page');
-    if (liens.length) out.push({ nom: designation(p), liens });
+      .filter(x => x.cible !== 'page')
+      .map(x => (x.label.endsWith(suffixe) && x.label.length > suffixe.length ? { ...x, label: x.label.slice(0, -suffixe.length) } : x));
+    if (liens.length) out.push({ nom, liens });
   }
   return out;
 }

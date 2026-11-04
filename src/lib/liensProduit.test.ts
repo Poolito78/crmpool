@@ -285,6 +285,12 @@ describe('articles d’un devis qui ont un lien à montrer', () => {
     expect(r[0].liens.map(l => l.label)).toEqual(['Vue de dessus']);
   });
 
+  it('ne répète pas la désignation que la ligne du PDF affiche déjà', () => {
+    const r = articlesLiesDuDevis([{ produitId: 'p1' }], [{ ...AVEC_FICHE, ficheLinkLabel: LIBELLE_FICHE_TECHNIQUE }], sansPhoto);
+    expect(r[0].nom).toBe('Flowfresh MF');
+    expect(r[0].liens[0].label).toBe('Fiche technique');
+  });
+
   it('ne propose jamais la fiche publique du CRM', () => {
     const r = articlesLiesDuDevis([{ produitId: 'p1' }], [AVEC_FICHE], sansPhoto);
     expect(r[0].liens.some(l => l.cible === 'page')).toBe(false);
