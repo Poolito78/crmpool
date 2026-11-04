@@ -375,7 +375,7 @@ export default function Devis() {
         if (Array.isArray(p) && p.length > 0) {
           // Une colonne nouvelle s'ajoute UNE fois (oct. 2026) ; masquée ensuite, elle le reste.
           const nouvelles: DevisTableColKey[] = [];
-          for (const col of ['relance', 'chantier'] as const) {
+          for (const col of ['relance', 'chantier', 'coutChantier'] as const) {
             const cle = `devis_table_cols_${col}`;
             if (localStorage.getItem(cle) !== '1') { localStorage.setItem(cle, '1'); nouvelles.push(col); }
           }
@@ -387,6 +387,24 @@ export default function Devis() {
   });
   useEffect(() => { try { localStorage.setItem('devis_table_cols', JSON.stringify([...visDevisTableCols])); } catch {} }, [visDevisTableCols]);
   const devisCols = useTableColumns<DevisTableColKey>('devis_table', DEVIS_TABLE_COLS_DEF.map(c => c.key));
+  /* Coût chantier de chaque devis, au m² (ou ml) : le calcul de l'aperçu (`coutChantier`).
+     Un modèle système n'a pas de chantier : son coût consommé sur 100 m² (`simCoutRevientM2`).
+     Calculé seulement quand la colonne est affichée ou sert au tri. */
+  const coutChantierActif = visDevisTableCols.has('coutChantier') || sortBy.startsWith('coutChantier_');
+  const coutChantierParDevis = useMemo(() => {
+    const m = new Map<string, number | null>();
+    if (!coutChantierActif) return m;
+    for (const d of devis) {
+      m.set(d.id, d.statut === 'système'
+        ? simCoutRevientM2(d, produits)?.parUnite ?? null
+        : coutChantier(d.lignes, produits, d.surfaceGlobaleM2 ?? 0, d.uniteSurface).parM2);
+    }
+    return m;
+  }, [devis, produits, coutChantierActif]);
+  const coutChantierEl = (d: DevisType) => {
+    const v = coutChantierParDevis.get(d.id);
+    return v != null ? `${v.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €/${d.uniteSurface === 'ml' ? 'ml' : 'm²'}` : null;
+  };
   // Roue de la vue tableau : point d'ancrage de « Ajuster les colonnes » (le menu est en portail).
   const devisGearRef = useRef<HTMLButtonElement>(null);
   // Colonnes de la vue tableau éditable des lignes (resize + ordre persistés)
@@ -954,6 +972,9 @@ export default function Devis() {
       case 'systeme_desc': return (b.systeme || '').localeCompare(a.systeme || '');
       case 'validite_asc':  return a.dateValidite.localeCompare(b.dateValidite);
       case 'validite_desc': return b.dateValidite.localeCompare(a.dateValidite);
+      // Sans coût chantier (pas de surface) : toujours en fin de liste.
+      case 'coutChantier_asc':  return (coutChantierParDevis.get(a.id) ?? Infinity) - (coutChantierParDevis.get(b.id) ?? Infinity) || 0;
+      case 'coutChantier_desc': return (coutChantierParDevis.get(b.id) ?? -Infinity) - (coutChantierParDevis.get(a.id) ?? -Infinity) || 0;
       case 'port_asc':  return (a.fraisPortHT || 0) - (b.fraisPortHT || 0);
       case 'port_desc': return (b.fraisPortHT || 0) - (a.fraisPortHT || 0);
       // Sans relance prévue (devis non envoyé) : toujours en fin de liste.
@@ -3584,6 +3605,7 @@ export default function Devis() {
                       case 'date': return <td style={ws} className="px-3 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(d.dateCreation)}</td>;
                       case 'validite': return <td style={ws} className={`px-3 py-2.5 text-sm whitespace-nowrap ${horsDelai ? 'text-destructive font-medium' : 'text-muted-foreground'}`} title={horsDelai ? 'Hors délais' : undefined}>{formatDate(d.dateValidite)}</td>;
                       case 'totalHT': return <td style={ws} className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">{formatMontant(t.totalHT)}</td>;
+                      case 'coutChantier': return <td style={ws} className="px-3 py-2.5 text-right text-sm text-muted-foreground whitespace-nowrap" title="Coût chantier : matière consommée HT rapportée à la surface">{coutChantierEl(d) ?? '—'}</td>;
                       case 'marge': return <td style={ws} className={`px-3 py-2.5 text-right text-sm font-medium whitespace-nowrap ${margeD < 0 ? 'text-destructive' : margeD < 20 ? 'text-warning' : 'text-success'}`}>{totalHTD > 0 ? `${margeD.toFixed(1)} %` : '—'}</td>;
                       case 'port': return <td style={ws} className="px-3 py-2.5 text-right text-sm text-muted-foreground whitespace-nowrap">{d.fraisPortHT ? formatMontant(d.fraisPortHT) : '—'}</td>;
                       case 'reussite': return <td style={ws} className="px-3 py-2.5 text-right text-sm whitespace-nowrap">{d.probabiliteReussite != null ? <span className={`font-medium ${d.probabiliteReussite >= 75 ? 'text-success' : d.probabiliteReussite >= 50 ? 'text-warning' : d.probabiliteReussite > 0 ? 'text-orange-500' : 'text-muted-foreground'}`}>{d.probabiliteReussite}%</span> : <span className="text-muted-foreground">—</span>}</td>;
@@ -3887,6 +3909,9 @@ export default function Devis() {
                   <div className="text-right">
                     <p className="font-heading font-bold text-lg">{formatMontant(t.totalHT)}</p>
                     <p className="text-xs text-muted-foreground">HT</p>
+                    {visDevisTableCols.has('coutChantier') && coutChantierEl(d) && (
+                      <p className="text-xs text-[#CC0000] font-medium whitespace-nowrap" title="Coût chantier : matière consommée HT rapportée à la surface">Coût chantier {coutChantierEl(d)}</p>
+                    )}
                   </div>
                   <div className="flex gap-1 items-center">
                     <select

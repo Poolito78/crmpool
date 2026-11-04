@@ -11,6 +11,8 @@ export const DEVIS_TABLE_COLS_DEF = [
   { key: 'date',       label: 'Date',         align: 'left'  },
   { key: 'validite',   label: 'Validité',     align: 'left'  },
   { key: 'totalHT',    label: 'Total HT',     align: 'right' },
+  // Prix de revient du chantier : matière CONSOMMÉE HT rapportée au m² (ou ml) — `coutChantier`.
+  { key: 'coutChantier', label: 'Coût chantier', align: 'right' },
   { key: 'marge',      label: 'Marge',        align: 'right' },
   { key: 'port',       label: 'Port HT',      align: 'right' },
   { key: 'reussite',   label: '% réussite',   align: 'right' },
@@ -20,4 +22,4 @@ export const DEVIS_TABLE_COLS_DEF = [
 ] as const;
 
 export type DevisTableColKey = typeof DEVIS_TABLE_COLS_DEF[number]['key'];
-export const DEFAULT_DEVIS_TABLE_COLS: DevisTableColKey[] = ['numero', 'statut', 'client', 'refAffaire', 'chantier', 'date', 'totalHT', 'relance', 'commercial'];
+export const DEFAULT_DEVIS_TABLE_COLS: DevisTableColKey[] = ['numero', 'statut', 'client', 'refAffaire', 'chantier', 'date', 'totalHT', 'coutChantier', 'relance', 'commercial'];
