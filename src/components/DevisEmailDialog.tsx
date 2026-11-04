@@ -16,7 +16,7 @@ import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearSto
 import { supabase } from '@/integrations/supabase/client';
 import { liensDesProduits, copierLiens, aUneFiche, designation, type LienProduit, type CibleLien } from '@/lib/liensProduit';
 import { liensDocumentsCategorie, dbToDocumentCategorie } from '@/lib/categorieDocuments';
-import { dbToSysteme, liensFichesSystemes, systemeEstObjet } from '@/lib/systemes';
+import { dbToSysteme, liensFichesSystemes, systemeDuLien, systemeEstObjet } from '@/lib/systemes';
 import { useIdentiteDocument } from '@/hooks/useSocietes';
 import { imageEnDataUrl } from '@/lib/societes';
 import { useMailsTypes, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteDuMail, estHtmlMail, placerDansHtml, placerDansTexte, type ImageMail } from '@/lib/mailsTypes';
@@ -684,12 +684,13 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
            DOCUMENTS DE FAMILLE décochés. Une homologation ne s'invite pas
            d'elle-même dans tous les devis — elle se joint quand elle est
            demandée. */
-        /* La fiche d'un SYSTÈME est cochée d'office quand ce système est l'objet
-           du devis (`devis.systeme`), décochée sinon. */
+        /* La fiche d'un SYSTÈME — et sa FICHE RÉCAP — sont cochées d'office
+           quand ce système est l'objet du devis (`devis.systeme`), décochées
+           sinon. */
         const objets = new Set(
           liensSysteme
             .filter(l => {
-              const s = systemes.find(x => `sys:${x.id}` === l.id);
+              const s = systemeDuLien(systemes, l.id);
               return !!s && systemeEstObjet(s, [devis.systeme]);
             })
             .map(l => l.id),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { declinerSysteme, kitsPour, chiffrerZones, liensFichesSystemes, systemeEstObjet, type Systeme, type SystemeComposant } from './systemes';
+import { declinerSysteme, kitsPour, chiffrerZones, liensFichesSystemes, systemeDuLien, estLienRecap, systemeEstObjet, type Systeme, type SystemeComposant } from './systemes';
 
 function composant(p: Partial<SystemeComposant>): SystemeComposant {
   return {
@@ -260,6 +260,24 @@ describe('fiches des systèmes', () => {
     const liens = liensFichesSystemes([orphelin], [{ id: 'p9' }], ['Flowfast 319 Route']);
     expect(liens).toHaveLength(1);
     expect(liens[0].url).toBe('https://ex/fs.pdf');
+  });
+
+  it('propose la fiche récap après la fiche système, sous « Fiche récap - <nom> » à défaut de libellé', () => {
+    const avecRecap: Systeme = { ...avecFiche, recapUrl: 'https://ex/recap319.pdf' };
+    const liens = liensFichesSystemes([avecRecap], [{ id: 'p1' }]);
+    expect(liens.map(l => l.id)).toEqual([`sys:${avecRecap.id}`, `sys:${avecRecap.id}:recap`]);
+    expect(liens[1].label).toBe('Fiche récap - Flowfast 319 Route');
+    expect(liens[1].cible).toBe('systeme');
+    expect(systemeDuLien([avecRecap], liens[1].id)?.id).toBe(avecRecap.id);
+    expect(estLienRecap(liens[1].id)).toBe(true);
+    expect(estLienRecap(liens[0].id)).toBe(false);
+  });
+
+  it('un système qui n’a que sa fiche récap est proposé quand même', () => {
+    const recapSeule: Systeme = { ...FLOWFAST, recapUrl: 'https://ex/r.pdf', recapLabel: 'Synthèse 319', composants: [] };
+    const liens = liensFichesSystemes([recapSeule], [], ['Flowfast 319 Route']);
+    expect(liens).toHaveLength(1);
+    expect(liens[0].label).toBe('Synthèse 319');
   });
 
   it("un système sans adresse de fiche n'est pas proposé", () => {

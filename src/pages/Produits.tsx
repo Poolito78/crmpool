@@ -18,7 +18,7 @@ import DosageEpaisseurEditor from '@/components/DosageEpaisseurEditor';
 import type { DosageEpaisseur } from '@/lib/dosageEpaisseur';
 import type { VarianteCompo } from '@/lib/variantesCompo';
 import FichesSystemesArticle from '@/components/FichesSystemesArticle';
-import { useSystemes, liensFichesSystemes, enregistrerFicheSysteme } from '@/lib/systemes';
+import { useSystemes, liensFichesSystemes, enregistrerFicheSysteme, enregistrerRecapSysteme, estLienRecap, systemeDuLien } from '@/lib/systemes';
 import { LIBELLE_TYPE_FICHE, sansMention, type TypeFiche, liensDuProduit, copierLiens, fichesDuProduit, aUneFiche, LIBELLE_CIBLE } from '@/lib/liensProduit';
 import {
   useCategorieDocuments, documentsPourCategorie, chaineCategories, articlesConcernes,
@@ -4106,8 +4106,15 @@ export default function Produits() {
                                       return ecrireFiches(prev, liste);
                                     });
                                     toast.success("Libellé de la fiche technique modifié — pensez à enregistrer l'article.");
+                                  } else if (l.cible === 'systeme' && estLienRecap(l.id)) {
+                                    const sys = systemeDuLien(systemes, l.id);
+                                    if (sys) {
+                                      const err = await enregistrerRecapSysteme(sys.id, { url: sys.recapUrl, label: v });
+                                      if (err) toast.error(err);
+                                      else { toast.success('Libellé de la fiche récap modifié.'); void rechargerSystemes(); }
+                                    }
                                   } else if (l.cible === 'systeme') {
-                                    const sys = systemes.find(x => `sys:${x.id}` === l.id);
+                                    const sys = systemeDuLien(systemes, l.id);
                                     if (sys) {
                                       const err = await enregistrerFicheSysteme(sys.id, {
                                         url: sys.ficheUrl, mention: sys.ficheMention,

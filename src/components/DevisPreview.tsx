@@ -14,6 +14,7 @@ import { genererScriptOdoo, promptOdooPartnerName, coutChantierLigne, coutChanti
 import { getRalInfo } from '@/lib/ralColors';
 import { supabase } from '@/integrations/supabase/client';
 import { articlesLiesDuDevis } from '@/lib/liensProduit';
+import { useSystemes, liensFichesSystemes, systemeEstObjet } from '@/lib/systemes';
 import { useProduitImages } from '@/lib/produitImages';
 import NoteRiche from '@/components/NoteRiche';
 import { noteEnTexte } from '@/lib/noteRiche';
@@ -186,6 +187,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [uniteEnAttente, setUniteEnAttente] = useState<'m2' | 'ml' | null>(null);
   const [showLiens, setShowLiens] = useState(initialShowLiens);
   const { principaleDe, chargement: chargementImages } = useProduitImages();
+  const { systemes } = useSystemes();
   const [printing, setPrinting] = useState(false);
   const [pdfMode, setPdfMode] = useState(false);
   const printAreaRef = useRef<HTMLDivElement>(null);
@@ -1593,6 +1595,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             largeur de la page devient cliquable. */}
         {showLiens && (() => {
           const parArticle = articlesLiesDuDevis(devis.lignes, produits, principaleDe);
+          /* Le SYSTÈME du devis passe en tête : sa fiche système et sa fiche
+             récap, celles que le mail coche d'office. */
+          const liensSysteme = devis.systeme
+            ? liensFichesSystemes(systemes.filter(s => systemeEstObjet(s, [devis.systeme])), [], [devis.systeme])
+            : [];
           /* UNE OPTION QUI NE PRODUIT RIEN DOIT DIRE POURQUOI. Cochee sur un
              devis dont aucun article ne porte de fiche ni de photo, elle
              restait sans effet — on croyait a une panne.
@@ -1604,7 +1611,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
              Les photos arrivent par une requête : tant qu'elle court, un
              article que sa seule photo qualifie manque encore à l'appel et
              l'absence n'est pas concluante. */
-          if (!parArticle.length) {
+          if (!parArticle.length && !liensSysteme.length) {
             if (printing || pdfMode || hideControls || chargementImages) return null;
             return (
               <div className="border-t border-border pt-4">
@@ -1623,6 +1630,25 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 Fiches techniques
               </p>
               <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                {liensSysteme.length > 0 && (
+                  <li className="text-xs" style={{ lineHeight: 1.5 }}>
+                    <span className="text-muted-foreground">Système {devis.systeme} — </span>
+                    {liensSysteme.map((lien, i) => (
+                      <span key={lien.id}>
+                        {i > 0 && <span className="text-muted-foreground"> · </span>}
+                        <a
+                          href={lien.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          data-pdf-href={lien.url}
+                          style={{ color: '#0563C1', textDecoration: 'underline' }}
+                        >
+                          {lien.label}
+                        </a>
+                      </span>
+                    ))}
+                  </li>
+                )}
                 {parArticle.map(a => (
                   <li key={a.nom} className="text-xs" style={{ lineHeight: 1.5 }}>
                     <span className="text-muted-foreground">{a.nom} — </span>

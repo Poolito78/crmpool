@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Produit } from '@/lib/store';
-import { avecMention, libelleFicheSysteme, type LienProduit } from '@/lib/liensProduit';
+import { avecMention, libelleFicheRecap, libelleFicheSysteme, type LienProduit } from '@/lib/liensProduit';
 
 /**
  * Systèmes de mise en œuvre, tels que les décrivent les fiches techniques.
@@ -122,6 +122,14 @@ export interface Systeme {
   /** Mention qui précède le texte ; à défaut « Fiche système ». */
   ficheMention?: string;
   /**
+   * La FICHE RÉCAP ISOFLOOR du système (PDF) : couches, schémas, chiffres et
+   * liens vers les fiches. Distincte de la fiche système du fabricant, elle
+   * part avec elle dans le mail et au pied du devis.
+   */
+  recapUrl?: string;
+  /** Texte du lien ; à défaut « Fiche récap - <nom du système> ». */
+  recapLabel?: string;
+  /**
    * Surface couverte par un petit mélange — 5 m² pour le Flowfast 319
    * Concrete : 2,5 kg de résine, 1,255 kg de SNL Concrete, 0,2 kg de pigments.
    * Une bande de 0,10 m ne se trace pas avec un mélange de 20 kg, qui prend
@@ -182,6 +190,8 @@ export function dbToSysteme(r: any): Systeme {
     ficheUrl: r.fiche_url || undefined,
     ficheLabel: r.fiche_label || undefined,
     ficheMention: r.fiche_mention || undefined,
+    recapUrl: r.recap_url || undefined,
+    recapLabel: r.recap_label || undefined,
     surfaceKitM2: r.surface_kit_m2 != null ? Number(r.surface_kit_m2) : undefined,
     kitSurfaceMaxM2: r.kit_surface_max_m2 != null ? Number(r.kit_surface_max_m2) : undefined,
     actif: r.actif ?? true,
@@ -501,9 +511,13 @@ export function chiffrerZones(
 
 /* ── Hook ────────────────────────────────────────────────────────────────── */
 
+let dernierJeuSystemes: Systeme[] | null = null;
+
 export function useSystemes() {
-  const [systemes, setSystemes] = useState<Systeme[]>([]);
-  const [chargement, setChargement] = useState(true);
+  /* Le dernier jeu lu sert d'état initial : le rendu caché qui fabrique le
+     PDF de l'e-mail n'attend pas la requête pour lister les fiches système. */
+  const [systemes, setSystemes] = useState<Systeme[]>(() => dernierJeuSystemes ?? []);
+  const [chargement, setChargement] = useState(dernierJeuSystemes === null);
 
   const recharger = useCallback(async () => {
     const { data, error } = await supabase
@@ -517,7 +531,8 @@ export function useSystemes() {
       console.warn('[systemes]', error.message);
       setSystemes([]);
     } else {
-      setSystemes((data || []).map(dbToSysteme));
+      dernierJeuSystemes = (data || []).map(dbToSysteme);
+      setSystemes(dernierJeuSystemes);
     }
     setChargement(false);
   }, []);
@@ -559,9 +574,9 @@ export function systemeEstObjet(s: Pick<Systeme, 'nom'>, textes: (string | undef
 }
 
 /**
- * Les liens des fiches de systèmes pour les articles d'un devis : une ligne
- * par système (même si plusieurs articles en sont composants), seulement ceux
- * dont la fiche a une adresse.
+ * Les liens des fiches de systèmes pour les articles d'un devis : par système
+ * (même si plusieurs articles en sont composants), sa FICHE SYSTÈME puis sa
+ * FICHE RÉCAP, chacune seulement si elle a une adresse.
  */
 export function liensFichesSystemes(
   systemes: Systeme[],
@@ -571,34 +586,48 @@ export function liensFichesSystemes(
 ): LienProduit[] {
   const vus = new Set<string>();
   const out: LienProduit[] = [];
-  for (const a of articles) {
-    for (const s of systemesDeLArticle(systemes, a.id)) {
-      const url = s.ficheUrl?.trim();
-      if (!url || vus.has(s.id)) continue;
-      vus.add(s.id);
+  const aDesFiches = (s: Systeme) => !!(s.ficheUrl?.trim() || s.recapUrl?.trim());
+  const ajouter = (s: Systeme, produitId: string) => {
+    vus.add(s.id);
+    const url = s.ficheUrl?.trim();
+    if (url) {
       out.push({
         id: `sys:${s.id}`,
-        produitId: a.id,
+        produitId,
         cible: 'systeme',
         label: avecMention(s.ficheLabel?.trim() || libelleFicheSysteme(s.nom), s.ficheMention || 'systeme'),
         url,
       });
     }
+    const recap = s.recapUrl?.trim();
+    if (recap) {
+      out.push({
+        id: `sys:${s.id}:recap`,
+        produitId,
+        cible: 'systeme',
+        label: s.recapLabel?.trim() || libelleFicheRecap(s.nom),
+        url: recap,
+      });
+    }
+  };
+  for (const a of articles) {
+    for (const s of systemesDeLArticle(systemes, a.id)) {
+      if (!vus.has(s.id) && aDesFiches(s)) ajouter(s, a.id);
+    }
   }
   for (const s of systemes) {
-    const url = s.ficheUrl?.trim();
-    if (!url || vus.has(s.id) || !systemeEstObjet(s, objets)) continue;
-    vus.add(s.id);
-    out.push({
-      id: `sys:${s.id}`,
-      produitId: articles[0]?.id ?? '',
-      cible: 'systeme',
-      label: avecMention(s.ficheLabel?.trim() || libelleFicheSysteme(s.nom), s.ficheMention || 'systeme'),
-      url,
-    });
+    if (!vus.has(s.id) && aDesFiches(s) && systemeEstObjet(s, objets)) ajouter(s, articles[0]?.id ?? '');
   }
   return out;
 }
+
+/** Le système d'un lien de `liensFichesSystemes` — fiche (`sys:<id>`) ou récap (`sys:<id>:recap`). */
+export function systemeDuLien<T extends { id: string }>(systemes: T[], lienId: string): T | undefined {
+  const m = /^sys:([^:]+)(?::recap)?$/.exec(lienId);
+  return m ? systemes.find(s => s.id === m[1]) : undefined;
+}
+
+export const estLienRecap = (lienId: string): boolean => lienId.endsWith(':recap');
 
 /** Enregistre la fiche d'un système. Rend un message d'erreur, ou null. */
 export async function enregistrerFicheSysteme(
@@ -608,6 +637,17 @@ export async function enregistrerFicheSysteme(
     fiche_url: fiche.url?.trim() || null,
     fiche_label: fiche.label?.trim() || null,
     fiche_mention: fiche.mention?.trim() || null,
+  } as never).eq('id', id);
+  return error ? error.message : null;
+}
+
+/** Enregistre la fiche récap d'un système. Rend un message d'erreur, ou null. */
+export async function enregistrerRecapSysteme(
+  id: string, recap: { url?: string; label?: string },
+): Promise<string | null> {
+  const { error } = await supabase.from('systemes').update({
+    recap_url: recap.url?.trim() || null,
+    recap_label: recap.label?.trim() || null,
   } as never).eq('id', id);
   return error ? error.message : null;
 }

@@ -177,6 +177,8 @@ export function sansMention(label: string, type?: TypeFiche): string {
  */
 export const LIBELLE_FICHE_TECHNIQUE = 'Fiche technique';
 export const libelleFicheSysteme = (nom: string): string => `Fiche Système - ${nom.trim()}`;
+/** La synthèse ISOFLOOR d'un système (couches, schémas, liens), à côté de sa fiche système. */
+export const libelleFicheRecap = (nom: string): string => `Fiche récap - ${nom.trim()}`;
 
 const pourComparer = (s: string): string =>
   s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();

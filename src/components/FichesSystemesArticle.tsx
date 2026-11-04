@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { FolderOpen, Layers, Loader2, Upload } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { FileText, FolderOpen, Layers, Loader2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,9 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import MentionFiche from '@/components/MentionFiche';
 import ChoisirFicheGed from '@/components/ChoisirFicheGed';
-import { enregistrerFicheSysteme, systemesDeLArticle, type Systeme } from '@/lib/systemes';
+import { enregistrerFicheSysteme, enregistrerRecapSysteme, systemesDeLArticle, type Systeme } from '@/lib/systemes';
 import { deposerFicheTechnique, estFichePdf } from '@/lib/fichesProduitPdf';
-import { libelleFicheSysteme } from '@/lib/liensProduit';
+import { libelleFicheRecap, libelleFicheSysteme } from '@/lib/liensProduit';
 
 /**
  * Encart « Fiches systèmes » de la fiche article.
@@ -21,7 +21,8 @@ import { libelleFicheSysteme } from '@/lib/liensProduit';
  * la GED, ou en GLISSANT le PDF (déposé dans le seau public des fiches).
  *
  * La fiche appartient au système, pas à l'article : elle sert ensuite à tous
- * ses composants. Dans le dialogue d'envoi du devis, elle est cochée d'office
+ * ses composants. Sous chaque système, sa FICHE RÉCAP ISOFLOOR (synthèse des
+ * couches, schémas et liens) : déposée en PDF, elle part avec la fiche système. Dans le dialogue d'envoi du devis, elle est cochée d'office
  * quand le système est l'objet du devis (`systemeEstObjet`).
  */
 interface Props {
@@ -38,6 +39,8 @@ export default function FichesSystemesArticle({ produitId, systemes, onChange }:
   const [envoi, setEnvoi] = useState(false);
   const [enAttente, setEnAttente] = useState<File | null>(null);
   const [cible, setCible] = useState('');
+  const [recapPour, setRecapPour] = useState<string | null>(null);
+  const recapInput = useRef<HTMLInputElement>(null);
 
   const liees = systemesDeLArticle(systemes, produitId);
   const liste = [
@@ -65,6 +68,22 @@ export default function FichesSystemesArticle({ produitId, systemes, onChange }:
     setEnvoi(false);
     setEnAttente(null);
     setCible('');
+  }
+
+  async function majRecap(s: Systeme, patch: { url?: string; label?: string }) {
+    const err = await enregistrerRecapSysteme(s.id, { url: s.recapUrl, label: s.recapLabel, ...patch });
+    if (err) toast.error(err);
+    else { toast.success('Fiche récap enregistrée.'); onChange(); }
+  }
+
+  async function deposerRecap(file: File, systemeId: string) {
+    const s = systemes.find(x => x.id === systemeId);
+    if (!s || !estFichePdf(file)) { toast.error('Choisissez un PDF.'); return; }
+    setEnvoi(true);
+    const res = await deposerFicheTechnique(produitId, file);
+    if ('erreur' in res) { toast.error(res.erreur); setEnvoi(false); return; }
+    await majRecap(s, { url: res.url, label: libelleFicheRecap(s.nom) });
+    setEnvoi(false);
   }
 
   function depose(files: File[]) {
@@ -150,6 +169,30 @@ export default function FichesSystemesArticle({ produitId, systemes, onChange }:
               <FolderOpen className="w-3.5 h-3.5 mr-1" />GED
             </Button>
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_13rem_auto] gap-2 items-end">
+            <div>
+              <Label className="text-xs">Fiche récap — texte du lien</Label>
+              <Input
+                key={`rl-${s.id}-${s.recapLabel ?? ''}`}
+                className="h-9 text-xs" defaultValue={s.recapLabel ?? ''} placeholder={libelleFicheRecap(s.nom)}
+                onBlur={e => { if (e.target.value.trim() !== (s.recapLabel ?? '')) void majRecap(s, { label: e.target.value }); }}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">URL de la fiche récap</Label>
+              <Input
+                key={`ru-${s.id}-${s.recapUrl ?? ''}`}
+                className="h-9 text-xs" type="url" defaultValue={s.recapUrl ?? ''} placeholder="https://..."
+                onBlur={e => { if (e.target.value.trim() !== (s.recapUrl ?? '')) void majRecap(s, { url: e.target.value }); }}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Button type="button" size="sm" variant="outline" className="h-9 text-xs" disabled={envoi}
+                onClick={() => { setRecapPour(s.id); recapInput.current?.click(); }}>
+                <FileText className="w-3.5 h-3.5 mr-1" />Déposer la fiche récap (PDF)
+              </Button>
+            </div>
+          </div>
           <ChoisirFicheGed
             open={gedPour === s.id}
             onOpenChange={o => { if (!o) setGedPour(null); }}
@@ -159,6 +202,15 @@ export default function FichesSystemesArticle({ produitId, systemes, onChange }:
           />
         </div>
       ))}
+
+      <input
+        ref={recapInput} type="file" accept="application/pdf,.pdf" className="hidden"
+        onChange={e => {
+          const f = e.target.files?.[0];
+          if (f && recapPour) void deposerRecap(f, recapPour);
+          e.target.value = '';
+        }}
+      />
 
       {autres.length > 0 && (
         <div className="flex items-center gap-2">
