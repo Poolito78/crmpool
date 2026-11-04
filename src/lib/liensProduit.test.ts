@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   designation, urlFichePublique, liensDuProduit, liensDesProduits, articlesLiesDuDevis,
-  liensHtml, liensTexte, echapperHtml, type ProduitLiable,
+  liensHtml, liensTexte, echapperHtml, avecMention, libelleFicheSysteme, LIBELLE_FICHE_TECHNIQUE,
+  type ProduitLiable,
 } from './liensProduit';
 
 const ORIGINE = 'https://crmpool.vercel.app';
@@ -296,5 +297,32 @@ describe('articles d’un devis qui ont un lien à montrer', () => {
 
   it('ignore une ligne dont l’article a disparu du catalogue', () => {
     expect(articlesLiesDuDevis([{ produitId: 'inconnu' }], [AVEC_FICHE], sansPhoto)).toEqual([]);
+  });
+});
+
+describe('intitulés posés d’office (04/11/2026)', () => {
+  it('nomme la fiche d’un système « Fiche Système - <nom> »', () => {
+    expect(libelleFicheSysteme(' Flowshield BC Uni ')).toBe('Fiche Système - Flowshield BC Uni');
+  });
+
+  it('ne double pas la mention système devant « Fiche Système - … »', () => {
+    expect(avecMention('Fiche Système - Flowshield BC Uni', 'systeme')).toBe('Fiche Système - Flowshield BC Uni');
+    expect(avecMention('Flowshield BC Uni', 'systeme')).toBe('Fiche système — Flowshield BC Uni');
+  });
+
+  it('garde la mention fournisseur seule devant « Fiche technique »', () => {
+    const [fiche] = liensDuProduit(
+      produit({ id: 'p1', ficheUrl: 'https://ex/f.pdf', ficheLinkLabel: LIBELLE_FICHE_TECHNIQUE, ficheType: 'fournisseur' }),
+      { origine: ORIGINE },
+    );
+    expect(fiche.label).toBe('Fiche technique fournisseur');
+  });
+
+  it('numérote une deuxième « Fiche technique » sans mention', () => {
+    const liens = liensDuProduit(produit({
+      id: 'p1', ficheUrl: 'https://ex/a.pdf', ficheLinkLabel: LIBELLE_FICHE_TECHNIQUE,
+      fichesSupplementaires: [{ url: 'https://ex/b.pdf', label: LIBELLE_FICHE_TECHNIQUE }],
+    }), { origine: ORIGINE }).filter(l => l.cible === 'fiche');
+    expect(liens.map(l => l.label)).toEqual(['Fiche technique', 'Fiche technique 2']);
   });
 });

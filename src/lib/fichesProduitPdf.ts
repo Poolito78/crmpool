@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { fichesDuProduit, type TypeFiche } from './liensProduit';
+import { fichesDuProduit, LIBELLE_FICHE_TECHNIQUE, type TypeFiche } from './liensProduit';
 import type { Produit } from './store';
 
 /**
@@ -35,7 +35,9 @@ export async function deposerFicheTechnique(
     .upload(chemin, file, { upsert: false, contentType: 'application/pdf' });
   if (error) return { erreur: `Envoi impossible : ${error.message}` };
   const { data } = supabase.storage.from(SEAU_FICHES).getPublicUrl(chemin);
-  return { url: data.publicUrl, label: file.name };
+  // Intitulé d'office « Fiche technique », jamais le nom du fichier importé.
+  // Une fiche de système le remplace par « Fiche Système - <nom> ».
+  return { url: data.publicUrl, label: LIBELLE_FICHE_TECHNIQUE };
 }
 
 /**

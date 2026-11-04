@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Produit } from '@/lib/store';
-import { avecMention, type LienProduit } from '@/lib/liensProduit';
+import { avecMention, libelleFicheSysteme, type LienProduit } from '@/lib/liensProduit';
 
 /**
  * Systèmes de mise en œuvre, tels que les décrivent les fiches techniques.
@@ -580,7 +580,7 @@ export function liensFichesSystemes(
         id: `sys:${s.id}`,
         produitId: a.id,
         cible: 'systeme',
-        label: avecMention(s.ficheLabel?.trim() || s.nom, s.ficheMention || 'systeme'),
+        label: avecMention(s.ficheLabel?.trim() || libelleFicheSysteme(s.nom), s.ficheMention || 'systeme'),
         url,
       });
     }
@@ -593,7 +593,7 @@ export function liensFichesSystemes(
       id: `sys:${s.id}`,
       produitId: articles[0]?.id ?? '',
       cible: 'systeme',
-      label: avecMention(s.ficheLabel?.trim() || s.nom, s.ficheMention || 'systeme'),
+      label: avecMention(s.ficheLabel?.trim() || libelleFicheSysteme(s.nom), s.ficheMention || 'systeme'),
       url,
     });
   }

@@ -9,6 +9,7 @@ import MentionFiche from '@/components/MentionFiche';
 import ChoisirFicheGed from '@/components/ChoisirFicheGed';
 import { enregistrerFicheSysteme, systemesDeLArticle, type Systeme } from '@/lib/systemes';
 import { deposerFicheTechnique, estFichePdf } from '@/lib/fichesProduitPdf';
+import { libelleFicheSysteme } from '@/lib/liensProduit';
 
 /**
  * Encart « Fiches systèmes » de la fiche article.
@@ -60,7 +61,7 @@ export default function FichesSystemesArticle({ produitId, systemes, onChange }:
     const res = await deposerFicheTechnique(produitId, file);
     if ('erreur' in res) { toast.error(res.erreur); setEnvoi(false); return; }
     if (!liste.some(l => l.id === s.id)) setAjoutes(prev => [...prev, s.id]);
-    await maj(s, { url: res.url, label: s.ficheLabel || res.label });
+    await maj(s, { url: res.url, label: libelleFicheSysteme(s.nom) });
     setEnvoi(false);
     setEnAttente(null);
     setCible('');
@@ -126,7 +127,7 @@ export default function FichesSystemesArticle({ produitId, systemes, onChange }:
               <Label className="text-xs">Texte affiché dans le mail</Label>
               <Input
                 key={`l-${s.id}-${s.ficheLabel ?? ''}`}
-                className="h-9 text-xs" defaultValue={s.ficheLabel ?? ''} placeholder={s.nom}
+                className="h-9 text-xs" defaultValue={s.ficheLabel ?? ''} placeholder={libelleFicheSysteme(s.nom)}
                 onBlur={e => { if (e.target.value.trim() !== (s.ficheLabel ?? '')) void maj(s, { label: e.target.value }); }}
               />
             </div>
@@ -154,7 +155,7 @@ export default function FichesSystemesArticle({ produitId, systemes, onChange }:
             onOpenChange={o => { if (!o) setGedPour(null); }}
             produitId={produitId}
             indice={s.nom}
-            onChoisie={fiche => void maj(s, { url: fiche.url, label: s.ficheLabel || fiche.label })}
+            onChoisie={fiche => void maj(s, { url: fiche.url, label: libelleFicheSysteme(s.nom) })}
           />
         </div>
       ))}

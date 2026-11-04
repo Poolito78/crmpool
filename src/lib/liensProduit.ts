@@ -169,14 +169,42 @@ export function sansMention(label: string, type?: TypeFiche): string {
   return prefixe && label.startsWith(prefixe) ? label.slice(prefixe.length) : label;
 }
 
+/**
+ * Intitulés posés d'office sur une fiche déposée (règle du 04/11/2026) : le
+ * nom du fichier importé (« FP_Peran_stc_fr_201402.pdf ») ne se lit pas dans
+ * un mail. Une fiche d'article s'appelle « Fiche technique », celle d'un
+ * système « Fiche Système - <nom du système> ».
+ */
+export const LIBELLE_FICHE_TECHNIQUE = 'Fiche technique';
+export const libelleFicheSysteme = (nom: string): string => `Fiche Système - ${nom.trim()}`;
+
+const pourComparer = (s: string): string =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+/**
+ * Mention et libellé qui se recouvrent ne se doublent pas : « Fiche système »
+ * devant « Fiche Système - Flowshield BC Uni » garde le libellé seul, et
+ * « Fiche technique fournisseur » devant « Fiche technique » garde la mention.
+ */
+function joindre(mention: string, label: string): string {
+  if (!mention) return label;
+  if (!label) return mention;
+  const m = pourComparer(mention), l = pourComparer(label);
+  if (l.startsWith(m)) return label;
+  if (m.startsWith(l)) return mention;
+  return `${mention} — ${label}`;
+}
+
 export function avecMention(label: string, type?: TypeFiche): string {
-  return type ? `${mentionTexte(type)} — ${label}` : label;
+  return type ? joindre(mentionTexte(type), label) : label;
 }
 
 function libelleFiche(f: { label: string; type?: TypeFiche }, rang: number, nom: string): string {
   const mention = mentionTexte(f.type);
-  const saisi = f.label.trim();
-  if (saisi) return mention ? `${mention} — ${saisi}` : saisi;
+  let saisi = f.label.trim();
+  // Deux fiches « Fiche technique » ne se distingueraient pas dans un mail.
+  if (rang > 0 && !mention && pourComparer(saisi) === pourComparer(LIBELLE_FICHE_TECHNIQUE)) saisi = `${saisi} ${rang + 1}`;
+  if (saisi) return joindre(mention, saisi);
   return `${mention || `${LIBELLE_CIBLE.fiche}${rang > 0 ? ` ${rang + 1}` : ''}`} — ${nom}`;
 }
 
