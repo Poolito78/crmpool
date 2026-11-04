@@ -120,7 +120,7 @@ describe('plusieurs fiches techniques', () => {
     expect(liens.map(l => l.cible)).toEqual(['fiche', 'fiche', 'image', 'page']);
     expect(liens.map(l => l.id)).toEqual(['p1:fiche', 'p1:fiche:2', 'p1:image', 'p1:page']);
     expect(liens.filter(l => l.cible === 'fiche').map(l => l.label))
-      .toEqual(['Fiche technique', 'Fiche de sécurité']);
+      .toEqual(['Fiche technique — Article de démonstration', 'Fiche de sécurité']);
   });
 
   it('numérote les fiches suivantes qui n’ont pas de libellé', () => {
@@ -310,19 +310,19 @@ describe('intitulés posés d’office (04/11/2026)', () => {
     expect(avecMention('Flowshield BC Uni', 'systeme')).toBe('Fiche système — Flowshield BC Uni');
   });
 
-  it('garde la mention fournisseur seule devant « Fiche technique »', () => {
+  it('complète l’intitulé d’office « Fiche technique » par la désignation, mention comprise', () => {
     const [fiche] = liensDuProduit(
       produit({ id: 'p1', ficheUrl: 'https://ex/f.pdf', ficheLinkLabel: LIBELLE_FICHE_TECHNIQUE, ficheType: 'fournisseur' }),
       { origine: ORIGINE },
     );
-    expect(fiche.label).toBe('Fiche technique fournisseur');
+    expect(fiche.label).toBe('Fiche technique fournisseur — Article de démonstration');
   });
 
-  it('numérote une deuxième « Fiche technique » sans mention', () => {
+  it('nomme l’article et numérote la deuxième « Fiche technique »', () => {
     const liens = liensDuProduit(produit({
       id: 'p1', ficheUrl: 'https://ex/a.pdf', ficheLinkLabel: LIBELLE_FICHE_TECHNIQUE,
       fichesSupplementaires: [{ url: 'https://ex/b.pdf', label: LIBELLE_FICHE_TECHNIQUE }],
     }), { origine: ORIGINE }).filter(l => l.cible === 'fiche');
-    expect(liens.map(l => l.label)).toEqual(['Fiche technique', 'Fiche technique 2']);
+    expect(liens.map(l => l.label)).toEqual(['Fiche technique — Article de démonstration', 'Fiche technique 2 — Article de démonstration']);
   });
 });

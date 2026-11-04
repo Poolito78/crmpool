@@ -204,8 +204,10 @@ export function avecMention(label: string, type?: TypeFiche): string {
 function libelleFiche(f: { label: string; type?: TypeFiche }, rang: number, nom: string): string {
   const mention = mentionTexte(f.type);
   let saisi = f.label.trim();
-  // Deux fiches « Fiche technique » ne se distingueraient pas dans un mail.
-  if (rang > 0 && !mention && pourComparer(saisi) === pourComparer(LIBELLE_FICHE_TECHNIQUE)) saisi = `${saisi} ${rang + 1}`;
+  /* L'intitulé posé d'office, « Fiche technique », ne dit pas DE QUOI : six
+     fiches d'un devis système partaient dans le mail sous ce seul texte. Il
+     vaut l'absence de libellé — la désignation de l'article le suit. */
+  if (pourComparer(saisi) === pourComparer(LIBELLE_FICHE_TECHNIQUE)) saisi = '';
   if (saisi) return joindre(mention, saisi);
   return `${mention || `${LIBELLE_CIBLE.fiche}${rang > 0 ? ` ${rang + 1}` : ''}`} — ${nom}`;
 }
