@@ -72,7 +72,7 @@ import {
 } from '@/lib/systemes';
 import { ressembleASysteme } from '@/lib/fichesSysteme';
 import SystemeIntrouvable from '@/components/SystemeIntrouvable';
-import { systemesDeDevis } from '@/lib/systemesDevis';
+import { fusionnerSystemes, systemesDeDevis } from '@/lib/systemesDevis';
 import {
   rapprocherSysteme, nomsCandidats, systemeImpose, composantDemande, precisionDemande, surfaceDeDemande, zoneDeDemande,
   lineaireDeDemande, surfaceDepuisLineaire,
@@ -1034,9 +1034,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
   const { systemes: systemesFiches, recharger: rechargerSystemes } = useSystemes();
   /* Les fiches Flowcrete de la table, puis les combinaisons que portent les
-     devis modèles (« Flowfast 107 + 319 Road »). */
+     devis modèles (« Flowfast 107 + 319 Road »), sans doublon de composition. */
   const systemes = useMemo(
-    () => [...systemesFiches, ...systemesDeDevis(devis)],
+    () => fusionnerSystemes(systemesFiches, systemesDeDevis(devis)),
     [systemesFiches, devis]);
   /**
    * Ajoute une ligne vide à la demande, puis place le curseur dans son

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { Devis, LigneDevis } from './store';
-import { systemeDepuisDevis, systemesDeDevis } from './systemesDevis';
+import { fusionnerSystemes, systemeDepuisDevis, systemesDeDevis } from './systemesDevis';
 import { rapprocherSysteme } from './rapprochementSysteme';
-import { declinerSysteme } from './systemes';
+import { declinerSysteme, type Systeme } from './systemes';
 
 const l = (o: Partial<LigneDevis>): LigneDevis => ({
   id: Math.random().toString(36).slice(2), description: '', quantite: 0, unite: 'U',
@@ -62,5 +62,53 @@ describe('systèmes issus de devis modèles', () => {
     const s = systemeDepuisDevis(ROAD_107_319)!;
     const d = declinerSysteme(s, 100);
     expect(d.map(x => x.quantiteKg)).toEqual([50, 52.3, 10.46]);
+  });
+});
+
+describe('un système présent dans la table et dans un devis modèle', () => {
+  const F1 = modele('Flowfast F1 Mortar', [
+    l({ type: 'groupe', description: 'Primaire' }),
+    l({ produitId: 'p107', description: 'FLOWFAST 107 Primer (20 kg)', consommation: 0.5 }),
+    l({ produitId: 'pqz', description: 'Quartz 0,3- 0,8 (25 kg)', consommation: 0.5 }),
+    l({ produitId: 'pcat', description: 'Catalyst (2 kg)' }),
+    l({ type: 'groupe', description: 'FLOWFAST F1 MORTAR' }),
+    l({ produitId: 'pf1', description: 'FLOWFAST F1 MORTAR (A 2,2 KG + B 17,8 kG)' }),
+  ]);
+  const ligneTable = (nom: string, articles: string[]): Systeme => ({
+    id: `t-${nom}`, nom, support: 'Béton', actif: true, variante: 'Réparation',
+    composants: articles.map((produitId, ordre) => ({
+      id: `c${ordre}`, systemeId: `t-${nom}`, ordre, produitId, libelle: produitId, role: 'base', obligatoire: true,
+    })) as Systeme['composants'],
+  });
+  const demande = 'Flowfast F1 Mortar 20 m²';
+
+  it('mêmes articles : le modèle reste seul et se chiffre comme sans la ligne de la table', () => {
+    const modeles = systemesDeDevis([F1]);
+    const table = ligneTable('Flowfast F1 Mortar', ['pf1', 'pcat', 'pqz', 'p107']);
+    const avant = rapprocherSysteme(demande, modeles)!;
+    const apres = rapprocherSysteme(demande, fusionnerSystemes([table], modeles))!;
+    expect(apres.variantes).toHaveLength(1);
+    expect(apres.retenu?.id).toBe(avant.retenu?.id);
+    expect(apres.retenu?.composants).toEqual(avant.retenu?.composants);
+  });
+
+  it('sans la fusion, la même ligne ne laisserait retenir aucune variante', () => {
+    const table = ligneTable('Flowfast F1 Mortar', ['pf1', 'pcat', 'pqz', 'p107']);
+    const r = rapprocherSysteme(demande, [table, ...systemesDeDevis([F1])])!;
+    expect(r.variantes).toHaveLength(2);
+    expect(r.retenu).toBeUndefined();
+  });
+
+  it('articles différents sous le même nom : les deux restent proposés', () => {
+    const table = ligneTable('Flowfast F1 Mortar', ['pf1', 'pautre']);
+    const tous = fusionnerSystemes([table], systemesDeDevis([F1]));
+    expect(tous).toHaveLength(2);
+    expect(rapprocherSysteme(demande, tous)!.retenu).toBeUndefined();
+  });
+
+  it('nom différent, ou ligne de table sans article : rien n’est retiré', () => {
+    const modeles = systemesDeDevis([F1]);
+    expect(fusionnerSystemes([ligneTable('Flowshield SL', ['pf1', 'pcat', 'pqz', 'p107'])], modeles)).toHaveLength(2);
+    expect(fusionnerSystemes([ligneTable('Flowfast F1 Mortar', [])], modeles)).toHaveLength(2);
   });
 });

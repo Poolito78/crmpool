@@ -91,3 +91,27 @@ export function systemesDeDevis(devis: Devis[]): Systeme[] {
   }
   return out;
 }
+
+/**
+ * Les systèmes qu'une demande peut désigner : ceux de la table, puis ceux des
+ * devis modèles.
+ *
+ * MÊME NOM ET MÊMES ARTICLES, C'EST LE MÊME SYSTÈME, pas deux variantes. Sans
+ * cela, `rapprochementDuNom` voit deux variantes du nom et ne retient plus rien
+ * (« variante à choisir »). Le modèle reste seul au chiffrage, avec ses
+ * consommations ; la ligne de la table sert aux fiches (mail, PDF, fiche
+ * article). Flowfast F1 Mortar : ligne créée le 05/11/2026 pour sa fiche récap.
+ *
+ * Deux compositions différentes sous un même nom (Flowshield BC Uni) restent
+ * deux choix proposés : rien ne dit laquelle est voulue.
+ */
+export function fusionnerSystemes(table: Systeme[], modeles: Systeme[]): Systeme[] {
+  const articles = (s: Systeme) => new Set(s.composants.map(c => c.produitId).filter(Boolean));
+  const memeSysteme = (t: Systeme, m: Systeme) => {
+    if (t.nom !== m.nom) return false;
+    const a = articles(t);
+    const b = articles(m);
+    return a.size > 0 && a.size === b.size && [...a].every(id => b.has(id));
+  };
+  return [...table.filter(t => !modeles.some(m => memeSysteme(t, m))), ...modeles];
+}
