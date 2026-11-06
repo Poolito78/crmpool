@@ -30,7 +30,7 @@ export const LIBELLE_ORIGINE_POIDS: Record<PoidsEcrit['origine'], string> = {
   unique: 'poids du document',
 };
 
-const NOMBRE = String.raw`(\d{1,3}(?:[ .  ]\d{3})+(?:,\d+)?|\d{1,3}(?:,\d{3})+\.\d+|\d+(?:[.,]\d+)?)`;
+const NOMBRE = String.raw`(\d{1,3}(?:[ .\u00a0\u202f]\d{3})+(?:,\d+)?|\d{1,3}(?:,\d{3})+\.\d+|\d+(?:[.,]\d+)?)`;
 const RE_TOTAL = new RegExp(
   String.raw`\b(?:poids\s+(?:brut\s+)?total(?:\s+brut)?|total\s+poids|poids\s+exp[ée]di[ée])\s*:?\s*${NOMBRE}\s*kg\b`, 'i');
 const RE_BRUT = new RegExp(String.raw`\bpoids\s+brut\s*:?\s*${NOMBRE}\s*kg\b`, 'gi');
@@ -45,7 +45,7 @@ const RE_POIDS = new RegExp(String.raw`\bpoids\s*:?\s*${NOMBRE}\s*kg\b`, 'gi');
 export function nombreLu(v: unknown): number | undefined {
   if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
   if (typeof v !== 'string') return undefined;
-  const t = v.replace(/[\s  €]/g, '').replace(/kg$/i, '');
+  const t = v.replace(/[\s\u00a0\u202f€]/g, '').replace(/kg$/i, '');
   if (!/^\d[\d.,]*$/.test(t)) return undefined;
   const virgule = t.lastIndexOf(',');
   const point = t.lastIndexOf('.');

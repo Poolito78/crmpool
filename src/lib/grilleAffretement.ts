@@ -30,7 +30,7 @@ const MEME_LIGNE = 4;
 /** La ligne de prix se trouve sous le libellé, à moins de cet écart. */
 const SOUS_LIBELLE = 26;
 
-const RE_PRIX = /^(\d[\d\s  ]*(?:[.,]\d{1,2})?)\s*€$/;
+const RE_PRIX = /^(\d[\d\s\u00a0\u202f]*(?:[.,]\d{1,2})?)\s*€$/;
 const RE_LIBELLE = /^(.*[A-Za-zÀ-ÿ'’])\s*(\d{2,3}|2[AB])((?:\s+\d{1,2})*)$/;
 const RE_SERVICE = /^[A-Z]{1,4}\d?$/;
 
@@ -38,7 +38,7 @@ const RE_SERVICE = /^[A-Z]{1,4}\d?$/;
 export const prixDe = (s: string): number | undefined => {
   const m = s.trim().match(RE_PRIX);
   if (!m) return undefined;
-  const n = parseFloat(m[1].replace(/[\s  ]/g, '').replace(',', '.'));
+  const n = parseFloat(m[1].replace(/[\s\u00a0\u202f]/g, '').replace(',', '.'));
   return Number.isFinite(n) && n > 0 ? n : undefined;
 };
 
