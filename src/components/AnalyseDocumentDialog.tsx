@@ -22,6 +22,12 @@ import {
 import PlanDirectionnelEncart from '@/components/PlanDirectionnelEncart';
 import ClasserDocumentFournisseur from '@/components/ClasserDocumentFournisseur';
 import FicheTechniqueArticle from '@/components/FicheTechniqueArticle';
+import PortDocumentPanel, { type PortSaisi } from '@/components/PortDocumentPanel';
+import TransportFournisseurDialog from '@/components/TransportFournisseurDialog';
+import {
+  LIBELLE_ORIGINE_POIDS, estLignePort, lireCodePostalLivraison, lirePoidsEcrit, texteEnLignes, type PoidsEcrit,
+} from '@/lib/portDuDocument';
+import { fusionnerPaliers, normaliserDept } from '@/lib/transportFournisseur';
 import GrilleAffretementTable from '@/components/GrilleAffretementTable';
 import GrilleMessagerieTable from '@/components/GrilleMessagerieTable';
 import { fournisseurNomme, lireGrilleAffretement, ressembleTarifTransport } from '@/lib/grilleAffretement';
@@ -115,7 +121,7 @@ import { useCRM } from '@/lib/StoreContext';
 import {
   type Client, type Fournisseur, type CommandeFournisseur, type LigneReception, type CommandeClient, type Devis, type LigneDevis,
   type Produit,
-  designationProduit, generateId, calculerDateEcheance, portFournisseur, formatDateISO, formatMontant,
+  designationProduit, generateId, calculerDateEcheance, departementDeCodePostal, formatDateISO, formatMontant,
 } from '@/lib/store';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
 import { supabase } from '@/integrations/supabase/client';
@@ -493,9 +499,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [creerCFNotes, setCreerCFNotes] = useState('');
   const [creerCFMemoPort, setCreerCFMemoPort] = useState(true);
   const [creerCFMajPrix, setCreerCFMajPrix] = useState(true);
-  /** Palier à retenir, modifiable ; vide = valeur lue sur le document. */
-  const [creerCFPalierPoids, setCreerCFPalierPoids] = useState('');
-  const [creerCFPalierCout, setCreerCFPalierCout] = useState('');
+  /* ── frais de transport du document (`PortDocumentPanel`) ── */
+  /** Poids et code postal relus à la position des cellules (`portDuDocument.ts`). */
+  const [portEcrit, setPortEcrit] = useState<{ poids?: PoidsEcrit; codePostal?: string } | null>(null);
+  /** Ce que l'utilisateur a corrigé ; absent = valeur lue sur le document. */
+  const [portModifs, setPortModifs] = useState<Partial<PortSaisi>>({});
+  const [portIntegre, setPortIntegre] = useState(false);
+  const [ficheTransportId, setFicheTransportId] = useState<string | null>(null);
 
   /* ── état commande client ── */
   const [showCreerCC, setShowCreerCC] = useState(false);
@@ -1172,7 +1182,6 @@ const [contratOdoo, setContratOdoo] = useState<
     setCreerCFDateReception(result.dateDocument || today());
     setCreerCFDateLivraison(result.dateLivraisonPrevue || '');
     setCreerCFNotes(result.referencePartenaire ? `Réf. fournisseur : ${result.referencePartenaire}` : '');
-    setCreerCFPalierPoids(''); setCreerCFPalierCout('');
   }, [result, matchedCF]);
 
   /* ── pré-remplissage devis fournisseur ──────────────────────────────────
@@ -1646,6 +1655,7 @@ const [contratOdoo, setContratOdoo] = useState<
     if (!apiKey) { toast.error('Clé API Groq manquante (VITE_GROQ_API_KEY)'); return; }
     setLoading(true); setResult(null); setMatchedCF(null); setShowCreerCF(false); setShowCreerCC(false);
     setGrilleTransport(null);
+    setPortEcrit(null); setPortModifs({}); setPortIntegre(false);
     /* Une nouvelle analyse repart d'une page blanche. Nécessaire depuis que le
        pré-remplissage ne réécrit plus ce qui est déjà renseigné : sans cela, le
        client et le contact du document précédent resteraient en place. */
@@ -1677,6 +1687,9 @@ const [contratOdoo, setContratOdoo] = useState<
     signaturesRef.current = []; souvenirRef.current = undefined; texteSourceRef.current = '';
     try {
       let analysis: DocumentAnalysis;
+      /* Le texte où relire poids et code postal du port : seulement ce que l'IA a lu
+         (ni plan Kadri de cent pages, ni grille de transport, ni offre Odoo). */
+      let lireSource: (() => Promise<string>) | null = null;
       if (pdfFile) {
         const texteSuppl = pdfsCtx.length > 0 && texteCtx.trim() ? texteCtx : undefined;
         if (texteCtx.trim()) analyseTexteRef.current = texteCtx;
@@ -1787,6 +1800,8 @@ const [contratOdoo, setContratOdoo] = useState<
         } else {
           const indice = await rappelerEmetteur([texteCtx, ...pages].join('\n'));
           analysis = await analyserDocument({ type: 'pdf', buffer: await principal.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, openrouterKey, impose, indice);
+          const piece = principal;
+          lireSource = async () => texteEnLignes(await extraireItemsPDF(await piece.arrayBuffer()));
         }
       } else if (texteCtx.trim()) {
         // Décoder le MIME côté client si c'est un email brut collé
@@ -1808,6 +1823,8 @@ const [contratOdoo, setContratOdoo] = useState<
         analyseTexteRef.current = texteAnalyse;
         const indice = await rappelerEmetteur(texteAnalyse);
         analysis = await analyserDocument({ type: 'text', texte: texteAnalyse }, apiKey, openrouterKey, impose, indice);
+        const source = texteAnalyse;
+        lireSource = async () => source;
       } else {
         toast.error('Glissez un PDF ou collez du texte'); return;
       }
@@ -1815,6 +1832,8 @@ const [contratOdoo, setContratOdoo] = useState<
       /* « 1 160,57 € » lu 160,57 : le texte source rend le millier perdu. */
       const milliers = redresserMilliers(analysis, texteSourceRef.current || texteCtx);
       if (milliers) toast.info(`${milliers} prix relu${milliers > 1 ? 's' : ''} sur le document : millier oublié par la lecture.`);
+      const texteEcrit = lireSource ? await lireSource().catch(() => '') : '';
+      if (texteEcrit) setPortEcrit({ poids: lirePoidsEcrit(texteEcrit), codePostal: lireCodePostalLivraison(texteEcrit) });
       setResult(analysis);
       if (isFournisseurDoc(analysis.typeDocument) && analysis.numeroDocument) {
         const match = commandesFournisseur.find(cf =>
@@ -2002,6 +2021,7 @@ const [contratOdoo, setContratOdoo] = useState<
 
   function reset() {
     setGrilleTransport(null);
+    setPortEcrit(null); setPortModifs({}); setPortIntegre(false);
     setTexte(''); setFichier(null); setFichiersOrigine([]); setEmlPdfs([]); setResult(null); setMatchedCF(null); setDragging(false);
     setReceptionOpen(false); setShowCreerCF(false); setShowCreerCC(false);
     setExtractingContact(false); setContactToSave(null); setContactCible(null);
@@ -2059,10 +2079,6 @@ const [contratOdoo, setContratOdoo] = useState<
      rattachent à un article du CRM — d'abord par la référence que CE
      fournisseur a déjà vue (fiche fournisseur), sinon par le rapprochement du
      texte, sinon au choix de l'utilisateur. */
-  const estLignePort = (l: { description?: string; reference?: string }) =>
-    /\b(freight|frais\s+(de\s+)?(transport|port|livraison|exp[ée]dition))\b|^\s*(transport|port|carriage)\s*$/i
-      .test(`${l.description || ''}`);
-
   const produitDeLigneCF = (i: number) => {
     const choisi = choixProduit[i];
     if (choisi) return produitParId(produits, choisi);
@@ -2085,8 +2101,60 @@ const [contratOdoo, setContratOdoo] = useState<
     const p = produitDeLigneCF(i);
     return s + (p?.poids ? p.poids * l.quantite : 0);
   }, 0);
-  const fraisPortCF = lignesPortCF.reduce(
-    (s, { l }) => s + (l.prixUnitaireHT ?? 0) * (l.quantite || 1), 0);
+  /* Une ligne « FREIGHT » passe avant le montant lu à part : jamais les deux. */
+  const fraisPortCF = lignesPortCF.length
+    ? lignesPortCF.reduce((s, { l }) => s + (l.prixUnitaireHT ?? 0) * (l.quantite || 1), 0)
+    : (result?.fraisPortHT ?? 0);
+
+  /**
+   * Le port du document : valeurs lues, corrigées par l'utilisateur, et d'où
+   * elles viennent. Fonction, pas valeur : `livraison` et `rapprochements` sont
+   * déclarés plus bas. Le poids : écrit sur le document, sinon lu par le modèle,
+   * sinon celui des fiches articles — et l'écran dit ce qu'il manque.
+   */
+  function portDuDocument() {
+    const articles = (result?.lignes ?? []).map((l, i) => ({ l, i })).filter(({ l }) => !estLignePort(l));
+    const ecrit = portEcrit?.poids;
+    const lu = result?.poidsTotalKg;
+    const sansPoids = articles.filter(({ i }) => !produitDeLigneCF(i)?.poids).length;
+    const poids = ecrit?.kg ?? lu ?? poidsCF();
+    const originePoids = ecrit ? LIBELLE_ORIGINE_POIDS[ecrit.origine] : lu ? 'lu sur le document' : 'fiches articles (aucun poids écrit sur le document)';
+    const alertePoids = ecrit && ecrit.origine !== 'total' && ecrit.origine !== 'unique' && ecrit.nbLignes < articles.length
+      ? `Poids écrit sur ${ecrit.nbLignes} ligne(s) d'article sur ${articles.length} : à vérifier.`
+      : !ecrit && !lu && sansPoids > 0 ? `${sansPoids} article(s) sans poids : à vérifier.` : undefined;
+    const cpEcrit = departementDeCodePostal(portEcrit?.codePostal);
+    const valeur: PortSaisi = {
+      fournisseurId: matchedCF?.fournisseurId || creerCFFournisseurId || dfFournisseurId
+        || rapprocherFournisseur(result?.nomPartenaire, fournisseurs)?.id || '',
+      cout: String(fraisPortCF),
+      poids: String(Math.floor(poids)),
+      dept: cpEcrit ?? livraison.dpt,
+      mode: '',
+      ...portModifs,
+    };
+    return {
+      valeur, originePoids, alertePoids,
+      origineDept: portModifs.dept !== undefined ? 'saisi à la main' : cpEcrit ? 'adresse de livraison du document' : livraison.origine,
+      montantMarchandise: Math.max(0, (result?.totalHT ?? 0) - fraisPortCF),
+    };
+  }
+
+  /* Le port devient un palier de la fiche, celui de sa destination : un palier de même
+     poids ne remplace que celui de la même destination. Sans poids, le coût fixe. */
+  function ecrirePortSurFiche(fournisseurId: string, v: PortSaisi) {
+    const cout = parseFloat(v.cout.replace(',', '.')) || 0;
+    const poidsMin = Math.max(0, Math.floor(parseFloat(v.poids.replace(',', '.')) || 0));
+    const dept = normaliserDept(v.dept);
+    updateFournisseurs(prev => prev.map(f => {
+      if (f.id !== fournisseurId) return f;
+      if (poidsMin > 0) {
+        return { ...f, paliersPortPoids: fusionnerPaliers(f.paliersPortPoids ?? [], [
+          { poidsMin, coutTransport: cout, ...(v.mode ? { mode: v.mode } : {}), ...(dept ? { dept } : {}) },
+        ]) };
+      }
+      return f.coutTransport === cout ? f : { ...f, coutTransport: cout };
+    }));
+  }
 
   /* ── créer nouvelle commande fournisseur reçue ── */
   function handleCreerCF() {
@@ -2143,24 +2211,11 @@ const [contratOdoo, setContratOdoo] = useState<
     }
     /* Le port lu devient le port habituel du fournisseur, sauf refus. Le
        franco n'est jamais deviné : il reste celui de la fiche. */
-    const portRetenu = creerCFPalierCout.trim() !== ''
-      ? (parseFloat(creerCFPalierCout.replace(',', '.')) || 0) : fraisTransport;
+    const portLu = portDuDocument().valeur;
+    const portRetenu = parseFloat(portLu.cout.replace(',', '.')) || 0;
     if (creerCFMemoPort && portRetenu > 0 && fourn) {
-      const poidsMin = creerCFPalierPoids.trim() !== ''
-        ? Math.max(0, Math.floor(parseFloat(creerCFPalierPoids.replace(',', '.')) || 0))
-        : Math.floor(poidsCF());
-      updateFournisseurs(prev => prev.map(f => {
-        if (f.id !== fourn.id) return f;
-        if (poidsMin > 0) {
-          /* Le tarif vaut POUR la destination du document : on garde le département de livraison avec le palier,
-             et un palier de même poids ne remplace que celui de la même destination. */
-          const dept = livraison.dpt || undefined;
-          const autres = (f.paliersPortPoids ?? []).filter(p => !(p.poidsMin === poidsMin && (p.dept ?? '') === (dept ?? '')));
-          return { ...f, paliersPortPoids: [...autres, { poidsMin, coutTransport: portRetenu, ...(dept ? { dept } : {}) }]
-            .sort((a, b) => a.poidsMin - b.poidsMin) };
-        }
-        return f.coutTransport === portRetenu ? f : { ...f, coutTransport: portRetenu };
-      }));
+      /* Déjà intégré par le bouton du panneau : ne pas l'écrire une seconde fois. */
+      if (!portIntegre) ecrirePortSurFiche(fourn.id, portLu);
       /* Les liens article-fournisseur de cette commande portent un port par
          montant (« ≥ 0 € → 0 » veut dire franco) : tant que leur premier
          palier est à 0 €, le port annoncé sur l'article est « Gratuit ». On y
@@ -6236,6 +6291,33 @@ const [contratOdoo, setContratOdoo] = useState<
                   </div>
                 )}
 
+                {/* ── Frais de transport lus : à intégrer à la fiche du fournisseur ── */}
+                {(isFournisseurDoc(result.typeDocument) || isDevisFourn(result.typeDocument)) && (fraisPortCF > 0 ? (() => {
+                  const port = portDuDocument();
+                  return (
+                    <PortDocumentPanel
+                      valeur={port.valeur}
+                      onChange={patch => { setPortModifs(m => ({ ...m, ...patch })); setPortIntegre(false); }}
+                      originePoids={port.originePoids}
+                      alertePoids={port.alertePoids}
+                      origineDept={port.origineDept}
+                      montantMarchandise={port.montantMarchandise}
+                      fournisseurs={fournisseurs}
+                      integre={portIntegre}
+                      onOuvrirFiche={setFicheTransportId}
+                      onIntegrer={() => {
+                        const f = fournisseurs.find(x => x.id === port.valeur.fournisseurId);
+                        if (!f) return;
+                        ecrirePortSurFiche(f.id, port.valeur);
+                        setPortIntegre(true);
+                        toast.success(`Transport intégré à la fiche ${f.societe || f.nom} (onglet Transport).`);
+                      }}
+                    />
+                  );
+                })() : (
+                  <p className="text-xs text-muted-foreground">Aucun frais de transport lu sur ce document.</p>
+                ))}
+
                 {/* ── Ce que l'analyse a lu, brut ──────────────────────────
                     Replié par défaut. C'est l'état AVANT correction : les
                     articles n'y sont pas rapprochés, les prix y valent 1 €
@@ -6432,42 +6514,14 @@ const [contratOdoo, setContratOdoo] = useState<
                           Mettre à jour le prix d'achat de la fiche article avec le prix du document
                         </label>
 
-                        {/* Port : lu sur le document, comparé à la fiche fournisseur */}
-                        {lignesPortCF.length > 0 && (() => {
-                          const f = fournisseurs.find(x => x.id === creerCFFournisseurId);
-                          const euro = (n: number) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
-                          const poids = poidsCF();
-                          const attendu = f ? portFournisseur(f, poids, result.totalHT ?? 0, livraison.dpt || undefined) : null;
+                        {/* Le port se corrige dans « Frais de transport du document », plus haut. */}
+                        {fraisPortCF > 0 && !portIntegre && (() => {
+                          const v = portDuDocument().valeur;
                           return (
-                            <div className="rounded-lg border border-border bg-background/60 p-2 space-y-1">
-                              <p className="text-xs font-medium">Frais de transport lus : {euro(fraisPortCF)}{poids > 0 ? ` · ${poids.toLocaleString('fr-FR')} kg` : ''}</p>
-                              <p className="text-[11px] text-muted-foreground">
-                                {f
-                                  ? `Fiche ${f.societe || f.nom} : port ${f.coutTransport ? euro(f.coutTransport) : 'non renseigné'}, franco ${f.francoPort ? euro(f.francoPort) : 'non renseigné'}.`
-                                  : 'Choisissez le fournisseur pour comparer à sa fiche.'}
-                              </p>
-                              {f && (
-                                <p className="text-[11px]">
-                                  {attendu
-                                    ? `D'après la fiche (${attendu.source === 'franco' ? 'franco atteint' : attendu.source === 'palier' ? `palier de poids${attendu.dept ? `, relevé pour le dépt ${attendu.dept}${attendu.approximatif ? ' — autre destination : estimation' : ''}` : ''}` : 'coût fixe'}) : ${euro(attendu.montant)}${Math.abs(attendu.montant - fraisPortCF) > 0.005 ? ' — écart avec le document' : ' — conforme'}.`
-                                    : 'La fiche ne permet pas de prévoir ce port.'}
-                                </p>
-                              )}
-                              {f && (!attendu || Math.abs(attendu.montant - fraisPortCF) > 0.005) && (
-                                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                                  <Checkbox checked={creerCFMemoPort} onCheckedChange={v => setCreerCFMemoPort(!!v)} />
-                                  <span>Retenir</span>
-                                  <Input className="h-7 w-20 text-xs text-right" inputMode="decimal"
-                                    value={creerCFPalierCout !== '' ? creerCFPalierCout : String(fraisPortCF)}
-                                    onChange={e => setCreerCFPalierCout(e.target.value)} />
-                                  <span>€ dès</span>
-                                  <Input className="h-7 w-20 text-xs text-right" inputMode="decimal"
-                                    value={creerCFPalierPoids !== '' ? creerCFPalierPoids : String(Math.floor(poids))}
-                                    onChange={e => setCreerCFPalierPoids(e.target.value)} />
-                                  <span>kg (palier de la fiche{Math.floor(poids) > 0 || creerCFPalierPoids !== '' ? '' : ' — 0 kg = coût fixe'}{livraison.dpt ? `, livraison dépt ${livraison.dpt}` : ''})</span>
-                                </div>
-                              )}
-                            </div>
+                            <label className="flex items-center gap-2 text-[11px]">
+                              <Checkbox checked={creerCFMemoPort} onCheckedChange={c => setCreerCFMemoPort(!!c)} />
+                              Retenir ce port dans la fiche fournisseur : {v.cout} € dès {v.poids} kg{v.dept ? `, livraison dépt ${v.dept}` : ''}
+                            </label>
                           );
                         })()}
                       </div>
@@ -9230,6 +9284,7 @@ const [contratOdoo, setContratOdoo] = useState<
         </DialogContent>
       </Dialog>
 
+      <TransportFournisseurDialog fournisseurId={ficheTransportId} onClose={() => setFicheTransportId(null)} />
       {matchedCF && (
         <ReceptionCommandeDialog
           open={receptionOpen}

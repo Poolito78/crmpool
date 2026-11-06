@@ -95,6 +95,10 @@ export interface DocumentAnalysis {
   lignes: LigneAnalysee[];
   totalHT?: number;
   totalTTC?: number;
+  /** Port HT quand il n'est pas en ligne d'article (une ligne « FREIGHT » passe avant). */
+  fraisPortHT?: number;
+  /** Poids de l'envoi lu par le modèle ; le poids écrit relu à la position des cellules passe avant (`portDuDocument.ts`). */
+  poidsTotalKg?: number;
   notes?: string;
   /**
    * Adresse de LIVRAISON, quand le document la distingue de la facturation.
@@ -125,6 +129,8 @@ Identifie le type de document et extrait les informations. Réponds UNIQUEMENT a
   "dateEcheance": "date d'échéance de paiement au format YYYY-MM-DD ou null",
   "totalHT": "montant TOTAL HORS TAXES (H.T.) du document, nombre ou null",
   "totalTTC": "montant TOUTES TAXES COMPRISES (T.T.C. / net à payer), nombre ou null",
+  "fraisPortHT": "montant HT des frais de port / transport du document, nombre ou null (0 seulement si « franco » ou « port offert » est écrit)",
+  "poidsTotalKg": "poids total de l'envoi en kg s'il est écrit, nombre ou null",
   "notes": "remarques importantes ou null",
   "adresseLivraison": "rue de l'adresse de LIVRAISON si elle est distincte de la facturation, ou null",
   "codePostalLivraison": "code postal de l'adresse de LIVRAISON (5 chiffres) ou null",
@@ -208,7 +214,8 @@ repris comme prix d'ACHAT :
   un même article répété sous plusieurs groupes donne autant de lignes.
 - Une majoration ou une participation chiffrée est une ligne (sans remise).
 - Les frais de port, d'emballage ou de transport ne sont pas des articles :
-  ne les mets pas en lignes, signale-les dans « notes ».
+  ne les mets pas en lignes, reporte leur montant dans « fraisPortHT » et
+  signale-les dans « notes ».
 - « nomPartenaire » = la société qui ÉMET le devis : celle de l'en-tête, du
   logo, du capital, du SIRET et du n° de TVA. ISOSIGN figure en
   « Adresse de facturation / de livraison » : ce n'est JAMAIS le partenaire.
@@ -268,6 +275,8 @@ function lireAnalyse(texte: string): DocumentAnalysis {
   /* Un modèle rend parfois « 19 958,50 » en chaîne : le total devenait NaN. */
   parsed.totalHT = nombreLu(parsed.totalHT);
   parsed.totalTTC = nombreLu(parsed.totalTTC);
+  parsed.fraisPortHT = nombreLu(parsed.fraisPortHT);
+  parsed.poidsTotalKg = nombreLu(parsed.poidsTotalKg);
   for (const l of parsed.lignes) {
     l.prixUnitaireHT = nombreLu(l.prixUnitaireHT);
     l.prixConseille = nombreLu(l.prixConseille);
