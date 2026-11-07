@@ -158,7 +158,8 @@ explication.
 `assistantVocal` (phrase dite → commande ; une commande ne vaut que si elle se résout entièrement, sinon c'est de la dictée) ·
 `stockDisponible` (stock − commandes clients en cours ; page Stock et assistant vocal) ·
 `dosageEpaisseur` (F1 Mortar : épaisseur saisie sur la ligne → conso du kit au palier de la fiche, granulats à cocher, quantité = kits × kg/kit) ·
-`agentMail` + `dossierMails` + `mailsTransferes` (Agent mail : non lus ET lus sans réponse exportés par la macro Outlook `ExporterMailsNonLus` — à l'arrivée si `ThisOutlookSession.vba` est installé —, glissés, ou TRANSFÉRÉS du mobile à l'adresse MonCRM → fonction `agent-mail-depot` ; tri IA, « Proposer un devis » = mail confié à l'analyse de document ; `microsoftGraph` = option Azure) ·
+`agentMail` + `dossierMails` + `mailsTransferes` (Agent mail : non lus ET lus sans réponse exportés par la macro Outlook `ExporterMailsNonLus` — à l'arrivée si `ThisOutlookSession.vba` est installé —, glissés, ou TRANSFÉRÉS du mobile à l'adresse MonCRM → fonction `agent-mail-depot` ; tri IA, « Proposer un devis » = mail confié à l'analyse de document ; `microsoftGraph` = option Azure ; la macro range répondus et sortis de la boîte, quota Gemini à ménager) ·
+`devisOdooMails` (demande de devis ↔ devis Odoo : même société, créé après le mail, avec preuve = « Déjà réalisé », sans preuve = proposé, jamais retenu) ·
 `mailsTypes` (objet + texte des mails d'envoi devis / commande fournisseur / facture / AR, par utilisateur, Paramètres → Mails ; `[[ ]]` = passage retiré si un champ est vide) ·
 `chantierDemande` · `contactAffaire` · `liensProduit` · `categorieDocuments` ·
 `produitImages` · `journalPrix` · `prixAchatFournisseur` · `devisFournisseur` ·
@@ -189,7 +190,7 @@ s'exécutent dans un **terminal**, jamais dans l'éditeur SQL.
 **Edge Functions** (`supabase/functions/*`) : déployer avec
 `.\deploy-function.ps1 <nom>` (ou `-All`). Fonctions : `extract-client`,
 `extract-contact`, `analyze-email`, `ai-calculator`, `devis-assistant`,
-`send-devis-email`, `odoo-prix`, `gemini`, `agent-mail-depot`, `odoo-achat`.
+`send-devis-email`, `odoo-prix`, `gemini`, `agent-mail-depot`, `odoo-achat`, `odoo-devis-mails`.
 
 **Diagnostic « ça ne persiste pas »** : les `updateXxx` écrivent en
 fire-and-forget. Un upsert qui envoie une colonne inexistante reçoit un 400 et

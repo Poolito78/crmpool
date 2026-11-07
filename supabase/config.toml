@@ -19,6 +19,11 @@ verify_jwt = true
 [functions.odoo-achat]
 verify_jwt = true
 
+# Agent mail : devis Odoo des societes qui ont ecrit, en LECTURE seule.
+# Session exigee (fichier partenaires et devis).
+[functions.odoo-devis-mails]
+verify_jwt = true
+
 # Relais Gemini : la cle vit cote serveur, l'acces exige une session MonCRM.
 # Un relais ouvert offrirait a tout venant un acces Gemini facture au
 # proprietaire de la cle — c'est exactement ce que la cle publique permettait.

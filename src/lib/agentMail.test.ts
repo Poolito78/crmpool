@@ -3,6 +3,7 @@ import {
   corpsUtile, lireTri, clientDuMail, numerosDevisCites, invitationTri,
   enteteEml, decoderMotsEncodes, dateDuNom, estFichierMail, pieceJointeUtile,
   mailTransfere, dateEnFrancais, emlSynthetique, corpsEtFil,
+  triSansModele,
 } from './agentMail';
 import { decouperFil, coupeSignatures } from './chiffrage';
 
@@ -201,5 +202,19 @@ describe('le fil des échanges précédents', () => {
   it('les marques de citation « > » sont retirées', () => {
     const m = decouperFil('Ok\n\nLe 9 oct. 2026 à 11:14, Jean <j@x.fr> a écrit :\n> 10 AB4\n> merci');
     expect(m[1]).toContain('10 AB4\nmerci');
+  });
+});
+
+describe('triSansModele', () => {
+  it('classe un robot sans appeler le modèle', () => {
+    expect(triSansModele({ id: 'a', deEmail: 'no-reply@linkedin.com' })?.categorie).toBe('autre');
+    expect(triSansModele({ id: 'a', deEmail: 'notifications@odoo.com' })?.categorie).toBe('autre');
+    expect(triSansModele({ id: 'a', deEmail: 'MAILER-DAEMON@isosign.fr' })?.categorie).toBe('autre');
+  });
+
+  it('laisse au modèle tout ce qui peut être une personne', () => {
+    expect(triSansModele({ id: 'a', deEmail: 'thomas.lemiere@signal-eco.fr' })).toBeNull();
+    expect(triSansModele({ id: 'a', deEmail: 'noreyna@client.fr' })).toBeNull();
+    expect(triSansModele({ id: 'a', deEmail: '' })).toBeNull();
   });
 });

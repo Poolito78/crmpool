@@ -21,13 +21,18 @@
  * Un mail du dossier est rangé dans `Traites` quand son devis est proposé (le
  * sous-dossier se vide à la main, rien n'est perdu). Un mail Microsoft 365
  * n'est jamais marqué lu sans clic.
+ *
+ * Ne reste à l'écran que ce qui attend : la macro range les mails répondus,
+ * supprimés ou classés, et une demande dont le devis existe chez Odoo passe en
+ * « Déjà réalisés » (`devisOdooMails.ts`) ou propose ce devis s'il n'y a pas de
+ * preuve qu'il y répond.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Mail, Loader2, RefreshCw, FileText, ExternalLink, Check, EyeOff, Paperclip, LogOut, Copy, Sparkles,
-  FolderOpen, Upload, Archive, ChevronRight, Smartphone,
+  FolderOpen, Upload, Archive, ChevronRight, Smartphone, X,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -42,11 +47,15 @@ import {
 } from '@/lib/microsoftGraph';
 import {
   DOSSIER_MAILS, copieEnMemoire, dernierExport, dossierMails, dossierMailsDisponible, fichiersDuDossier,
-  lienOutlook, lireIndexOutlook, lireMailFichier, nomDossierMails, rangerTraite,
+  idFichier, lienOutlook, lireIndexOutlook, lireMailFichier, nomDossierMails, rangerTraite,
 } from '@/lib/dossierMails';
 import {
   type MailAgent, type TriMail, CATEGORIE_MAIL, clientDuMail, estFichierMail, invitationTri, lireTri, numerosDevisCites,
+  triSansModele,
 } from '@/lib/agentMail';
+import {
+  type AdressesMail, type DevisOdooLu, type ReponseDevisOdoo, ETAT_DEVIS_ODOO, adressesDuMail, lireDevisOdoo, rapprocherMail,
+} from '@/lib/devisOdooMails';
 import {
   type AdresseAgent, type DonneesTransfert, adresseDeTransfert, classerMailTransfere, enregistrerAdresseAgent,
   fichiersPourAnalyse, lireAdresseAgent, lireMailsTransferes,
@@ -61,6 +70,10 @@ interface Props {
 
 const CLE_TRAITES = 'agent_mail_traites';
 const CLE_ECARTES = 'agent_mail_ecartes';
+/** « mail|numéro » : ce devis Odoo ne répond pas à ce mail, décidé à la main. */
+const CLE_PAS_CE_DEVIS = 'agent_mail_pas_ce_devis';
+/** Les devis Odoo se relisent au plus souvent que cela. */
+const RELECTURE_ODOO_MS = 10 * 60 * 1000;
 /** Mails envoyés au modèle par appel : au-delà, la réponse se tronque. */
 const PAR_LOT = 10;
 
@@ -78,7 +91,10 @@ function noterId(cle: string, id: string): Record<string, string> {
 
 /* Le dernier tri survit à la fermeture de la fenêtre : la rouvrir ne doit pas
    relancer le modèle sur les mêmes mails. */
-const memoire: { mails: MailAgent[]; tri: Map<string, TriMail>; compte?: string } = { mails: [], tri: new Map() };
+const memoire: {
+  mails: MailAgent[]; tri: Map<string, TriMail>; compte?: string;
+  odoo?: ReponseDevisOdoo; odooCle?: string; odooHeure?: number;
+} = { mails: [], tri: new Map() };
 
 /* …ni au rechargement de la page : la macro exporte aussi les mails lus sans
    réponse, ceux qui ne sont pas des demandes restent au dossier, et chaque
@@ -91,11 +107,16 @@ const triGarde: Map<string, TriMail> = (() => {
 function garderTri(id: string, t: TriMail) {
   triGarde.delete(id);
   triGarde.set(id, t);
-  const derniers = [...triGarde].slice(-500);
+  const derniers = [...triGarde].slice(-1500);
   try { localStorage.setItem(CLE_TRI, JSON.stringify(Object.fromEntries(derniers))); } catch { /* stockage plein */ }
 }
 /* Mails partis au modèle : une relecture pendant le tri ne les renvoie pas. */
 const enVol = new Set<string>();
+/* Déjà soumis : un mail que le modèle a sauté n'est pas renvoyé à chaque relecture,
+   et après deux échecs de suite (quota) on laisse le modèle tranquille un moment. */
+const triTentes = new Set<string>();
+let triEnPauseJusqua = 0;
+const PAUSE_TRI_MS = 15 * 60 * 1000;
 
 /** Au-delà, la macro ne tourne plus (un week-end sans mail en fait 63 h). */
 const EXPORT_PERIME_MS = 72 * 3600 * 1000;
@@ -123,6 +144,10 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   const [triEnCours, setTriEnCours] = useState(false);
   const [erreur, setErreur] = useState('');
   const [toutVoir, setToutVoir] = useState(false);
+  const [voirRealises, setVoirRealises] = useState(false);
+  const [odoo, setOdoo] = useState<ReponseDevisOdoo | undefined>(memoire.odoo);
+  const [erreurOdoo, setErreurOdoo] = useState('');
+  const [pasCeDevis, setPasCeDevis] = useState(() => lireIds(CLE_PAS_CE_DEVIS));
   const [traites, setTraites] = useState(() => lireIds(CLE_TRAITES));
   const [ecartes, setEcartes] = useState(() => lireIds(CLE_ECARTES));
   const [enCours, setEnCours] = useState<string | null>(null);
@@ -163,24 +188,35 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     setMails(liste);
     const t = new Map([...memoire.tri].filter(([id]) => liste.some(m => m.id === id)));
     for (const m of liste) {
-      const g = triGarde.get(m.id);
+      const g = triGarde.get(m.id) ?? triSansModele(m);
       if (g && !t.has(m.id)) t.set(m.id, g);
     }
     setTri(t);
 
-    const aTrier = liste.filter(m => !t.has(m.id) && !enVol.has(m.id));
-    if (!aTrier.length) return;
+    /* Les plus récents d'abord : si le quota lâche, ce sont eux qui comptent. */
+    const aTrier = liste.filter(m => !t.has(m.id) && !enVol.has(m.id) && !triTentes.has(m.id))
+      .sort((a, b) => b.recuLe.localeCompare(a.recuLe));
+    if (!aTrier.length || Date.now() < triEnPauseJusqua) return;
     aTrier.forEach(m => enVol.add(m.id));
     setTriEnCours(true);
+    let echecs = 0;
     try {
       for (let i = 0; i < aTrier.length; i += PAR_LOT) {
         const lot = aTrier.slice(i, i + PAR_LOT);
+        lot.forEach(m => triTentes.add(m.id));
         try {
           const rep = texteGemini(await appelerGemini(invitationTri(lot)));
           for (const [id, r] of lireTri(rep, lot.map(m => m.id))) { memoire.tri.set(id, r); garderTri(id, r); }
           setTri(memoire.tri);
+          echecs = 0;
         } catch (e) {
+          lot.forEach(m => triTentes.delete(m.id));
           setErreur(`Tri IA incomplet : ${(e as Error).message}`);
+          if (++echecs >= 2) {
+            triEnPauseJusqua = Date.now() + PAUSE_TRI_MS;
+            setErreur(`Tri IA suspendu 15 min : Gemini ne répond plus (quota probablement atteint). ${aTrier.length - i} mail(s) restent à trier.`);
+            break;
+          }
         }
       }
     } finally {
@@ -208,7 +244,13 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
       setDossierOuvert(d);
       setNomDossier(d.name);
       if (!silencieux) setLecture(true);
-      const mailsDossier = await lireFichiers(await fichiersDuDossier(d), true);
+      /* Seuls les nouveaux fichiers sont ouverts : le dossier se relit chaque minute. */
+      const fichiers = await fichiersDuDossier(d);
+      const connus = new Map(memoire.mails.filter(m => m.duDossier).map(m => [m.id, m]));
+      const mailsDossier = [
+        ...fichiers.flatMap(f => { const c = connus.get(idFichier(f)); return c ? [{ ...c, fichier: f }] : []; }),
+        ...await lireFichiers(fichiers.filter(f => !connus.has(idFichier(f))), true),
+      ];
       const index = await lireIndexOutlook(d);
       for (const m of mailsDossier) m.entryId = index.get(m.fichier!.name);
       setBilanDossier({
@@ -381,7 +423,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
 
   /* ── La liste ─────────────────────────────────────────────────────────── */
 
-  const lignes = useMemo(() => {
+  const lignesBrutes = useMemo(() => {
     /* Glissé à la main puis exporté par Outlook : un seul, celui du dossier
        (il se range dans Traites). */
     const cle = (m: MailAgent) => `${m.deEmail}|${m.sujet.trim().toLowerCase()}`;
@@ -400,16 +442,56 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
         const cites = numerosDevisCites(`${m.sujet}\n${m.corps}`)
           .map(n => devis.find(d => d.numero.toUpperCase() === n))
           .filter((d): d is NonNullable<typeof d> => !!d);
-        return { m, t, cl, ouverts, cites };
+        return { m, t, cl, ouverts, cites, adresses: adressesDuMail(m, cl.client) };
       })
       .sort((a, b) =>
         (a.t ? RANG[a.t.categorie] : 2.5) - (b.t ? RANG[b.t.categorie] : 2.5)
         || b.m.recuLe.localeCompare(a.m.recuLe));
   }, [mails, tri, ecartes, clients, devis]);
 
-  const utiles = lignes.filter(l => !l.t || l.t.categorie !== 'autre');
-  const visibles = toutVoir ? lignes : utiles;
-  const nbDemandes = lignes.filter(l => l.t?.categorie === 'demande_devis').length;
+  /* Les demandes à rapprocher : une seule lecture Odoo pour toutes, et pas
+     tant que le tri tourne (chaque lot changerait la liste). */
+  const demandesOdoo = useMemo(() => {
+    const demandes = lignesBrutes.filter(l => l.t?.categorie === 'demande_devis' && !isNaN(Date.parse(l.m.recuLe)));
+    if (!demandes.length) return null;
+    const unir = (cle: keyof AdressesMail) => [...new Set(demandes.flatMap(l => l.adresses[cle]))].sort();
+    const depuis = demandes.reduce((min, l) => (l.m.recuLe < min ? l.m.recuLe : min), demandes[0].m.recuLe).slice(0, 10);
+    return { emails: unir('emails'), domaines: unir('domaines'), depuis };
+  }, [lignesBrutes]);
+
+  useEffect(() => {
+    if (!open || triEnCours || !demandesOdoo?.emails.length) return;
+    const cle = JSON.stringify(demandesOdoo);
+    if (memoire.odooCle === cle && Date.now() - (memoire.odooHeure ?? 0) < RELECTURE_ODOO_MS) return;
+    memoire.odooCle = cle;
+    memoire.odooHeure = Date.now();
+    lireDevisOdoo(demandesOdoo)
+      .then(r => { memoire.odoo = r; setOdoo(r); setErreurOdoo(''); })
+      .catch(e => setErreurOdoo((e as Error).message || String(e)));
+  }, [open, triEnCours, demandesOdoo, bilanDossier]);
+
+  const lignes = useMemo(() => lignesBrutes.map(l => ({
+    ...l,
+    odoo: odoo ? rapprocherMail({ recuLe: l.m.recuLe, sujet: l.m.sujet, tri: l.t }, l.adresses, odoo, n => !!pasCeDevis[`${l.m.id}|${n}`]) : null,
+  })), [lignesBrutes, odoo, pasCeDevis]);
+
+  const realises = lignes.filter(l => l.odoo?.certitude === 'sur');
+  const aFaire = lignes.filter(l => l.odoo?.certitude !== 'sur');
+  const utiles = aFaire.filter(l => !l.t || l.t.categorie !== 'autre');
+  const visibles = toutVoir ? aFaire : utiles;
+  const nbDemandes = aFaire.filter(l => l.t?.categorie === 'demande_devis').length;
+
+  const refuserDevis = (m: MailAgent, numero: string) => setPasCeDevis(noterId(CLE_PAS_CE_DEVIS, `${m.id}|${numero}`));
+
+  const lienDevisOdoo = (d: DevisOdooLu) => (d.lien
+    ? <a href={d.lien} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">{d.numero}</a>
+    : <span className="font-medium">{d.numero}</span>);
+  const detailDevisOdoo = (d: DevisOdooLu) => [
+    dateCourte(d.creeLe),
+    `${d.montantHT.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € HT`,
+    ETAT_DEVIS_ODOO[d.etat] || d.etat,
+    d.vendeur,
+  ].filter(Boolean).join(' · ');
 
   /* ── Rendu ──────────────────────────────────────────────────────────────── */
 
@@ -569,7 +651,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-3xl max-h-[90vh] overflow-y-auto"
+        className="max-w-3xl max-h-[90vh] overflow-y-auto overflow-x-hidden grid-cols-[minmax(0,1fr)]"
         onDragEnter={arreter}
         onDragOver={arreter}
         onDrop={e => { arreter(e); ajouterFichiers(e.dataTransfer.files); }}
@@ -590,13 +672,13 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
             <span className="inline-flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Lecture des mails…</span>
           ) : (
             <span>
-              {lignes.length} mail{lignes.length > 1 ? 's' : ''} · <strong className="text-foreground">{nbDemandes} demande{nbDemandes > 1 ? 's' : ''} de devis</strong>
+              {aFaire.length} mail{aFaire.length > 1 ? 's' : ''} à traiter · <strong className="text-foreground">{nbDemandes} demande{nbDemandes > 1 ? 's' : ''} de devis</strong>
             </span>
           )}
           {triEnCours && <span className="inline-flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5 animate-pulse" />tri en cours…</span>}
-          {lignes.length > utiles.length && (
+          {aFaire.length > utiles.length && (
             <Button variant="ghost" size="sm" className="ml-auto h-7 text-xs" onClick={() => setToutVoir(v => !v)}>
-              {toutVoir ? 'Masquer les autres' : `Tout voir (${lignes.length - utiles.length} autres)`}
+              {toutVoir ? 'Masquer les autres' : `Tout voir (${aFaire.length - utiles.length} autres)`}
             </Button>
           )}
         </div>
@@ -608,7 +690,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
             </p>
           )}
 
-          {visibles.map(({ m, t, cl, ouverts, cites }) => {
+          {visibles.map(({ m, t, cl, ouverts, cites, odoo: rapproche }) => {
             const cat = t ? CATEGORIE_MAIL[t.categorie] : null;
             const occupe = enCours === m.id;
             return (
@@ -619,7 +701,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
                       ? <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', cat.couleur)}>{cat.label}{t!.confiance ? ` · ${t!.confiance} %` : ''}</span>
                       : <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{triEnCours ? 'tri…' : 'non trié'}</span>}
                     {traites[m.id] && <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold text-success">Devis proposé</span>}
-                    <span className="truncate font-medium text-sm">{m.sujet}</span>
+                    <span className="min-w-0 max-w-full truncate font-medium text-sm">{m.sujet}</span>
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                     <span className="truncate" title={m.deEmail}>{m.deNom || m.deEmail || 'expéditeur inconnu'}</span>
@@ -665,6 +747,20 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
                   ))}
                 </div>
 
+                {rapproche && (
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-warning/10 px-2 py-1.5 text-xs">
+                    <span>Devis Odoo possible : {lienDevisOdoo(rapproche.devis)}
+                      <span className="text-muted-foreground"> ({detailDevisOdoo(rapproche.devis)}){rapproche.autres > 0 ? ` · ${rapproche.autres} autre${rapproche.autres > 1 ? 's' : ''}` : ''}</span>
+                    </span>
+                    <Button size="sm" variant="outline" className="h-6 text-xs" disabled={occupe} onClick={() => ranger(m)} title="Ce devis répond à la demande : le mail est rangé comme traité">
+                      <Check className="w-3 h-3 mr-1" />C'est lui
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-6 text-xs text-muted-foreground" onClick={() => refuserDevis(m, rapproche.devis.numero)}>
+                      <X className="w-3 h-3 mr-1" />Non
+                    </Button>
+                  </div>
+                )}
+
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
                   <Button size="sm" className="h-7 text-xs" disabled={occupe}
                     variant={t?.categorie === 'demande_devis' || !t ? 'default' : 'outline'}
@@ -703,6 +799,45 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
               </div>
             );
           })}
+
+          {realises.length > 0 && (
+            <div className="rounded-lg border border-border">
+              <button type="button" className="flex w-full items-center gap-1.5 p-3 text-left text-sm font-medium" onClick={() => setVoirRealises(v => !v)}>
+                <ChevronRight className={cn('w-4 h-4 transition-transform', voirRealises && 'rotate-90')} />
+                <Check className="w-4 h-4 text-success" />Déjà réalisés dans Odoo ({realises.length})
+              </button>
+              {voirRealises && (
+                <div className="divide-y divide-border border-t border-border">
+                  {realises.map(({ m, odoo: rapproche }) => (
+                    <div key={m.id} className="space-y-1 p-3 text-xs">
+                      <p className="truncate text-sm font-medium">{m.sujet}</p>
+                      <p className="text-muted-foreground">{m.deNom || m.deEmail || 'expéditeur inconnu'} · {dateCourte(m.recuLe)}</p>
+                      <p>{lienDevisOdoo(rapproche!.devis)}<span className="text-muted-foreground"> ({detailDevisOdoo(rapproche!.devis)})</span>
+                        <span className="text-muted-foreground"> — d'après : {rapproche!.preuves.join(' ; ')}</span>
+                      </p>
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                        {(m.source === 'transfert' || m.duDossier) && (
+                          <Button size="sm" variant="ghost" className="h-6 text-xs" disabled={enCours === m.id} onClick={() => ranger(m)}>
+                            <Archive className="w-3 h-3 mr-1" />Ranger (traité)
+                          </Button>
+                        )}
+                        <Button size="sm" variant="ghost" className="h-6 text-xs text-muted-foreground"
+                          onClick={() => refuserDevis(m, rapproche!.devis.numero)} title="Ce devis ne répond pas à cette demande : le mail revient à traiter">
+                          <X className="w-3 h-3 mr-1" />Pas ce devis
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {erreurOdoo && (
+            <p className="text-xs text-muted-foreground">Rapprochement avec les devis Odoo indisponible : {erreurOdoo}</p>
+          )}
+          {odoo?.tronque && (
+            <p className="text-xs text-warning">Trop de devis Odoo sur la période : les plus anciens n'ont pas été comparés.</p>
+          )}
         </div>
 
         <div className="pt-1">

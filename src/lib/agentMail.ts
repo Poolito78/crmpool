@@ -222,6 +222,16 @@ export function invitationTri(mails: MailATrier[]): CorpsGemini {
   };
 }
 
+/**
+ * Un robot n'attend pas de devis : classé sans le modèle. Le quota gratuit de
+ * Gemini tient en quelques requêtes et sert aussi à l'analyse de document —
+ * 709 mails à trier l'avaient épuisé (7/11).
+ */
+export function triSansModele(m: Pick<MailATrier, 'id' | 'deEmail'>): TriMail | null {
+  if (!/^(no[-_.]?reply|do[-_.]?not[-_.]?reply|ne[-_.]?pas[-_.]?repondre|notifications?|mailer-daemon|postmaster)\b/i.test(m.deEmail.trim())) return null;
+  return { id: m.id, categorie: 'autre', confiance: 100, resume: 'Message automatique.', demandes: [] };
+}
+
 const CATEGORIES = new Set<CategorieMail>(['demande_devis', 'suite_devis', 'commande', 'autre']);
 
 const chaine = (v: unknown): string | undefined =>
