@@ -1,5 +1,6 @@
-import type { Produit, ProduitFournisseur, Fournisseur } from './store';
+import type { ComposantProduit, Produit, ProduitFournisseur, Fournisseur } from './store';
 import { niveauGamme, REMISE_GAMME } from './remiseGammes';
+import { reporterPrixKit } from './kitFournisseur';
 
 /**
  * Reprise des prix d'ACHAT depuis un document fournisseur.
@@ -294,7 +295,8 @@ export function prixVenteDepuisAchat(
 export function estFraisAnnexe(l: { reference?: string; description?: string }): boolean {
   const t = `${l.reference || ''} ${l.description || ''}`
     .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-  return /\b(frais|port|franco|livraison|messagerie|transport|expedition|emballage|maquette|b\.?a\.?t|bon a tirer|eco[- ]?participation|ecotaxe)\b/.test(t);
+  /* « Majoration temporaire de 5,5 % » (TTS) : un montant du devis, pas un article. */
+  return /\b(frais|port|franco|livraison|messagerie|transport|expedition|emballage|maquette|b\.?a\.?t|bon a tirer|eco[- ]?participation|ecotaxe|majoration|participation)\b/.test(t);
 }
 
 /* ── Le tarif de revente conseillé par le fournisseur ────────────────────── */
@@ -456,6 +458,8 @@ export function articleDepuisLigne(args: {
   poids?: number;
   /** Notes internes de la fiche (intitulé d'achat, tarif conseillé). */
   notes?: string;
+  /** Un kit : ses composants, le coût porté sur eux (`composantsDuKit`). */
+  composants?: ComposantProduit[];
 }): Produit {
   const designation = (args.designation || '').trim();
   const reference = (args.reference || '').trim()
@@ -482,6 +486,7 @@ export function articleDepuisLigne(args: {
     tva: args.tva ?? 20, unite: (args.unite || '').trim() || 'u', stock: 0, stockMin: 0,
     ...(args.poids != null && args.poids > 0 ? { poids: args.poids } : {}),
     ...(args.notes?.trim() ? { notes: args.notes.trim() } : {}),
+    ...(args.composants?.length ? { composants: args.composants } : {}),
     /* Les deux prix sont DATÉS : le plus récent l'emporte à la synchro Odoo,
        et un prix posé à l'import ne doit pas céder à une fiche Odoo plus
        ancienne. */
@@ -599,7 +604,10 @@ export function appliquerPrix(args: {
     ? args.produits.map(p => {
         const prix = versArticle.get(p.id);
         if (prix == null || memePrix(prix, p.prixAchat)) return p;
-        return { ...p, prixAchat: prix, prixAchatMaj: horodate };
+        /* Un kit dont le coût est saisi sur ses composants : la fiche recalcule
+           le prix d'après eux, il faut donc le leur reporter. */
+        const composants = reporterPrixKit(p.composants, prix);
+        return { ...p, prixAchat: prix, prixAchatMaj: horodate, ...(composants ? { composants } : {}) };
       })
     : args.produits;
 

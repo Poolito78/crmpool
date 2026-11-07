@@ -1,5 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import { appelerGemini, texteGemini } from './modelesIA';
+import { regrouperKits, type ComposantLu } from './kitFournisseur';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.mjs',
@@ -82,6 +83,10 @@ export interface LigneAnalysee {
   tva?: number;
   /** Le groupe qui porte la ligne dans une offre Odoo (« AF039468/0001 »). */
   groupe?: string;
+  /** Devis reçu : la ligne est un KIT, ses composants sont dessous (`kitFournisseur.ts`). */
+  composants?: ComposantLu[];
+  /** Les mentions du fournisseur sous le kit (« Pinces livrées non montées »). */
+  notesKit?: string[];
 }
 
 export interface DocumentAnalysis {
@@ -213,6 +218,14 @@ repris comme prix d'ACHAT :
 - Les titres de groupe (« Alimentation solaire : ») ne sont pas des lignes ;
   un même article répété sous plusieurs groupes donne autant de lignes.
 - Une majoration ou une participation chiffrée est une ligne (sans remise).
+- UN KIT : une ligne chiffrée suivie de lignes SANS AUCUN PRIX (le détail de ce
+  qu'elle contient). Recopie CHAQUE ligne, dans l'ordre du document : la ligne
+  chiffrée avec son P.U. NET UNITAIRE (jamais son montant : « 3,000 1435,00
+  861,00 2 583,00 » → quantite 3, prixConseille 1435, prixUnitaireHT 861), puis
+  chaque ligne de détail avec son code, sa désignation, sa quantité TELLE
+  QU'ÉCRITE (9,000 reste 9) et prixUnitaireHT null. Une mention sans code ni
+  quantité (« Pinces livrées non montées ») est aussi une ligne : quantite null,
+  prixUnitaireHT null. N'additionne rien et ne divise rien.
 - Les frais de port, d'emballage ou de transport ne sont pas des articles :
   ne les mets pas en lignes, reporte leur montant dans « fraisPortHT » et
   signale-les dans « notes ».
@@ -382,15 +395,41 @@ export function verifierTotaux(a: DocumentAnalysis): DocumentAnalysis {
   return { ...a, totalHT, totalTTC };
 }
 
-async function extraireTextePDF(buffer: ArrayBuffer): Promise<string> {
-  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-  const pages: string[] = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    pages.push(content.items.map((item: any) => item.str).join(' '));
+/**
+ * LE TEXTE D'UN PDF, RECOMPOSÉ LIGNE PAR LIGNE D'APRÈS LA POSITION DES CELLULES.
+ *
+ * pdf.js rend les cellules dans l'ordre où le PDF les écrit, pas dans celui où
+ * on les lit. Le devis TTS 74164 sortait « … 3,000 1435,00 861,00 2 583,00
+ * 0046062 0055887 Optique noire… » : le code d'une ligne après ses prix, collé
+ * à celui de la suivante, et le modèle rattachait les codes à la mauvaise
+ * désignation. Regroupées par hauteur, puis de gauche à droite, les cellules
+ * redonnent la ligne du tableau.
+ *
+ * Fonction PURE. La tolérance absorbe le léger décalage de ligne de base entre
+ * deux colonnes d'une même ligne, sans mêler deux lignes voisines.
+ */
+export function lignesParPosition(
+  items: { str: string; x: number; y: number; page: number }[],
+  tolerance = 3,
+): string {
+  const tries = [...items].sort((a, b) => a.page - b.page || b.y - a.y);
+  const lignes: { page: number; y: number; cellules: { str: string; x: number }[] }[] = [];
+  for (const it of tries) {
+    const courante = lignes[lignes.length - 1];
+    if (courante && courante.page === it.page && Math.abs(courante.y - it.y) <= tolerance) {
+      courante.cellules.push(it);
+    } else {
+      lignes.push({ page: it.page, y: it.y, cellules: [it] });
+    }
   }
-  return pages.join('\n');
+  return lignes
+    .map(l => l.cellules.sort((a, b) => a.x - b.x).map(c => c.str.trim()).filter(Boolean).join(' '))
+    .filter(Boolean)
+    .join('\n');
+}
+
+async function extraireTextePDF(buffer: ArrayBuffer): Promise<string> {
+  return lignesParPosition(await extraireItemsPDF(buffer));
 }
 
 /**
@@ -512,7 +551,13 @@ export async function analyserDocument(
   indice?: string,
 ): Promise<DocumentAnalysis> {
   const analyse = await analyserSansType(input, apiKey, openrouterKey, typeImpose, indice);
-  return typeImpose ? { ...analyse, typeDocument: typeImpose } : analyse;
+  return avecKits(typeImpose ? { ...analyse, typeDocument: typeImpose } : analyse);
+}
+
+/** Devis reçu : les lignes sans prix rejoignent le kit qui les précède (`kitFournisseur.ts`). */
+export function avecKits(a: DocumentAnalysis): DocumentAnalysis {
+  if (a.typeDocument !== 'devis_fournisseur') return a;
+  return verifierTotaux({ ...a, lignes: regrouperKits(a.lignes) });
 }
 
 async function analyserSansType(

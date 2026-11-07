@@ -103,6 +103,9 @@ import {
 } from '@/lib/prixAchatFournisseur';
 import { choisirPdfPrincipal } from '@/lib/pdfPrincipal';
 import {
+  cleLigneAchat, composantsDuKit, memeIntitule, noteKit, separerKit, type ComposantLu,
+} from '@/lib/kitFournisseur';
+import {
   signaturesEmetteur, souvenirDocument, retenirDocument, emetteurDuTexte, typeDansLeSens, sensDuType,
   type MemoireDocument,
 } from '@/lib/memoireDocuments';
@@ -975,6 +978,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [dfVersRevendeur, setDfVersRevendeur] = useState<Record<number, boolean>>({});
   /** Lignes hors catalogue dont on veut créer l'article. */
   const [dfCreer, setDfCreer] = useState<Record<number, boolean>>({});
+  /** Kit : l'article choisi pour un composant (`null` = le créer), par `cleCompo`. */
+  const [dfCompoChoix, setDfCompoChoix] = useState<Record<string, string | null>>({});
   const [dfEnCours, setDfEnCours] = useState(false);
   /**
    * La fiche de l'article à CRÉER, retouchée à la main. Clé : indice de ligne.
@@ -1678,7 +1683,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setClientsProposes([]);
     setDfFournisseurId(''); setDfPrix({});
     setDfVersLien({}); setDfVersArticle({}); setDfCreer({}); setDfVersPublic({});
-    setDfCoefRev({}); setDfVersRevendeur({});
+    setDfCoefRev({}); setDfVersRevendeur({}); setDfCompoChoix({});
     setDfFiche({}); setDfOdoo(null); setDfOdooEtat(''); setDfOdooChoix({}); setDfOdooPartenaire(undefined);
     dfTouche.current = false;
     chercheFaitePour.current = null;
@@ -2292,8 +2297,10 @@ const [contratOdoo, setContratOdoo] = useState<
     /* Prix REVENDEUR d'un article existant : achat × coefficient. */
     const revendeurs = new Map<string, { achat: number; coef: number }>();
     /* Cocher « créer » sur une occurrence vaut pour toutes celles du même code. */
-    const codeDe = (l: { reference?: string }) => (l.reference || '').trim().toUpperCase();
-    const codesACreer = new Set((result.lignes || []).filter((l, j) => dfCreer[j] && codeDe(l)).map(codeDe));
+    /* Un kit : le code ET l'intitulé — les deux kits du devis TTS 74164 portent
+       le même code générique 0046062 et ne doivent pas fusionner. */
+    const codeDe = (l: LigneAnalysee) => cleLigneAchat(l);
+    const codesACreer = new Set((result.lignes || []).filter((l, j) => dfCreer[j] && codeDe(l)).map(l => codeDe(l)));
     /* La fiche saisie (code, intitulé…) est celle de la ligne où l'on a coché. */
     const ligneDeFiche = new Map<string, number>();
     (result.lignes || []).forEach((l, j) => {
@@ -2333,7 +2340,8 @@ const [contratOdoo, setContratOdoo] = useState<
          retenir un mauvais article (« PPRF BTR A13a », panneau lumineux à
          777 €, rapproché du panneau A13A à 9,09 €). */
       const aCreer = prix != null && (dfCreer[i] || codesACreer.has(codeDe(l)));
-      const dejaCree = refFournisseur ? creesParCode.get(refFournisseur.toUpperCase()) : undefined;
+      const cleCree = l.composants?.length ? codeDe(l) : refFournisseur.toUpperCase();
+      const dejaCree = cleCree ? creesParCode.get(cleCree) : undefined;
 
       if (aCreer && dejaCree) {
         produitId = dejaCree.id;
@@ -2344,6 +2352,37 @@ const [contratOdoo, setContratOdoo] = useState<
         const fiche = ficheProposee(dfCreer[i] ? i : (ligneDeFiche.get(codeDe(l)) ?? i));
         const reference = referenceLibre(fiche.reference || refFournisseur || (l.description || '').slice(0, 40),
           [...produits, ...nouveauxArticles]);
+        const nomFournisseur = (() => { const fo = fournisseurs.find(x => x.id === dfFournisseurId); return fo?.societe || fo?.nom; })();
+        /* UN KIT : ses composants d'abord. Déjà au catalogue, ils sont repris ;
+           sinon créés sans prix (le fournisseur ne les chiffre pas), une seule
+           fois s'ils servent à deux kits. Leur lien fournisseur retient le code
+           pour le prochain devis, sans écraser un prix existant. */
+        const composantsKit = l.composants?.length ? l.composants.map(c => {
+          let article = articleDuComposant(i, c);
+          if (!article) {
+            const cleC = `composant|${(c.reference || c.description).trim().toUpperCase()}`;
+            article = creesParCode.get(cleC);
+            if (!article) {
+              article = articleDepuisLigne({
+                id: generateId(),
+                reference: referenceLibre(c.reference || c.description.slice(0, 40), [...produits, ...nouveauxArticles]),
+                referenceFournisseur: c.reference,
+                designation: c.description, prixAchat: 0,
+                categorie: fiche.categorie, fournisseurId: dfFournisseurId,
+                notes: `Composant du kit « ${fiche.designation} »${nomFournisseur ? ` chez ${nomFournisseur}` : ''}. Prix non détaillé par le fournisseur : à compléter.`,
+                produits, horodate, aujourdhui: today(),
+              });
+              nouveauxArticles.push(article);
+              creesParCode.set(cleC, article);
+            }
+          }
+          const id = article.id;
+          if (c.reference && !produitFournisseurs.some(pf => pf.produitId === id && pf.fournisseurId === dfFournisseurId)
+              && !cibles.some(x => x.produitId === id && x.versLien)) {
+            cibles.push({ produitId: id, prix: 0, reference: c.reference, versLien: true, versArticle: false });
+          }
+          return { produitId: id, quantite: c.quantite };
+        }) : undefined;
         const neuf: Produit = articleDepuisLigne({
           id: generateId(),
           /* Référence UNIQUE en base : libre face au catalogue ET aux
@@ -2354,13 +2393,14 @@ const [contratOdoo, setContratOdoo] = useState<
           unite: fiche.unite, poids: fiche.poids,
           /* L'intitulé d'ACHAT et le tarif de revente conseillé vont aux
              notes : la désignation, elle, est l'intitulé de VENTE. */
-          notes: noteAchat({
-            fournisseur: (() => { const fo = fournisseurs.find(x => x.id === dfFournisseurId); return fo?.societe || fo?.nom; })(),
+          notes: [noteAchat({
+            fournisseur: nomFournisseur,
             intituleAchat: fiche.designationAchat !== fiche.designation ? fiche.designationAchat : undefined,
             referenceFournisseur: refFournisseur || undefined,
             prixAchat: prix, coefs: coefsDoc,
             date: new Date().toLocaleDateString('fr-FR'),
-          }),
+          }), noteKit(l)].filter(Boolean).join('\n\n'),
+          ...(composantsKit ? { composants: composantsDuKit(composantsKit, prix) } : {}),
           categorie: fiche.categorie, fournisseurId: dfFournisseurId,
           vente: { prixHT: fiche.vente.prixHT, coeffRevendeur: fiche.coefRevendeur, remiseRevendeur: fiche.vente.remiseRevendeur },
           referenceOdoo: (() => {
@@ -2370,7 +2410,7 @@ const [contratOdoo, setContratOdoo] = useState<
           produits, horodate, aujourdhui: today(),
         });
         nouveauxArticles.push(neuf);
-        if (refFournisseur) creesParCode.set(refFournisseur.toUpperCase(), neuf);
+        if (cleCree) creesParCode.set(cleCree, neuf);
         produitId = neuf.id;
       } else if (prop?.produit) {
         const article = prop.produit;
@@ -3364,17 +3404,24 @@ const [contratOdoo, setContratOdoo] = useState<
     const choisi = choixProduit[i];
     if (choisi) return produitParId(produits, choisi);
 
-    const ref = (result?.lignes?.[i]?.reference || '').trim().toUpperCase();
+    const ligne = result?.lignes?.[i];
+    const ref = (ligne?.reference || '').trim().toUpperCase();
+    /* UN KIT : son code de tête est générique (0046062 chez TTS, pour des kits
+       différents). Le lien ne vaut que pour le même intitulé, de vente ou d'achat
+       (gardé dans les notes), et une ressemblance de mots ne retient rien : une
+       composition ne se devine pas, on propose de la créer. */
+    const estKit = !!ligne?.composants?.length;
     if (ref && dfFournisseurId) {
-      const lien = produitFournisseurs.find(pf =>
+      const liens = produitFournisseurs.filter(pf =>
         pf.fournisseurId === dfFournisseurId &&
         (pf.referenceFournisseur || '').trim().toUpperCase() === ref);
-      if (lien) {
+      for (const lien of liens) {
         const p = produitParId(produits, lien.produitId);
-        if (p) return p;
+        if (p && (!estKit || memeIntitule(designationProduit(p), ligne?.description)
+                  || (!!ligne?.description && (p.notes || '').includes(ligne.description)))) return p;
       }
     }
-    return rapprochements.get(i)?.meilleur;
+    return estKit ? undefined : rapprochements.get(i)?.meilleur;
   }, [choixProduit, produits, rapprochements, result, dfFournisseurId, produitFournisseurs]);
 
   /** Une ligne du devis reçu, corrigée à la main (référence, libellé, quantité…). */
@@ -3393,6 +3440,17 @@ const [contratOdoo, setContratOdoo] = useState<
     setDfCreer(prev => ({ ...prev, [i]: true }));
     setDfVersLien(prev => ({ ...prev, [i]: true }));
   }, [result]);
+
+  /* « Ce n'est pas un kit » : ses composants redeviennent des lignes, EN FIN de
+     liste pour la même raison. */
+  const separerKitDf = useCallback((i: number) => {
+    dfTouche.current = true;
+    setResult(prev => {
+      if (!prev?.lignes[i]) return prev;
+      const { ligne, lignes } = separerKit(prev.lignes[i]);
+      return { ...prev, lignes: [...prev.lignes.map((l, j) => (j === i ? ligne : l)), ...lignes] };
+    });
+  }, []);
 
   /** Le prix d'achat retenu pour une ligne : celui lu, ou celui corrigé. */
   const dfPrixDeLigne = useCallback((i: number) =>
@@ -3424,6 +3482,34 @@ const [contratOdoo, setContratOdoo] = useState<
   const jumeauOdoo = useCallback((ref?: string) =>
     ref ? produitParCodeOdoo.get(ref.trim().toUpperCase()) : undefined,
   [produitParCodeOdoo]);
+
+  /* Un composant se désigne par son code, pas par son rang : le rang bouge quand
+     on en retire un. */
+  const cleCompo = (i: number, c: ComposantLu) => `${i}:${(c.reference || c.description).trim().toUpperCase()}`;
+
+  /** L'article d'un composant : choisi, sinon lu par le code du fournisseur, sinon par la référence exacte. Rien = à créer. */
+  const articleDuComposant = useCallback((i: number, c: ComposantLu): Produit | undefined => {
+    const k = cleCompo(i, c);
+    if (k in dfCompoChoix) {
+      const choisi = dfCompoChoix[k];
+      return choisi ? produitParId(produits, choisi) : undefined;
+    }
+    const ref = (c.reference || '').trim().toUpperCase();
+    if (!ref) return undefined;
+    const lien = produitFournisseurs.find(pf =>
+      pf.fournisseurId === dfFournisseurId && (pf.referenceFournisseur || '').trim().toUpperCase() === ref);
+    return (lien && produitParId(produits, lien.produitId)) || produitParCodeOdoo.get(ref);
+  }, [dfCompoChoix, produits, produitFournisseurs, dfFournisseurId, produitParCodeOdoo]);
+
+  /* Les articles proches de chaque composant, proposés au sélecteur — sans
+     jamais en retenir un d'office. */
+  const suggestionsComposants = useMemo(() => {
+    const m = new Map<string, Produit[]>();
+    if (!result || !isDevisFourn(result.typeDocument)) return m;
+    result.lignes.forEach((l, i) => (l.composants ?? []).forEach(c =>
+      m.set(cleCompo(i, c), articlesComparables([c.reference, c.description].filter(Boolean).join(' '), produits).map(x => x.produit))));
+    return m;
+  }, [result, produits]);
 
   /* La catégorie que désigne la gamme de chaque ligne (FLOWFAST → MMA),
      calculée une fois par analyse : elle balaie tout le catalogue. */
@@ -3518,8 +3604,10 @@ const [contratOdoo, setContratOdoo] = useState<
   /** L'article Odoo retenu pour une ligne : choisi, sinon celui lu par un code. */
   const odooDeLigne = useCallback((i: number): ArticleOdooAchat | undefined => {
     if (i in dfOdooChoix) return dfOdooChoix[i] ?? undefined;
+    /* Le code de tête d'un kit est générique : il ne désigne pas l'article Odoo. */
+    if (result?.lignes?.[i]?.composants?.length) return undefined;
     return dfOdoo?.lignes?.[i]?.exact;
-  }, [dfOdooChoix, dfOdoo]);
+  }, [dfOdooChoix, dfOdoo, result]);
 
   /**
    * L'article Odoo d'un article à CRÉER : celui choisi à la main, ou celui lu
@@ -3528,10 +3616,11 @@ const [contratOdoo, setContratOdoo] = useState<
    */
   const odooPourCreation = useCallback((i: number): ArticleOdooAchat | undefined => {
     if (i in dfOdooChoix) return dfOdooChoix[i] ?? undefined;
+    if (result?.lignes?.[i]?.composants?.length) return undefined;
     const exact = dfOdoo?.lignes?.[i]?.exact;
     if (!exact) return undefined;
     return !propositionsFournisseur.get(i)?.produit || exact.par === 'code fournisseur' ? exact : undefined;
-  }, [dfOdooChoix, dfOdoo, propositionsFournisseur]);
+  }, [dfOdooChoix, dfOdoo, propositionsFournisseur, result]);
 
   /**
    * La fiche de l'article à créer pour une ligne : ce qui a été saisi, sinon
@@ -3547,7 +3636,9 @@ const [contratOdoo, setContratOdoo] = useState<
     const refF = (l?.reference || '').trim();
     /* Code et intitulé se SAISISSENT (demande du 15/10) : le code proposé
        n'est qu'un exemple affiché en grisé, pris seulement si rien n'est tapé. */
-    const referenceProposee = odoo?.reference || referenceLibre(refF || (l?.description || '').slice(0, 40), produits);
+    /* Le code de tête d'un kit est générique : deux kits ne le partagent pas chez nous. */
+    const referenceProposee = odoo?.reference
+      || referenceLibre((l?.composants?.length ? '' : refF) || (l?.description || '').slice(0, 40), produits);
     const reference = saisie.reference?.trim() || referenceProposee;
     const designation = saisie.designation ?? (odoo?.designation || l?.description || '');
     /* LA GAMME COMMANDE LA CATÉGORIE (règle du 20/10) : un FLOWFAST va où
@@ -3837,6 +3928,107 @@ const [contratOdoo, setContratOdoo] = useState<
    * revendeur et public, au kilo quand le poids est connu, et le prix lu sur
    * le devis pour comparer. Un clic retient l'article au lieu d'en créer un.
    */
+  const blocKit = (i: number, l: LigneAnalysee) => {
+    if (!l.composants?.length) return null;
+    const prix = dfPrixDeLigne(i);
+    const retirer = (c: ComposantLu) => {
+      const reste = l.composants!.filter(x => x !== c);
+      corrigerLigneDf(i, { composants: reste.length ? reste : undefined });
+    };
+    const corriger = (c: ComposantLu, quantite: number) => corrigerLigneDf(i, {
+      composants: l.composants!.map(x => {
+        if (x !== c) return x;
+        const { aVerifier: _v, ...reste } = x;
+        return { ...reste, quantite };
+      }),
+    });
+    return (
+      <div className="mt-1 rounded border border-info/40 bg-info/5 p-1.5 space-y-1">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-[11px] font-medium text-info">
+            Kit : {String(l.quantite).replace('.', ',')} × {prix != null ? formatMontant(prix) : '—'}
+            {prix != null ? ` = ${formatMontant(prix * (l.quantite || 0))}` : ''}
+          </p>
+          <button
+            type="button"
+            className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            onClick={() => separerKitDf(i)}
+          >Ce n'est pas un kit : séparer</button>
+        </div>
+        <p className="text-[10px] text-muted-foreground">Composition pour UN kit. Le prix retenu est celui d'un kit ; les composants ne sont pas chiffrés par le fournisseur.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="text-[10px] text-muted-foreground">
+                <th className="text-left font-normal px-1">Composant</th>
+                <th className="text-right font-normal px-1" title="Quantité écrite sur le document, pour tous les kits">Document</th>
+                <th className="text-right font-normal px-1">Par kit</th>
+                <th className="text-left font-normal px-1 min-w-[180px]">Article MonCRM</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {l.composants.map(c => {
+                const k = cleCompo(i, c);
+                const article = articleDuComposant(i, c);
+                return (
+                  <tr key={k} className="border-t border-border/50 align-top">
+                    <td className="px-1 py-0.5">
+                      {c.reference && <span className="font-mono text-[10px] mr-1">{c.reference}</span>}
+                      {c.description}
+                      {c.aVerifier && (
+                        <div className="text-[10px] text-warning flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 shrink-0" />Quantité par kit à vérifier
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-1 py-0.5 text-right tabular-nums text-muted-foreground">
+                      {c.quantiteDocument ? String(c.quantiteDocument).replace('.', ',') : '—'}
+                    </td>
+                    <td className="px-1 py-0.5">
+                      <ChampLigne
+                        className="ml-auto text-right tabular-nums" nombre ajuste
+                        valeur={String(c.quantite).replace('.', ',')}
+                        onValider={v => {
+                          const q = parseFloat(v.replace(',', '.'));
+                          if (q > 0) corriger(c, q);
+                        }}
+                      />
+                    </td>
+                    <td className="px-1 py-0.5">
+                      <ProduitCombobox
+                        produits={produits}
+                        suggestions={suggestionsComposants.get(k) ?? []}
+                        value={article?.id ?? ''}
+                        onSelect={id => {
+                          dfTouche.current = true;
+                          setDfCompoChoix(prev => ({ ...prev, [k]: id || null }));
+                        }}
+                      />
+                      {!article && <div className="text-[10px] text-success">À créer dans MonCRM, sans prix (à compléter)</div>}
+                    </td>
+                    <td className="px-1 py-0.5 text-right">
+                      <button
+                        type="button" title="Retirer ce composant du kit"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => retirer(c)}
+                      ><X className="w-3 h-3" /></button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {!!l.notesKit?.length && (
+          <ul className="text-[10px] text-muted-foreground list-disc pl-4">
+            {l.notesKit.map(n => <li key={n}>{n}</li>)}
+          </ul>
+        )}
+      </div>
+    );
+  };
+
   const comparablesAchat = (i: number) => {
     const retenu = propositionsFournisseur.get(i)?.produit;
     const liste = (comparablesDeLigne.get(i) ?? []).filter(p => !retenu || dfCreer[i] || p.id !== retenu.id);
@@ -8759,6 +8951,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                       />
                                       <span className="text-[10px] text-muted-foreground">{uniteArticle(l.unite) || l.unite || 'u'}</span>
                                     </div>
+                                    {blocKit(i, l)}
                                     {article ? (
                                       <div className="mt-1 space-y-1">
                                         <div className={dfCreer[i] ? 'opacity-50' : ''}>

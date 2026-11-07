@@ -503,6 +503,21 @@ devis relancés sortiraient de tous les comptes de devis en cours.
   (≤ 5 % du catalogue) exigé — avec achat (écart au devis), revendeur et
   public, au kg, et « Retenir ». « CRAMIC » ne rapprochait pas FLOWFASTF107.
   Cellules Conseillé / Prix net à la largeur du chiffre.
+- ⚠️ **Un kit sur un devis reçu** (`kitFournisseur.ts`, 7 nov., TTS 74164) : une
+  ligne chiffrée suivie de lignes SANS prix. `regrouperKits` (appliqué par
+  `avecKits`, sans IA) les range en `composants`, quantité ramenée à UN kit
+  (9 optiques ÷ 3 kits = 3 ; une division qui ne tombe pas juste se signale) ;
+  une mention sans code ni quantité devient `notesKit`. Le prix retenu est le
+  P.U. NET d'un kit. ⚠️ **Le code de tête est générique** (0046062 pour deux kits
+  différents) : `cleLigneAchat` = code + intitulé, le lien ne vaut que pour le
+  même intitulé, et le rapprochement par les mots ne retient rien. À la création,
+  les composants absents se créent à 0 € (non chiffrés, jamais devinés), une fois
+  s'ils servent à deux kits. ⚠️ **Le coût du kit est porté par `prixAchatManuel`**
+  sur la 1re ligne (`composantsDuKit`) : un composé recalcule son achat d'après
+  ses composants, à 0 € il le perdrait ; `appliquerPrix` reporte un nouveau prix
+  (`reporterPrixKit`). « Ce n'est pas un kit : séparer » rend les lignes.
+- **Le texte d'un PDF se relit par position** (`lignesParPosition`) : à plat,
+  les codes TTS tombaient après les prix de la ligne, collés à ceux de la suivante.
 - Groq rendait 400 `json_validate_failed` vide sur un devis long : repli
   sur Gemini (budget 8192) au lieu d'une erreur.
 - **Déployé** (odoo-achat, 15/10). Si la fonction ne répond pas, l'écran dit

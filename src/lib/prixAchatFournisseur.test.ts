@@ -211,6 +211,31 @@ describe('application des prix', () => {
   const LIENS = [lien({ produitId: 'p1', fournisseurId: 'f1', prixAchat: 80, referenceFournisseur: 'ANCIENNE' })];
   const commun = { fournisseurId: 'f1', horodate: '2026-09-02T10:00:00Z', nouvelId: () => 'neuf' };
 
+  it('reporte le nouveau prix d’un kit sur ses composants, sinon la fiche le perd', () => {
+    const kit = produit({
+      id: 'k', prixAchat: 861,
+      composants: [
+        { produitId: 'a', quantite: 3, prixAchatManuel: 861 },
+        { produitId: 'b', quantite: 1, prixAchatManuel: 0 },
+      ],
+    });
+    const r = appliquerPrix({
+      ...commun, liens: [], produits: [kit],
+      cibles: [{ produitId: 'k', prix: 900, versLien: false, versArticle: true }],
+    });
+    expect(r.produits[0].prixAchat).toBe(900);
+    expect(r.produits[0].composants!.map(c => c.prixAchatManuel)).toEqual([900, 0]);
+  });
+
+  it('laisse un composé qui se calcule vraiment', () => {
+    const compose = produit({ id: 'c', prixAchat: 10, composants: [{ produitId: 'a', quantite: 1 }] });
+    const r = appliquerPrix({
+      ...commun, liens: [], produits: [compose],
+      cibles: [{ produitId: 'c', prix: 20, versLien: false, versArticle: true }],
+    });
+    expect(r.produits[0].composants).toEqual([{ produitId: 'a', quantite: 1 }]);
+  });
+
   it('met à jour le lien existant sans écraser sa référence', () => {
     const r = appliquerPrix({
       ...commun, liens: LIENS, produits: PRODUITS,
@@ -457,6 +482,11 @@ describe('estFraisAnnexe — une ligne de frais n’est pas un article', () => {
     expect(estFraisAnnexe({ description: 'Envoi messagerie Forfait livraison 1 palette 80x120cm' })).toBe(true);
     expect(estFraisAnnexe({ description: 'Maquette et mise aux normes d\'impression OFFERTE' })).toBe(true);
     expect(estFraisAnnexe({ description: 'Frais de port' })).toBe(true);
+  });
+
+  it('une majoration ou une participation n’est pas un article (TTS 74164)', () => {
+    expect(estFraisAnnexe({ description: 'Majoration temporaire de 5,5 %, variable selon le montant total' })).toBe(true);
+    expect(estFraisAnnexe({ description: 'Participation aux frais' })).toBe(true);
   });
 
   it('laisse passer les articles, même ceux qui contiennent « port »', () => {

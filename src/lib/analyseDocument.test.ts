@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('pdfjs-dist', () => ({ GlobalWorkerOptions: {}, getDocument: vi.fn() }));
 vi.mock('./modelesIA', () => ({ appelerGemini: vi.fn(), texteGemini: vi.fn() }));
 
-import { verifierTotaux, nombreLu, sansFauxConseille, redresserMilliers, type DocumentAnalysis } from './analyseDocument';
+import { verifierTotaux, nombreLu, sansFauxConseille, redresserMilliers, lignesParPosition, avecKits, type DocumentAnalysis } from './analyseDocument';
 
 const doc = (a: Partial<DocumentAnalysis>): DocumentAnalysis =>
   ({ typeDocument: 'devis_fournisseur', lignes: [], ...a });
@@ -98,5 +98,49 @@ MA101 FLOWFAST 101 STAND PRIMER 20 KG
     const a = doc([160.57]);
     redresserMilliers(a, 'Prix net 1\u202f160,57 €');
     expect(a.lignes[0].prixUnitaireHT).toBe(1160.57);
+  });
+});
+
+describe('lignesParPosition — le tableau relu ligne par ligne', () => {
+  it('remet le code devant sa désignation, malgré l’ordre du PDF', () => {
+    const items = [
+      { str: '! OPTIQUE KIT', x: 80, y: 500, page: 1 },
+      { str: '3,000', x: 400, y: 500, page: 1 },
+      { str: '861,00', x: 500, y: 500, page: 1 },
+      { str: '0046062', x: 20, y: 501, page: 1 },
+      { str: '0055887', x: 20, y: 480, page: 1 },
+      { str: 'Optique noire', x: 80, y: 480, page: 1 },
+      { str: '9,000', x: 400, y: 480, page: 1 },
+    ];
+    expect(lignesParPosition(items)).toBe('0046062 ! OPTIQUE KIT 3,000 861,00\n0055887 Optique noire 9,000');
+  });
+
+  it('ne mêle pas deux pages à la même hauteur', () => {
+    expect(lignesParPosition([
+      { str: 'B', x: 0, y: 100, page: 2 },
+      { str: 'A', x: 0, y: 100, page: 1 },
+    ])).toBe('A\nB');
+  });
+
+  it('écarte les cellules vides', () => {
+    expect(lignesParPosition([{ str: '  ', x: 0, y: 10, page: 1 }, { str: 'X', x: 5, y: 10, page: 1 }])).toBe('X');
+  });
+});
+
+describe('avecKits — seul un devis reçu se regroupe', () => {
+  const lignes = [
+    { reference: 'K', description: '! Kit', quantite: 3, prixUnitaireHT: 861 },
+    { reference: 'C', description: 'Composant', quantite: 9 },
+  ];
+
+  it('range les composants sous le kit, et le total se contrôle sur les kits', () => {
+    const a = avecKits(doc({ lignes, totalHT: 2583 }));
+    expect(a.lignes).toHaveLength(1);
+    expect(a.lignes[0].composants![0]).toMatchObject({ reference: 'C', quantite: 3 });
+    expect(a.totalHT).toBe(2583);
+  });
+
+  it('laisse les autres documents tels quels', () => {
+    expect(avecKits(doc({ typeDocument: 'commande_client', lignes })).lignes).toHaveLength(2);
   });
 });
