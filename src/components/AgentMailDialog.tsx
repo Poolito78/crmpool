@@ -44,6 +44,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { useCRM } from '@/lib/StoreContext';
+import { numerosOdooCites, ouvrirDansOdoo, LIBELLE_MODELE } from '@/lib/numerosOdoo';
 import { appelerGemini, texteGemini } from '@/lib/modelesIA';
 import {
   ConnexionRequise, compteMicrosoft, configMicrosoft, connecterMicrosoft,
@@ -454,7 +455,9 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
         const cites = numerosDevisCites(`${m.sujet}\n${m.corps}`)
           .map(n => devis.find(d => d.numero.toUpperCase() === n))
           .filter((d): d is NonNullable<typeof d> => !!d);
-        return { m, t, cl, ouverts, cites, adresses: adressesDuMail(m, cl.client) };
+        /* Les dossiers Odoo nommés dans le mail (« ACHAT P29317- AF041510 »), à ouvrir d'un clic. */
+        const dossiersOdoo = numerosOdooCites(`${m.sujet}\n${m.corps}`);
+        return { m, t, cl, ouverts, cites, dossiersOdoo, adresses: adressesDuMail(m, cl.client) };
       })
       .sort((a, b) =>
         (a.t ? RANG[a.t.categorie] : 2.5) - (b.t ? RANG[b.t.categorie] : 2.5)
@@ -709,7 +712,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
             </p>
           )}
 
-          {visibles.map(({ m, t, cl, ouverts, cites, odoo: rapproche }, i) => {
+          {visibles.map(({ m, t, cl, ouverts, cites, dossiersOdoo, odoo: rapproche }, i) => {
             const cat = t ? CATEGORIE_MAIL[t.categorie] : null;
             const occupe = enCours === m.id;
             const groupe = groupeDe(t);
@@ -790,6 +793,18 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
                       onClick={() => { onOpenChange(false); navigate(`/devis?editDevis=${d.id}`); }}
                       title={cites.includes(d) ? 'Devis cité dans le mail' : `Devis ${d.statut} du client`}>
                       <FileText className="w-3 h-3" />{d.numero}{cites.includes(d) ? ' (cité)' : ''}
+                    </button>
+                  ))}
+                  {dossiersOdoo.map(n => (
+                    <button key={n.numero} type="button"
+                      className="inline-flex items-center gap-1 rounded border border-primary/30 bg-primary/5 px-1.5 py-0.5 font-mono text-[11px] text-primary hover:bg-primary/10"
+                      title={`Ouvrir ${n.numero} (${LIBELLE_MODELE[n.modele]}) dans Odoo`}
+                      onClick={async () => {
+                        const r = await ouvrirDansOdoo(n);
+                        if (r === 'introuvable') toast.warning(`${n.numero} : aucun(e) ${LIBELLE_MODELE[n.modele]} de ce numéro dans Odoo.`);
+                        else if (r === 'liste') toast.info(`Odoo n'a pas répondu : liste ouverte, ${n.numero} copié — collez-le dans la recherche.`);
+                      }}>
+                      <ExternalLink className="w-3 h-3" />{n.numero}
                     </button>
                   ))}
                 </div>

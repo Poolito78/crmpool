@@ -226,6 +226,25 @@ serve(async (req) => {
 
   try {
     const entree = await req.json();
+
+    /* MODE « ouvrir » : le lien de la fiche Odoo d'un numéro cité dans un mail
+       (AF… devis client, P… commande d'achat — `src/lib/numerosOdoo.ts`).
+       Lecture seule, par nom exact, dans les seuls modèles connus. */
+    if (entree?.mode === "ouvrir") {
+      const MODELES = new Set(["sale.order", "purchase.order"]);
+      const demandes = (Array.isArray(entree?.numeros) ? entree.numeros : [])
+        .filter((n: { numero?: unknown; modele?: unknown }) =>
+          typeof n?.numero === "string" && /^[A-Z0-9]{4,12}$/.test(n.numero) && MODELES.has(String(n?.modele)))
+        .slice(0, 20) as { numero: string; modele: string }[];
+      const od = new Odoo();
+      const liens: Record<string, string | null> = {};
+      for (const n of demandes) {
+        const lus = await od.kw(n.modele, "search_read", [[["name", "=", n.numero]]], { fields: ["id"], limit: 1 }) as { id: number }[];
+        liens[n.numero] = lus[0] ? `${od.url}/web#id=${lus[0].id}&model=${n.modele}&view_type=form` : null;
+      }
+      return json({ liens });
+    }
+
     const depuis = String(entree?.depuis || "");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(depuis)) return json({ erreur: "date « depuis » attendue (AAAA-MM-JJ)" }, 400);
     const propres = (v: unknown) => [...new Set((Array.isArray(v) ? v : []).map(min).filter(Boolean))].slice(0, MAX_ADRESSES);
