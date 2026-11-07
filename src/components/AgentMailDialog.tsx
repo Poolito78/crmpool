@@ -26,13 +26,17 @@
  * supprimés ou classés, et une demande dont le devis existe chez Odoo passe en
  * « Déjà réalisés » (`devisOdooMails.ts`) ou propose ce devis s'il n'y a pas de
  * preuve qu'il y répond.
+ *
+ * Les mails se replient par catégorie : le premier de chaque groupe porte le
+ * bouton −, et replié il reste seul, sur une ligne, avec + et le nombre de mails
+ * du groupe. Ce choix est mémorisé dans ce navigateur.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Mail, Loader2, RefreshCw, FileText, ExternalLink, Check, EyeOff, Paperclip, LogOut, Copy, Sparkles,
-  FolderOpen, Upload, Archive, ChevronRight, Smartphone, X,
+  FolderOpen, Upload, Archive, ChevronRight, Smartphone, X, Plus, Minus,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -123,6 +127,13 @@ const EXPORT_PERIME_MS = 72 * 3600 * 1000;
 
 const RANG = { demande_devis: 0, suite_devis: 1, commande: 2, autre: 3 } as const;
 
+/* Les catégories repliées. La liste est triée par rang : un groupe se suit. */
+const CLE_GROUPES_REPLIES = 'agent_mail_groupes_replies';
+const groupeDe = (t?: TriMail) => t?.categorie ?? 'non_trie';
+function lireGroupesReplies(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem(CLE_GROUPES_REPLIES) || '[]')); } catch { return new Set(); }
+}
+
 function dateCourte(iso: string): string {
   const d = new Date(iso);
   const heure = d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
@@ -145,6 +156,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   const [erreur, setErreur] = useState('');
   const [toutVoir, setToutVoir] = useState(false);
   const [voirRealises, setVoirRealises] = useState(false);
+  const [groupesReplies, setGroupesReplies] = useState(lireGroupesReplies);
   const [odoo, setOdoo] = useState<ReponseDevisOdoo | undefined>(memoire.odoo);
   const [erreurOdoo, setErreurOdoo] = useState('');
   const [pasCeDevis, setPasCeDevis] = useState(() => lireIds(CLE_PAS_CE_DEVIS));
@@ -483,6 +495,13 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
 
   const refuserDevis = (m: MailAgent, numero: string) => setPasCeDevis(noterId(CLE_PAS_CE_DEVIS, `${m.id}|${numero}`));
 
+  const basculerGroupe = (groupe: string) => {
+    const suivant = new Set(groupesReplies);
+    if (!suivant.delete(groupe)) suivant.add(groupe);
+    setGroupesReplies(suivant);
+    try { localStorage.setItem(CLE_GROUPES_REPLIES, JSON.stringify([...suivant])); } catch { /* stockage indisponible */ }
+  };
+
   const lienDevisOdoo = (d: DevisOdooLu) => (d.lien
     ? <a href={d.lien} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">{d.numero}</a>
     : <span className="font-medium">{d.numero}</span>);
@@ -690,16 +709,44 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
             </p>
           )}
 
-          {visibles.map(({ m, t, cl, ouverts, cites, odoo: rapproche }) => {
+          {visibles.map(({ m, t, cl, ouverts, cites, odoo: rapproche }, i) => {
             const cat = t ? CATEGORIE_MAIL[t.categorie] : null;
             const occupe = enCours === m.id;
+            const groupe = groupeDe(t);
+            const premier = i === 0 || groupeDe(visibles[i - 1].t) !== groupe;
+            const replie = groupesReplies.has(groupe);
+            if (replie && !premier) return null;
+            const pastille = cat
+              ? <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold', cat.couleur)}>{cat.label}{t!.confiance ? ` · ${t!.confiance} %` : ''}</span>
+              : <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{triEnCours ? 'tri…' : 'non trié'}</span>;
+            if (replie) {
+              const nombre = visibles.filter(l => groupeDe(l.t) === groupe).length;
+              return (
+                <button key={m.id} type="button" aria-expanded={false}
+                  className={cn('flex w-full min-w-0 items-center gap-1.5 rounded-lg border p-2 text-left hover:bg-muted/50', t?.categorie === 'demande_devis' ? 'border-primary/40 bg-primary/[0.03]' : 'border-border')}
+                  title={`Développer ce groupe (${nombre} mail${nombre > 1 ? 's' : ''})`}
+                  onClick={() => basculerGroupe(groupe)}>
+                  <span className="inline-flex h-5 shrink-0 items-center gap-0.5 rounded border border-border bg-background px-1 text-[11px] font-semibold tabular-nums">
+                    <Plus className="w-3 h-3" />{nombre}
+                  </span>
+                  {pastille}
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{m.sujet}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{dateCourte(m.recuLe)}</span>
+                </button>
+              );
+            }
             return (
               <div key={m.id} className={cn('rounded-lg border p-3 space-y-2', t?.categorie === 'demande_devis' ? 'border-primary/40 bg-primary/[0.03]' : 'border-border')}>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {cat
-                      ? <span className={cn('rounded-full px-2 py-0.5 text-[10px] font-semibold', cat.couleur)}>{cat.label}{t!.confiance ? ` · ${t!.confiance} %` : ''}</span>
-                      : <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{triEnCours ? 'tri…' : 'non trié'}</span>}
+                    {premier && (
+                      <button type="button" aria-expanded aria-label="Replier ce groupe" title="Replier ce groupe"
+                        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:text-foreground"
+                        onClick={() => basculerGroupe(groupe)}>
+                        <Minus className="w-3 h-3" />
+                      </button>
+                    )}
+                    {pastille}
                     {traites[m.id] && <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold text-success">Devis proposé</span>}
                     <span className="min-w-0 max-w-full truncate font-medium text-sm">{m.sujet}</span>
                   </div>
