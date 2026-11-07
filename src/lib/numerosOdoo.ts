@@ -59,7 +59,7 @@ const connus = new Map<string, string>();
  * navigateur le prendrait pour une fenêtre surgissante et le bloquerait.
  * Rend ce qui s'est passé, pour que l'écran le dise.
  */
-export async function ouvrirDansOdoo(n: NumeroOdoo): Promise<'ouvert' | 'introuvable' | 'liste'> {
+export async function ouvrirDansOdoo(n: NumeroOdoo): Promise<'ouvert' | 'introuvable' | 'liste' | 'a-deployer'> {
   const deja = connus.get(n.numero);
   if (deja) { window.open(deja, '_blank', 'noopener'); return 'ouvert'; }
   const onglet = window.open('', '_blank');
@@ -67,18 +67,23 @@ export async function ouvrirDansOdoo(n: NumeroOdoo): Promise<'ouvert' | 'introuv
     const { data, error } = await supabase.functions.invoke('odoo-devis-mails', {
       body: { mode: 'ouvrir', numeros: [n] },
     });
-    if (error || data?.erreur || !data?.liens) throw new Error(error?.message || data?.erreur || 'réponse inattendue');
+    /* Une fonction d'avant le mode « ouvrir » répond « date depuis attendue »
+       (400) : ce n'est pas Odoo qui est muet, c'est la fonction à redéployer. */
+    if (!data?.liens) {
+      const ancienne = !!error && /400|non-2xx/i.test(error.message || '');
+      throw Object.assign(new Error(error?.message || data?.erreur || 'réponse inattendue'), { ancienne });
+    }
     const lien: string | null = data.liens[n.numero] ?? null;
     if (!lien) { onglet?.close(); return 'introuvable'; }
     connus.set(n.numero, lien);
     if (onglet) onglet.location.href = lien; else window.open(lien, '_blank', 'noopener');
     return 'ouvert';
-  } catch {
+  } catch (e) {
     /* Fonction pas encore déployée ou Odoo muet : la liste du modèle, et le
        numéro prêt à coller dans sa recherche. */
     try { await navigator.clipboard.writeText(n.numero); } catch { /* le numéro reste affiché */ }
     const liste = `${ODOO_WEB}/web#model=${n.modele}&view_type=list`;
     if (onglet) onglet.location.href = liste; else window.open(liste, '_blank', 'noopener');
-    return 'liste';
+    return (e as { ancienne?: boolean }).ancienne ? 'a-deployer' : 'liste';
   }
 }

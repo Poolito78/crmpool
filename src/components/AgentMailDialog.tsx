@@ -803,6 +803,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
                         const r = await ouvrirDansOdoo(n);
                         if (r === 'introuvable') toast.warning(`${n.numero} : aucun(e) ${LIBELLE_MODELE[n.modele]} de ce numéro dans Odoo.`);
                         else if (r === 'liste') toast.info(`Odoo n'a pas répondu : liste ouverte, ${n.numero} copié — collez-le dans la recherche.`);
+                        else if (r === 'a-deployer') toast.warning(`Ouverture directe pas encore active : la fonction odoo-devis-mails est à redéployer. En attendant, liste ouverte et ${n.numero} copié.`, { duration: 10000 });
                       }}>
                       <ExternalLink className="w-3 h-3" />{n.numero}
                     </button>
