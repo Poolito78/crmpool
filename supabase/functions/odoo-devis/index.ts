@@ -353,6 +353,27 @@ function conditionnementCompatible(notre: string, odoo: string): boolean {
   return Math.abs(a - b) <= Math.max(a, b) * 0.02;
 }
 
+/** Le segment de teinte d'un code : « PIGMENT2KG.L7037 » → « 7037 ». */
+function teinteDuCode(code: string): string | null {
+  const m = String(code || "").match(/(?:^|[.\-_ ])L(\d{4})(?=$|[.\-_ ])/i);
+  return m ? m[1] : null;
+}
+
+/**
+ * ⚠️ **UNE TEINTE N'EST PAS UNE AUTRE.** PIGMENT2KG.L7037 ressemble à 93 % à
+ * PIGMENT2KG.L7035 : la passe 4 l'aurait retenu, et le chantier aurait reçu
+ * un autre gris. Comme le conditionnement, la teinte du code écarte le
+ * candidat dès qu'elle diffère — ou qu'un seul des deux codes en porte une
+ * (PIGMENT2KG sans teinte ne devient pas PIGMENT2KG.L1000). Devis AF041510.
+ * Rend l'écart à afficher, ou null si compatible.
+ */
+function ecartTeinte(notre: string, odoo: string): string | null {
+  const a = teinteDuCode(notre);
+  const b = teinteDuCode(odoo);
+  if (a === b) return null;
+  return `teinte ${a ? "RAL " + a : "non précisée"} ≠ ${b ? "RAL " + b : "non précisée"}`;
+}
+
 /** Un article Odoo proposé à l'utilisateur quand la référence reste orpheline. */
 interface Proposition {
   code: string;
@@ -438,6 +459,16 @@ async function resoudreArticles(
         String(p.default_code || "").toLowerCase().includes(r.toLowerCase())
       );
       if (hits.length !== 1) continue;
+      const ecartT = ecartTeinte(r, String(hits[0].default_code || ""));
+      if (ecartT) {
+        propositions[r] = [{
+          code: String(hits[0].default_code || ""),
+          nom: String(hits[0].name || ""),
+          note: 0,
+          ecart: ecartT,
+        }];
+        continue;
+      }
       if (!conditionnementCompatible(descOf[r] || "", hits[0].name || "")) {
         propositions[r] = [{
           code: String(hits[0].default_code || ""),
@@ -483,19 +514,25 @@ async function resoudreArticles(
 
         /* Les meilleurs candidats, retenus ou non : c'est de là que sortira la
            correspondance à enregistrer si personne ne l'emporte. */
-        propositions[r] = notes.slice(0, 4).filter((n) => n.s >= 0.5).map((n) => ({
-          code: String(n.p.default_code || ""),
-          nom: String(n.p.name || ""),
-          note: Math.round(n.s * 100),
-          ...(conditionnementCompatible(descOf[r] || "", n.p.name || "") ? {} : {
-            ecart: `${conditionnement(descOf[r] || "")} ≠ ${conditionnement(n.p.name || "")}`,
-          }),
-        }));
+        propositions[r] = notes.slice(0, 4).filter((n) => n.s >= 0.5).map((n) => {
+          const ecartT = ecartTeinte(r, String(n.p.default_code || ""));
+          return {
+            code: String(n.p.default_code || ""),
+            nom: String(n.p.name || ""),
+            note: Math.round(n.s * 100),
+            ...(ecartT ? { ecart: ecartT }
+              : conditionnementCompatible(descOf[r] || "", n.p.name || "") ? {} : {
+                ecart: `${conditionnement(descOf[r] || "")} ≠ ${conditionnement(n.p.name || "")}`,
+              }),
+          };
+        });
 
         /* Le conditionnement d'abord : un candidat qui n'emballe pas la même
-           chose n'est pas un meilleur candidat, c'est un autre produit. */
+           chose n'est pas un meilleur candidat, c'est un autre produit. La
+           teinte de même : une autre teinte est un autre article. */
         const retenables = notes.filter((n) =>
           conditionnementCompatible(descOf[r] || "", n.p.name || "")
+          && !ecartTeinte(r, String(n.p.default_code || ""))
         );
         const premier = retenables[0];
         const second = retenables[1];

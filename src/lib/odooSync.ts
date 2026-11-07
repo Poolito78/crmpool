@@ -10,6 +10,7 @@ import { produitParId } from '@/lib/indexProduits';
 import { estGamme, niveauGamme } from '@/lib/remiseGammes';
 import { noteEnTexte } from '@/lib/noteRiche';
 import { calculerCatalyse, contenanceCatalyseur, estCatalyseur, ligneDuTableau, TEMPERATURE_PAR_DEFAUT } from '@/lib/catalyseur';
+import { libelleAvecTeinte, referenceSelonTeinte } from '@/lib/referenceTeinte';
 
 // ── Gestion du nom Odoo par client (localStorage) ────────────────────────────
 
@@ -115,7 +116,7 @@ interface LigneScript {
   negoce?: string;
 }
 
-function buildLignes(devis: Devis, produits: Produit[]): LigneScript[] {
+function buildLignes(devis: Devis, produits: Produit[], avertissements?: string[]): LigneScript[] {
   const result: LigneScript[] = [];
 
   for (const l of devis.lignes) {
@@ -137,11 +138,18 @@ function buildLignes(devis: Devis, produits: Produit[]): LigneScript[] {
       /* À défaut d'article MonCRM, la référence portée par la ligne elle-même :
          c'est le cas des articles retenus chez Odoo et absents du catalogue
          local, qui partaient jusqu'ici en négoce. */
-      const ref = (produit?.referenceOdoo || produit?.reference || l.referenceOdoo || '').trim();
+      const brute = (produit?.referenceOdoo || produit?.reference || l.referenceOdoo || '').trim();
+      /* ⚠️ La référence d'une TEINTE suit la teinte choisie : PIGMENT2KG.L1000
+         partait pour un pigment choisi en RAL 7037 (AF041510 / P29317).
+         Teinte sans RAL ou non choisie → pas de référence, « à vérifier ». */
+      const t = referenceSelonTeinte(brute || undefined, produit, l.variantesChoisies);
+      if (t.aVerifier) avertissements?.push(t.aVerifier);
+      const ref = t.ref || '';
       result.push({
         type: 'product',
         // Odoo n'a pas de gras : le texte part sans les balises de mise en forme.
-        desc: noteEnTexte(l.description),
+        // La teinte rejoint le libellé : une ligne en négoce n'a que lui.
+        desc: libelleAvecTeinte(noteEnTexte(l.description), t.teinte),
         ref: ref || undefined,
         qty: l.quantite,
         pu: l.prixUnitaireHT,
@@ -202,6 +210,9 @@ export interface OdooPayload {
   negoce_id: number;
   port_id: number;
   lines: LigneScript[];
+  /** Ce que l'export n'a pas pu tirer au clair (teinte sans RAL…) : affiché
+      à l'écran, ignoré par `odoo-devis`. */
+  avertissements?: string[];
 }
 
 /**
@@ -403,7 +414,8 @@ export function buildOdooPayload(
   if (coutM2 > 0) noteLines.push(`Coût chantier : ${coutM2} €/${u}`);
 
   // Prix net (remise appliquée), arrondi supérieur au centime — comme l'export console.
-  const lines = buildLignes(devis, produits).map(l =>
+  const avertissements: string[] = [];
+  const lines = buildLignes(devis, produits, avertissements).map(l =>
     l.type === 'product'
       ? { ...l, pu: Math.ceil((l.pu || 0) * (1 - ((l.rem || 0) / 100)) * 100) / 100, rem: 0 }
       : l
@@ -436,6 +448,7 @@ export function buildOdooPayload(
     negoce_id: ODOO_NEGOCE_ID,
     port_id: ODOO_PORT_PRODUCT_ID,
     lines,
+    ...(avertissements.length ? { avertissements } : {}),
   };
 }
 

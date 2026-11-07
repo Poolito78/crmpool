@@ -603,6 +603,19 @@ Note : SNLR5 est COMPOSÉ — son achat se recalcule depuis ses composants
 (SNLR775 au prorata 3,14 € + main d'œuvre = 8,15 €) ; un 8,14 posé en base
 redevient 8,15 au prochain enregistrement de la fiche.
 
+## Envoi Odoo : la référence suit la TEINTE choisie (8 nov.)
+
+⚠️ Chez Odoo une teinte est un article (`PIGMENT2KG.L7037`) ; la fiche
+MonCRM n'a qu'une `reference_odoo` (`PIGMENT2KG.L1000`, la 1re teinte). Un
+pigment choisi en RAL 7037 partait en L1000 : devis AF041510 et achat P29317
+imprimés en RAL 1000. `referenceSelonTeinte` (`referenceTeinte.ts`, appelé
+par `buildLignes`) remplace le segment `.L{RAL}` par le RAL de l'option
+choisie ; teinte sans RAL ou non choisie → pas de référence (négoce, teinte
+dans le libellé) et `payload.avertissements` « À vérifier » à l'écran.
+`odoo-devis` (`ecartTeinte`) refuse tout rapprochement par ressemblance vers
+une autre teinte (L7035 pour L7037). **À déployer** :
+`.\deploy-function.ps1 odoo-devis`.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du

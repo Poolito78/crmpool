@@ -8,6 +8,7 @@ import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Building2, MoveHorizontal, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, getOdooPartnerId, setOdooPartnerId, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, type OdooPayload } from '@/lib/odooSync';
+import { teinteDeReference } from '@/lib/referenceTeinte';
 import { motsRechercheOdoo, classerClientsOdoo, natureFicheOdoo, type CandidatOdoo } from '@/lib/clientOdoo';
 import { compterBrides } from '@/lib/bridesDevis';
 import { Button } from '@/components/ui/button';
@@ -615,7 +616,11 @@ export default function Devis() {
     const cible = produits.find(p =>
       String(p.reference || '').toUpperCase() === ref.toUpperCase());
     if (!cible) {
-      toast.error(`Article « ${ref} » introuvable dans le catalogue local.`);
+      /* Une référence de teinte (PIGMENT2KG.L7037) n'est pas une fiche : la
+         teinte se choisit sur la ligne, la fiche garde une seule référence. */
+      toast.error(teinteDeReference(ref)
+        ? `${ref} est la référence d'une teinte : elle se déduit de la teinte choisie sur la ligne. Si Odoo ne la porte pas, créez la variante dans Odoo.`
+        : `Article « ${ref} » introuvable dans le catalogue local.`);
       return;
     }
     updateProduits(prev => prev.map(p =>
@@ -6451,6 +6456,18 @@ ${dosage.source}` : ''}`}>
             {/* Les lignes qu'Odoo n'a pas su rattacher à un article : elles
                 existent, sous l'article négoce, avec leur désignation dans le
                 libellé. Il faut le savoir avant d'envoyer au client. */}
+            {/* Une teinte dont la référence Odoo ne se déduit pas (pas de RAL,
+                pas de teinte choisie) : la ligne part sans référence plutôt
+                que sous la première teinte de la fiche. À vérifier. */}
+            {!!odooInfo?.payload?.avertissements?.length && (
+              <div className="rounded border border-warning/40 bg-warning/5 p-2">
+                <p className="text-xs font-medium text-warning mb-1">À vérifier :</p>
+                <ul className="text-xs text-muted-foreground space-y-0.5">
+                  {odooInfo.payload.avertissements.map((n, i) => <li key={i}>· {n}</li>)}
+                </ul>
+              </div>
+            )}
+
             {!!odooInfo?.negoce?.length && (
               <div className="rounded border border-warning/40 bg-warning/5 p-2">
                 <p className="text-xs font-medium text-warning mb-1">
@@ -6495,7 +6512,9 @@ ${dosage.source}` : ''}`}>
                             <span className="text-muted-foreground">{prop.nom}</span>
                             <span className="text-muted-foreground/60">
                               {prop.ecart
-                                ? `conditionnement ${prop.ecart} — ce n'est pas le même produit`
+                                ? prop.ecart.startsWith('teinte')
+                                  ? `${prop.ecart} — ce n'est pas la même teinte`
+                                  : `conditionnement ${prop.ecart} — ce n'est pas le même produit`
                                 : `${prop.note} %`}
                             </span>
                           </li>
