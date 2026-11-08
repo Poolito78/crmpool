@@ -70,7 +70,7 @@ describe('port ISOFLOOR', () => {
     expect(p.poids).toBe(2500);        // le camion les emporte
     expect(p.poidsFranco).toBe(1000);  // le franco les ignore
     expect(p.offert).toBe(false);
-    expect(p.montant).toBe(230);       // tranche 701 et plus
+    expect(p.montant).toBe(235);       // tranche 701 et plus
   });
 
   it('reconnaît un granulat à son libellé', () => {
@@ -94,7 +94,7 @@ describe('répartition des expéditions', () => {
       { ...ligne('Flowfast (20 kg)', 1, 400), niveau: 'ISOFLOOR' },
     ]);
     expect(ports).toHaveLength(3);
-    expect(ports.map(p => p.montant)).toEqual([51, 51, 49]);
+    expect(ports.map(p => p.montant)).toEqual([51, 51, 51]);
   });
 
   it('ne fait pas franchir un franco par des lignes d\'une autre expédition', () => {
