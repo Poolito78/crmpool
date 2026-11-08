@@ -3,9 +3,28 @@ import {
   corpsUtile, lireTri, clientDuMail, numerosDevisCites, invitationTri,
   enteteEml, decoderMotsEncodes, dateDuNom, estFichierMail, pieceJointeUtile,
   mailTransfere, dateEnFrancais, emlSynthetique, corpsEtFil,
-  triSansModele,
+  triSansModele, motsCherches, texteCherchable, contientTousLesMots,
 } from './agentMail';
 import { decouperFil, coupeSignatures } from './chiffrage';
+
+describe('recherche dans la liste', () => {
+  const texte = texteCherchable(['TR: Demande de peinture', 'Blondel Aérologistique', null, undefined, 'Chantier à Méaulte', 'DEV-2026-165']);
+
+  it('ignore la casse et les accents, des deux côtés', () => {
+    expect(contientTousLesMots(texte, motsCherches('MEAULTE'))).toBe(true);
+    expect(contientTousLesMots(texte, motsCherches('méaulte'))).toBe(true);
+  });
+  it('exige tous les mots, dans n\'importe quel ordre et n\'importe quel champ', () => {
+    expect(contientTousLesMots(texte, motsCherches('meaulte  blondel'))).toBe(true);
+    expect(contientTousLesMots(texte, motsCherches('blondel lille'))).toBe(false);
+  });
+  it('trouve un morceau de numéro de devis', () => {
+    expect(contientTousLesMots(texte, motsCherches('2026-165'))).toBe(true);
+  });
+  it('une saisie blanche ne donne aucun mot', () => {
+    expect(motsCherches('   ')).toEqual([]);
+  });
+});
 
 describe('corpsUtile', () => {
   it("coupe l'historique cité d'un fil", () => {

@@ -267,6 +267,26 @@ export function lireTri(texte: string, ids: string[]): Map<string, TriMail> {
   return res;
 }
 
+/* ── La recherche dans la liste ───────────────────────────────────────────── */
+
+const sansAccent = (s: string): string =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+/**
+ * La saisie, mot à mot : « blondel meaulte » trouve le mail qui porte les deux,
+ * dans n'importe quel ordre et à n'importe quel endroit — l'objet peut nommer
+ * le client et le corps le chantier.
+ */
+export const motsCherches = (saisie: string): string[] =>
+  sansAccent(saisie).split(/\s+/).filter(Boolean);
+
+/** Tout ce qu'une carte de mail montre ou contient, prêt à être comparé. */
+export const texteCherchable = (parties: (string | null | undefined)[]): string =>
+  sansAccent(parties.filter(Boolean).join('\n'));
+
+export const contientTousLesMots = (texte: string, mots: string[]): boolean =>
+  mots.every(m => texte.includes(m));
+
 export interface ClientDuMail<C> {
   client?: C;
   /** Comment la fiche a été trouvée — ou pourquoi aucune n'est retenue. */

@@ -30,13 +30,19 @@
  * Les mails se replient par catégorie : le premier de chaque groupe porte le
  * bouton −, et replié il reste seul, sur une ligne, avec + et le nombre de mails
  * du groupe. Ce choix est mémorisé dans ce navigateur.
+ *
+ * La recherche filtre mot à mot TOUT ce que la carte montre ou contient (objet,
+ * expéditeur, corps et fil, pièces jointes, résumé, chantier, client, numéros de
+ * devis). Chercher, c'est chercher partout : un mot tapé fait tomber le filtre
+ * « Autre », les groupes repliés et le volet « Déjà réalisés ». Elle ne porte
+ * que sur les mails chargés dans la fenêtre, jamais sur la boîte Outlook entière.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Mail, Loader2, RefreshCw, FileText, ExternalLink, Check, EyeOff, Paperclip, LogOut, Copy, Sparkles,
-  FolderOpen, Upload, Archive, ChevronRight, Smartphone, X, Plus, Minus,
+  FolderOpen, Upload, Archive, ChevronRight, Smartphone, X, Plus, Minus, Search,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -55,8 +61,8 @@ import {
   idFichier, lancerMacroOutlook, lienOutlook, lireIndexOutlook, lireMailFichier, nomDossierMails, rangerTraite,
 } from '@/lib/dossierMails';
 import {
-  type MailAgent, type TriMail, CATEGORIE_MAIL, clientDuMail, estFichierMail, invitationTri, lireTri, numerosDevisCites,
-  triSansModele,
+  type MailAgent, type TriMail, CATEGORIE_MAIL, clientDuMail, contientTousLesMots, estFichierMail, invitationTri, lireTri,
+  motsCherches, numerosDevisCites, texteCherchable, triSansModele,
 } from '@/lib/agentMail';
 import {
   type AdressesMail, type DevisOdooLu, type ReponseDevisOdoo, ETAT_DEVIS_ODOO, adressesDuMail, lireDevisOdoo, rapprocherMail,
@@ -165,6 +171,8 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   const [erreur, setErreur] = useState('');
   const [toutVoir, setToutVoir] = useState(false);
   const [voirRealises, setVoirRealises] = useState(false);
+  /** Les mots tapés dans la recherche de la liste (`recherche`, c'est la macro Outlook). */
+  const [filtre, setFiltre] = useState('');
   const [groupesReplies, setGroupesReplies] = useState(lireGroupesReplies);
   const [odoo, setOdoo] = useState<ReponseDevisOdoo | undefined>(memoire.odoo);
   const [erreurOdoo, setErreurOdoo] = useState('');
@@ -358,6 +366,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
      et la boîte Microsoft 365 si elle est connectée. */
   useEffect(() => {
     if (!open) return;
+    setFiltre('');
     lireTransferts();
     nomDossierMails().then(setNomDossier);
     const premiere = !memoire.accesDemande;
@@ -538,16 +547,33 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
       .catch(e => setErreurOdoo((e as Error).message || String(e)));
   }, [open, triEnCours, demandesOdoo, bilanDossier]);
 
-  const lignes = useMemo(() => lignesBrutes.map(l => ({
-    ...l,
-    odoo: odoo ? rapprocherMail({ recuLe: l.m.recuLe, sujet: l.m.sujet, tri: l.t }, l.adresses, odoo, n => !!pasCeDevis[`${l.m.id}|${n}`]) : null,
-  })), [lignesBrutes, odoo, pasCeDevis]);
+  const lignes = useMemo(() => lignesBrutes.map(l => {
+    const rapproche = odoo ? rapprocherMail({ recuLe: l.m.recuLe, sujet: l.m.sujet, tri: l.t }, l.adresses, odoo, n => !!pasCeDevis[`${l.m.id}|${n}`]) : null;
+    return {
+      ...l,
+      odoo: rapproche,
+      /* Calculé une fois par mail, pas à chaque frappe : le corps porte tout le fil. */
+      cherchable: texteCherchable([
+        l.m.sujet, l.m.deNom, l.m.deEmail, l.m.corps, ...l.m.piecesJointes,
+        l.t && CATEGORIE_MAIL[l.t.categorie].label, l.t?.resume, l.t?.societe, l.t?.chantier, l.t?.delai, ...(l.t?.demandes ?? []),
+        ...l.cl.candidats.map(c => `${c.societe ?? ''} ${c.nom ?? ''}`),
+        l.cl.client?.societe, l.cl.client?.nom,
+        ...l.ouverts.map(d => d.numero), ...l.cites.map(d => d.numero), ...l.dossiersOdoo.map(n => n.numero),
+        rapproche?.devis.numero,
+      ]),
+    };
+  }), [lignesBrutes, odoo, pasCeDevis]);
 
-  const realises = lignes.filter(l => l.odoo?.certitude === 'sur');
-  const aFaire = lignes.filter(l => l.odoo?.certitude !== 'sur');
+  const mots = useMemo(() => motsCherches(filtre), [filtre]);
+  const enRecherche = mots.length > 0;
+  const trouves = enRecherche ? lignes.filter(l => contientTousLesMots(l.cherchable, mots)) : lignes;
+
+  const realises = trouves.filter(l => l.odoo?.certitude === 'sur');
+  const aFaire = trouves.filter(l => l.odoo?.certitude !== 'sur');
   const utiles = aFaire.filter(l => !l.t || l.t.categorie !== 'autre');
-  const visibles = toutVoir ? aFaire : utiles;
+  const visibles = toutVoir || enRecherche ? aFaire : utiles;
   const nbDemandes = aFaire.filter(l => l.t?.categorie === 'demande_devis').length;
+  const realisesOuverts = voirRealises || enRecherche;
 
   const refuserDevis = (m: MailAgent, numero: string) => setPasCeDevis(noterId(CLE_PAS_CE_DEVIS, `${m.id}|${numero}`));
 
@@ -740,16 +766,38 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
 
         {erreur && <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive">{erreur}</p>}
 
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9 pr-9"
+            value={filtre}
+            onChange={e => setFiltre(e.target.value)}
+            placeholder="Rechercher : client, chantier, objet, article, n° de devis…"
+            aria-label="Rechercher dans les mails"
+          />
+          {filtre && (
+            <button type="button" aria-label="Effacer la recherche" title="Effacer la recherche"
+              className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground"
+              onClick={() => setFiltre('')}>
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {lecture ? (
             <span className="inline-flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Lecture des mails…</span>
+          ) : enRecherche ? (
+            <span>
+              <strong className="text-foreground">{trouves.length} mail{trouves.length > 1 ? 's' : ''} trouvé{trouves.length > 1 ? 's' : ''}</strong> sur {lignes.length}
+            </span>
           ) : (
             <span>
               {aFaire.length} mail{aFaire.length > 1 ? 's' : ''} à traiter · <strong className="text-foreground">{nbDemandes} demande{nbDemandes > 1 ? 's' : ''} de devis</strong>
             </span>
           )}
           {triEnCours && <span className="inline-flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5 animate-pulse" />tri en cours…</span>}
-          {aFaire.length > utiles.length && (
+          {!enRecherche && aFaire.length > utiles.length && (
             <Button variant="ghost" size="sm" className="ml-auto h-7 text-xs" onClick={() => setToutVoir(v => !v)}>
               {toutVoir ? 'Masquer les autres' : `Tout voir (${aFaire.length - utiles.length} autres)`}
             </Button>
@@ -759,7 +807,11 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
         <div className="space-y-3">
           {!lecture && visibles.length === 0 && (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              {lignes.length
+              {enRecherche
+                ? realises.length
+                  ? `Rien à traiter pour « ${filtre.trim()} » : voir « Déjà réalisés » ci-dessous.`
+                  : `Aucun mail ne contient « ${filtre.trim()} ».`
+                : lignes.length
                 ? 'Aucune demande parmi ces mails.'
                 : dossierMailsDisponible() && !dossierOuvert
                   ? 'Les mails d\'Outlook ne sont pas encore accessibles dans cette fenêtre : cliquez sur le bouton bleu ci-dessus.'
@@ -772,7 +824,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
             const occupe = enCours === m.id;
             const groupe = groupeDe(t);
             const premier = i === 0 || groupeDe(visibles[i - 1].t) !== groupe;
-            const replie = groupesReplies.has(groupe);
+            const replie = !enRecherche && groupesReplies.has(groupe);
             if (replie && !premier) return null;
             const pastille = cat
               ? <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold', cat.couleur)}>{cat.label}{t!.confiance ? ` · ${t!.confiance} %` : ''}</span>
@@ -797,7 +849,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
               <div key={m.id} className={cn('rounded-lg border p-3 space-y-2', t?.categorie === 'demande_devis' ? 'border-primary/40 bg-primary/[0.03]' : 'border-border')}>
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {premier && (
+                    {premier && !enRecherche && (
                       <button type="button" aria-expanded aria-label="Replier ce groupe" title="Replier ce groupe"
                         className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:text-foreground"
                         onClick={() => basculerGroupe(groupe)}>
@@ -921,10 +973,10 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
           {realises.length > 0 && (
             <div className="rounded-lg border border-border">
               <button type="button" className="flex w-full items-center gap-1.5 p-3 text-left text-sm font-medium" onClick={() => setVoirRealises(v => !v)}>
-                <ChevronRight className={cn('w-4 h-4 transition-transform', voirRealises && 'rotate-90')} />
+                <ChevronRight className={cn('w-4 h-4 transition-transform', realisesOuverts && 'rotate-90')} />
                 <Check className="w-4 h-4 text-success" />Déjà réalisés dans Odoo ({realises.length})
               </button>
-              {voirRealises && (
+              {realisesOuverts && (
                 <div className="divide-y divide-border border-t border-border">
                   {realises.map(({ m, odoo: rapproche }) => (
                     <div key={m.id} className="space-y-1 p-3 text-xs">

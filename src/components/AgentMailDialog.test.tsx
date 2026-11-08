@@ -143,6 +143,39 @@ describe('AgentMailDialog — choix du dossier', () => {
   });
 });
 
+describe('AgentMailDialog — recherche par mots', () => {
+  const chercher = (texte: string) =>
+    fireEvent.change(screen.getByRole('textbox', { name: 'Rechercher dans les mails' }), { target: { value: texte } });
+
+  it('filtre mot à mot, sans tenir compte des accents ni de l\'ordre', async () => {
+    await chargerLesMails();
+    chercher('RECENTE demande');
+    expect(screen.getByText('Demande récente')).toBeTruthy();
+    expect(screen.queryByText('Suite récente')).toBeNull();
+    expect(screen.queryByText('Demande moyenne')).toBeNull();
+    expect(screen.getByText(/1 mail trouvé/)).toBeTruthy();
+  });
+
+  it('trouve aussi dans un groupe replié, puis le repli revient quand on efface', async () => {
+    await chargerLesMails();
+    fireEvent.click(boutonsReplier()[0]);
+    expect(screen.queryByText('Demande ancienne')).toBeNull();
+
+    chercher('ancienne');
+    expect(screen.getByText('Demande ancienne')).toBeTruthy();
+    expect(screen.getByText('Suite ancienne')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Effacer la recherche' }));
+    expect(screen.queryByText('Demande ancienne')).toBeNull();
+  });
+
+  it('dit quand rien ne correspond', async () => {
+    await chargerLesMails();
+    chercher('introuvable');
+    expect(screen.getByText('Aucun mail ne contient « introuvable ».')).toBeTruthy();
+  });
+});
+
 describe('AgentMailDialog — repli par catégorie', () => {
   it('un bouton par catégorie, sur le premier mail du groupe seulement', async () => {
     await chargerLesMails();
