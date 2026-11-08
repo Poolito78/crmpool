@@ -51,8 +51,8 @@ import {
   deconnecterMicrosoft, enregistrerConfigMicrosoft, estConnecte, fichierEml, mailsNonLus, marquerLu, uriRetour,
 } from '@/lib/microsoftGraph';
 import {
-  DOSSIER_MAILS, copieEnMemoire, dernierExport, dossierMails, dossierMailsDisponible, fichiersDuDossier,
-  idFichier, lienOutlook, lireIndexOutlook, lireMailFichier, nomDossierMails, rangerTraite,
+  DOSSIER_MAILS, copieEnMemoire, dernierExport, dernierPassage, dossierMails, dossierMailsDisponible, fichiersDuDossier,
+  idFichier, lancerMacroOutlook, lienOutlook, lireIndexOutlook, lireMailFichier, nomDossierMails, rangerTraite,
 } from '@/lib/dossierMails';
 import {
   type MailAgent, type TriMail, CATEGORIE_MAIL, clientDuMail, estFichierMail, invitationTri, lireTri, numerosDevisCites,
@@ -98,8 +98,18 @@ function noterId(cle: string, id: string): Record<string, string> {
    relancer le modèle sur les mêmes mails. */
 const memoire: {
   mails: MailAgent[]; tri: Map<string, TriMail>; compte?: string;
-  odoo?: ReponseDevisOdoo; odooCle?: string; odooHeure?: number;
+  odoo?: ReponseDevisOdoo; odooCle?: string; odooHeure?: number; rechercheHeure?: number;
 } = { mails: [], tri: new Map() };
+
+/* La recherche lancée dans Outlook. Elle ne part seule à l'ouverture qu'une
+   fois prouvé qu'elle marche sur ce poste : sinon, chaque ouverture suivrait un
+   lien mort. */
+const CLE_MACRO_OK = 'agent_mail_macro_ok';
+const ATTENTE_MACRO_MS = 60 * 1000;
+const RECHERCHE_AUTO_MS = 5 * 60 * 1000;
+function macroConfirmee(): boolean {
+  try { return localStorage.getItem(CLE_MACRO_OK) === '1'; } catch { return false; }
+}
 
 /* …ni au rechargement de la page : la macro exporte aussi les mails lus sans
    réponse, ceux qui ne sont pas des demandes restent au dossier, et chaque
@@ -153,6 +163,8 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   const setTri = (t: Map<string, TriMail>) => { memoire.tri = t; setTriEtat(new Map(t)); };
 
   const [lecture, setLecture] = useState(false);
+  const [recherche, setRecherche] = useState(false);
+  const rechercheEnVol = useRef(false);
   const [triEnCours, setTriEnCours] = useState(false);
   const [erreur, setErreur] = useState('');
   const [toutVoir, setToutVoir] = useState(false);
@@ -280,6 +292,35 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     } finally { setLecture(false); }
   }, [echec, integrer, lireFichiers]);
 
+  /** Fait chercher les mails par Outlook, attend son accusé de réception, relit le dossier. */
+  const rechercher = useCallback(async (auClic: boolean) => {
+    if (rechercheEnVol.current) return;
+    if (!auClic && !(await dossierMails(false))) return;
+    rechercheEnVol.current = true;
+    const depuis = Date.now();
+    memoire.rechercheHeure = depuis;
+    /* D'abord le lien : c'est lui qui a besoin du geste de l'utilisateur. */
+    lancerMacroOutlook();
+    setRecherche(true);
+    try {
+      if (auClic) await lireDossier(true);
+      const d = await dossierMails(false);
+      if (!d) return;
+      while (Date.now() - depuis < ATTENTE_MACRO_MS) {
+        await new Promise(r => setTimeout(r, 2000));
+        if (((await dernierPassage(d)) ?? 0) >= depuis) {
+          try { localStorage.setItem(CLE_MACRO_OK, '1'); } catch { /* stockage indisponible */ }
+          await lireDossier(false, false, true);
+          return;
+        }
+      }
+      if (auClic) setErreur('Outlook n\'a pas répondu à la recherche. Vérifiez qu\'il est ouvert, et que ThisOutlookSession.vba et lien-outlook.reg (dossier outlook_macro) sont installés sur ce poste.');
+    } finally {
+      rechercheEnVol.current = false;
+      setRecherche(false);
+    }
+  }, [lireDossier]);
+
   const lireOutlook = useCallback(async () => {
     setErreur('');
     setLecture(true);
@@ -315,6 +356,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     lireTransferts();
     nomDossierMails().then(setNomDossier);
     lireDossier(false);
+    if (dossierMailsDisponible() && macroConfirmee() && Date.now() - (memoire.rechercheHeure ?? 0) > RECHERCHE_AUTO_MS) rechercher(false);
     if (configMicrosoft() && estConnecte()) lireOutlook();
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -575,10 +617,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
             {bilanDossier?.dernier && (
               Date.now() - new Date(bilanDossier.dernier).getTime() > EXPORT_PERIME_MS ? (
                 <p className="text-warning">
-                  Outlook n'a rien exporté depuis le mail du {dateCourte(bilanDossier.dernier)}.
-                  « Relire » relit le dossier sans interroger Outlook : relancez la macro
-                  <strong> ExporterMailsNonLus</strong>, ou installez l'export automatique
-                  (<span className="font-mono text-[10px]">outlook_macro\ThisOutlookSession.vba</span>).
+                  Outlook n'a rien exporté depuis le mail du {dateCourte(bilanDossier.dernier)} : cliquez « Rechercher dans Outlook ».
                 </p>
               ) : (
                 <p className="text-muted-foreground">Dernier mail exporté : reçu {dateCourte(bilanDossier.dernier)}</p>
@@ -594,14 +633,15 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
           </>
         ) : (
           <p className="text-muted-foreground">
-            Lancez la macro Outlook <strong>ExporterMailsNonLus</strong>, puis choisissez le dossier
+            Choisissez une fois le dossier ci-dessous : l'Agent mail lance ensuite lui-même la recherche dans Outlook.
             <span className="block font-mono text-[10px] text-foreground mt-0.5">{DOSSIER_MAILS}</span>
           </p>
         )}
         <div className="flex flex-wrap gap-1.5">
-          <Button size="sm" className="h-7 text-xs" disabled={lecture} onClick={() => lireDossier(true)}>
-            <RefreshCw className={cn('w-3.5 h-3.5 mr-1', lecture && 'animate-spin')} />
-            {nomDossier ? (dossierOuvert ? 'Relire' : 'Lire le dossier') : 'Choisir le dossier'}
+          <Button size="sm" className="h-7 text-xs" disabled={lecture || recherche} onClick={() => rechercher(true)}
+            title="Lance la macro dans Outlook, puis relit le dossier. Outlook doit être ouvert.">
+            <RefreshCw className={cn('w-3.5 h-3.5 mr-1', (lecture || recherche) && 'animate-spin')} />
+            {recherche ? 'Recherche dans Outlook…' : nomDossier ? 'Rechercher dans Outlook' : 'Choisir le dossier'}
           </Button>
           {nomDossier && (
             <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => lireDossier(true, true)}>Changer</Button>

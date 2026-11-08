@@ -1,5 +1,5 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { ComponentType } from 'react';
 import type { MailAgent, TriMail } from '@/lib/agentMail';
@@ -18,6 +18,8 @@ const MAILS: { id: string; sujet: string; categorie: TriMail['categorie']; jour:
 
 const gemini = vi.hoisted(() => vi.fn());
 const ouvrirDossier = vi.hoisted(() => vi.fn(async () => null as FileSystemDirectoryHandle | null));
+const lancerMacro = vi.hoisted(() => vi.fn());
+const passage = vi.hoisted(() => vi.fn(async () => null as number | null));
 
 vi.mock('@/lib/StoreContext', () => ({ useCRM: () => ({ clients: [], devis: [] }) }));
 vi.mock('@/lib/modelesIA', () => ({ appelerGemini: gemini, texteGemini: () => '' }));
@@ -34,6 +36,11 @@ vi.mock('@/lib/dossierMails', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/dossierMails')>()),
   dossierMailsDisponible: () => true,
   dossierMails: ouvrirDossier,
+  lancerMacroOutlook: lancerMacro,
+  dernierPassage: passage,
+  fichiersDuDossier: async () => [],
+  lireIndexOutlook: async () => new Map(),
+  dernierExport: async () => null,
   nomDossierMails: async () => null,
   copieEnMemoire: async (f: File) => f,
   lireMailFichier: async (f: File): Promise<MailAgent> => {
@@ -55,7 +62,16 @@ beforeAll(async () => {
   Dialogue = (await import('./AgentMailDialog')).default;
 });
 
-beforeEach(() => localStorage.removeItem('agent_mail_groupes_replies'));
+beforeEach(() => {
+  localStorage.removeItem('agent_mail_groupes_replies');
+  localStorage.removeItem('agent_mail_macro_ok');
+  ouvrirDossier.mockReset().mockResolvedValue(null);
+  passage.mockReset().mockResolvedValue(null);
+  lancerMacro.mockReset();
+});
+afterEach(() => vi.useRealTimers());
+
+const DOSSIER = { name: 'Mails a traiter' } as FileSystemDirectoryHandle;
 
 const monter = () => render(
   <MemoryRouter><Dialogue open onOpenChange={() => {}} onProposerDevis={() => {}} /></MemoryRouter>,
@@ -70,6 +86,42 @@ async function chargerLesMails() {
 }
 
 const boutonsReplier = () => screen.getAllByRole('button', { name: 'Replier ce groupe' });
+
+describe('AgentMailDialog — recherche lancée dans Outlook', () => {
+  it('à l\'ouverture, rien ne part tant que la macro n\'a pas prouvé qu\'elle marche', async () => {
+    ouvrirDossier.mockResolvedValue(DOSSIER);
+    monter();
+    await screen.findByRole('button', { name: /Rechercher dans Outlook/ });
+    expect(lancerMacro).not.toHaveBeenCalled();
+  });
+
+  it('une fois prouvée, elle part seule à l\'ouverture', async () => {
+    localStorage.setItem('agent_mail_macro_ok', '1');
+    ouvrirDossier.mockResolvedValue(DOSSIER);
+    monter();
+    await waitFor(() => expect(lancerMacro).toHaveBeenCalledOnce());
+  });
+
+  it('au clic : lance la macro, et son accusé de réception la confirme', async () => {
+    ouvrirDossier.mockResolvedValue(DOSSIER);
+    passage.mockImplementation(async () => Date.now());
+    monter();
+    fireEvent.click(await screen.findByRole('button', { name: /Rechercher dans Outlook/ }));
+    expect(lancerMacro).toHaveBeenCalledOnce();
+    await waitFor(() => expect(localStorage.getItem('agent_mail_macro_ok')).toBe('1'), { timeout: 4000 });
+  });
+
+  it('sans accusé de réception, l\'écran le dit au bout d\'une minute', async () => {
+    ouvrirDossier.mockResolvedValue(DOSSIER);
+    monter();
+    const bouton = await screen.findByRole('button', { name: /Rechercher dans Outlook/ });
+    vi.useFakeTimers();
+    fireEvent.click(bouton);
+    await act(async () => { await vi.advanceTimersByTimeAsync(62_000); });
+    expect(screen.getByText(/Outlook n'a pas répondu à la recherche/)).toBeTruthy();
+    expect(localStorage.getItem('agent_mail_macro_ok')).toBeNull();
+  });
+});
 
 describe('AgentMailDialog — choix du dossier', () => {
   it('une fenêtre fermée sans choix se dit à l\'écran', async () => {

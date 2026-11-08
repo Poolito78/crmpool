@@ -13,6 +13,8 @@
 '  - A l'arrivee d'un mail dans la boite de reception : export immediat.
 '  - Mail repondu : range tout de suite. Mail envoye, recu ou retire de la
 '    boite : nouveau passage complet, au plus toutes les 10 minutes.
+'  - Bouton "Rechercher dans Outlook" de l'Agent mail : LancerAgentMail,
+'    appelee via le lien moncrm-agent: (lien-outlook.reg).
 '  MonCRM relit le dossier toutes les minutes tant que l'Agent mail est
 '  ouvert, et quand on revient sur son onglet.
 '
@@ -29,6 +31,20 @@ Private Sub Application_Startup()
     Set mailsEnvoyes = Application.GetNamespace("MAPI").GetDefaultFolder(olFolderSentMail).Items
     On Error Resume Next
     ExporterMailsAgent True
+End Sub
+
+' Appelee de l'exterieur par MonCRM : seules les Sub publiques de
+' ThisOutlookSession sont joignables, pas celles d'un module. Le fichier ecrit
+' a la fin est l'accuse de reception que l'Agent mail attend (meme dossier que
+' DossierMailsCRM, prive au module).
+Public Sub LancerAgentMail()
+    Dim f As Integer
+    On Error Resume Next
+    ExporterMailsAgent True
+    f = FreeFile
+    Open Environ("USERPROFILE") & "\OneDrive - ISOSIGN\Documents\MonCRM\Mails a traiter\dernier-passage.txt" For Output As #f
+    Print #f, Format(Now, "yyyy-mm-dd hh:nn:ss")
+    Close #f
 End Sub
 
 ' Partout : un mail qui ne s'exporte pas ne doit jamais gener Outlook.

@@ -11,3 +11,14 @@ Windows Registry Editor Version 5.00
 
 [HKEY_CURRENT_USER\Software\Classes\outlook\shell\open\command]
 @="\"C:\\Program Files\\Microsoft Office\\Root\\Office16\\OUTLOOK.EXE\" /select \"%1\""
+
+; Lien moncrm-agent: (bouton "Rechercher dans Outlook" de l'Agent mail) : demande
+; a l'Outlook deja ouvert de lancer LancerAgentMail (ThisOutlookSession).
+; L'adresse du lien n'est pas transmise a la commande.
+
+[HKEY_CURRENT_USER\Software\Classes\moncrm-agent]
+@="URL:Agent mail MonCRM"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\moncrm-agent\shell\open\command]
+@="C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command \"$o=[Runtime.InteropServices.Marshal]::GetActiveObject('Outlook.Application');[void][System.__ComObject].InvokeMember('LancerAgentMail','InvokeMethod',$null,$o,$null)\""

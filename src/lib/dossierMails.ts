@@ -17,6 +17,12 @@
  * ⚠️ **Le mail reste NON LU dans Outlook.** Seule la connexion directe
  * Microsoft 365 (`microsoftGraph.ts`) sait le marquer lu.
  *
+ * Une page web ne peut pas exécuter une macro : `lancerMacroOutlook` suit le
+ * lien `moncrm-agent:` (`outlook_macro/lien-outlook.reg`), qui demande à
+ * l'Outlook ouvert de lancer `LancerAgentMail`. Un lien mort ne lève aucune
+ * erreur : c'est `dernier-passage.txt`, écrit par la macro, qui prouve qu'elle
+ * a tourné (`dernierPassage`).
+ *
  * ⚠️ **Un `File` tiré d'un dossier est adossé au disque** : une fois le
  * fichier déplacé, le lire lève `NotReadableError`. `copieEnMemoire` en fait
  * une copie avant de le confier à l'analyse puis de le ranger.
@@ -178,6 +184,18 @@ export async function lireIndexOutlook(dossier: FileSystemDirectoryHandle): Prom
  */
 export function lienOutlook(entryId: string): string {
   return `outlook:${entryId}`;
+}
+
+/** Demande à Outlook de chercher les mails. Sans effet si le lien n'est pas installé. */
+export function lancerMacroOutlook(): void {
+  window.location.assign('moncrm-agent:rechercher');
+}
+
+/** Quand `LancerAgentMail` a fini pour la dernière fois (ms), `null` si jamais. */
+export async function dernierPassage(dossier: FileSystemDirectoryHandle): Promise<number | null> {
+  try {
+    return (await (await dossier.getFileHandle('dernier-passage.txt')).getFile()).lastModified;
+  } catch { return null; }
 }
 
 /** Copie détachée du disque : reste lisible une fois l'original rangé. */
