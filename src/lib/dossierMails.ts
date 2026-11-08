@@ -215,6 +215,44 @@ export async function rangerTraite(dossier: FileSystemDirectoryHandle, f: File):
   await dossier.removeEntry(f.name);
 }
 
+/**
+ * Une page web ne peut pas écrire dans Outlook : les ordres attendent dans ce
+ * fichier que `DrapeauxAgentMail` les applique, à son prochain passage. Un mail
+ * s'y désigne par le nom de son .msg. Octets latin-1, comme `entryids.txt` : le
+ * nom d'un .msg ne porte aucun caractère au-delà de 255 (`NomFichierMail`).
+ */
+const FICHIER_COMMANDES = 'commandes-outlook.txt';
+export type ActionOutlook = 'DRAPEAU' | 'RETIRER' | 'ARCHIVER';
+
+export async function ecrireCommandesOutlook(
+  dossier: FileSystemDirectoryHandle,
+  commandes: { action: ActionOutlook; nom: string }[],
+): Promise<void> {
+  if (!commandes.length) return;
+  const h = await dossier.getFileHandle(FICHIER_COMMANDES, { create: true });
+  const taille = (await h.getFile()).size;
+  const w = await h.createWritable({ keepExistingData: true });
+  await w.seek(taille);
+  const texte = commandes.map(c => `${c.action}\t${c.nom}\r\n`).join('');
+  await w.write(Uint8Array.from(texte, c => Math.min(c.charCodeAt(0), 255)));
+  await w.close();
+}
+
+/** Le sous-dossier `Traites`, `null` tant qu'il n'existe pas. */
+export async function dossierTraites(dossier: FileSystemDirectoryHandle): Promise<FileSystemDirectoryHandle | null> {
+  try { return await dossier.getDirectoryHandle(SOUS_DOSSIER_TRAITES); } catch { return null; }
+}
+
+/** L'inverse de `rangerTraite` : le mail revient dans la liste à traiter. */
+export async function remettreATraiter(dossier: FileSystemDirectoryHandle, f: File): Promise<void> {
+  const traites = await dossier.getDirectoryHandle(SOUS_DOSSIER_TRAITES);
+  const cible = await dossier.getFileHandle(f.name, { create: true });
+  const w = await cible.createWritable();
+  await w.write(await f.arrayBuffer());
+  await w.close();
+  await traites.removeEntry(f.name);
+}
+
 /** Identifiant stable d'un fichier de mail, d'une lecture à l'autre. */
 export function idFichier(f: File): string {
   return `f:${f.name}:${f.size}`;

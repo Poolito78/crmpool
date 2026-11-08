@@ -18,9 +18,22 @@
  * document (`onProposerDevis`) : c'est elle qui chiffre, et le dialogue d'envoi
  * du devis qui répond par Outlook.
  *
- * Un mail du dossier est rangé dans `Traites` quand son devis est proposé (le
- * sous-dossier se vide à la main, rien n'est perdu). Un mail Microsoft 365
- * n'est jamais marqué lu sans clic.
+ * ⚠️ « Proposer un devis » NE RANGE PLUS le mail : il partait dans `Traites` à
+ * l'ouverture de l'analyse, et une analyse refermée sans devis faisait disparaître
+ * une demande encore en attente (TOP SIGNALISATION, 08/11). Il reste à l'écran,
+ * marqué « Devis proposé », jusqu'à « Ranger » ou la réponse dans Outlook. Un mail
+ * Microsoft 365 n'est jamais marqué lu sans clic.
+ *
+ * Deux listes à la demande : « Mails déjà traités » lit `Traites` au clic (jamais
+ * envoyé au modèle, le tri connu est repris) et « Supprimés » rend les mails écartés ;
+ * les filtres s'y appliquent, et chacun peut revenir à traiter.
+ *
+ * Traité = archivé dans Outlook. « Ranger » y archive le mail, et une demande de
+ * devis à réaliser porte le drapeau « aujourd'hui » : ordres déposés dans
+ * `commandes-outlook.txt`, appliqués par `DrapeauxAgentMail.bas`. Le drapeau
+ * n'attend pas seulement le tri : aussi la réponse d'Odoo, pour épargner un devis
+ * déjà réalisé. Un mail n'est marqué qu'une fois (`CLE_DRAPEAUX`) : un drapeau
+ * retiré à la main ne revient pas.
  *
  * Ne reste à l'écran que ce qui attend : la macro range les mails répondus,
  * supprimés ou classés, et une demande dont le devis existe chez Odoo passe en
@@ -41,12 +54,12 @@
  * filtres. Le client d'une liste est la fiche retrouvée par l'adresse, à défaut
  * la société que le mail annonce.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Mail, Loader2, RefreshCw, FileText, ExternalLink, Check, EyeOff, Paperclip, LogOut, Copy, Sparkles,
-  FolderOpen, Upload, Archive, ChevronRight, Smartphone, X, Plus, Minus, Search,
+  FolderOpen, Upload, Archive, ChevronRight, Smartphone, X, Plus, Minus, Search, Trash2, Undo2,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -62,8 +75,8 @@ import {
   deconnecterMicrosoft, enregistrerConfigMicrosoft, estConnecte, fichierEml, mailsNonLus, marquerLu, uriRetour,
 } from '@/lib/microsoftGraph';
 import {
-  DOSSIER_MAILS, copieEnMemoire, dernierExport, dernierPassage, dossierMails, dossierMailsDisponible, fichiersDuDossier,
-  idFichier, lancerMacroOutlook, lienOutlook, lireIndexOutlook, lireMailFichier, nomDossierMails, rangerTraite,
+  DOSSIER_MAILS, copieEnMemoire, dernierExport, dernierPassage, dossierMails, dossierMailsDisponible, dossierTraites, ecrireCommandesOutlook, fichiersDuDossier,
+  idFichier, lancerMacroOutlook, lienOutlook, lireIndexOutlook, lireMailFichier, nomDossierMails, rangerTraite, remettreATraiter,
 } from '@/lib/dossierMails';
 import {
   type MailAgent, type TriMail, CATEGORIE_MAIL, cleDeFiltre, clientDuMail, contientTousLesMots, estFichierMail, invitationTri, lireTri,
@@ -86,6 +99,8 @@ interface Props {
 
 const CLE_TRAITES = 'agent_mail_traites';
 const CLE_ECARTES = 'agent_mail_ecartes';
+/** Les mails dont le drapeau Outlook a déjà été demandé. */
+const CLE_DRAPEAUX = 'agent_mail_drapeaux';
 /** « mail|numéro » : ce devis Odoo ne répond pas à ce mail, décidé à la main. */
 const CLE_PAS_CE_DEVIS = 'agent_mail_pas_ce_devis';
 /** Les devis Odoo se relisent au plus souvent que cela. */
@@ -104,15 +119,23 @@ function noterId(cle: string, id: string): Record<string, string> {
   try { localStorage.setItem(cle, JSON.stringify(garde)); } catch { /* stockage indisponible */ }
   return garde;
 }
+function retirerId(cle: string, id: string): Record<string, string> {
+  const ids = lireIds(cle);
+  delete ids[id];
+  try { localStorage.setItem(cle, JSON.stringify(ids)); } catch { /* stockage indisponible */ }
+  return ids;
+}
 
 /* Le dernier tri survit à la fermeture de la fenêtre : la rouvrir ne doit pas
    relancer le modèle sur les mêmes mails. */
 const memoire: {
   mails: MailAgent[]; tri: Map<string, TriMail>; compte?: string;
+  /** Les mails de `Traites`, lus à la demande : ils n'entrent jamais dans `mails`. */
+  ranges: MailAgent[];
   odoo?: ReponseDevisOdoo; odooCle?: string; odooHeure?: number; rechercheHeure?: number;
   /** L'accès au dossier n'est demandé d'office qu'une fois par chargement de la page. */
   accesDemande?: boolean;
-} ={ mails: [], tri: new Map() };
+} ={ mails: [], tri: new Map(), ranges: [] };
 
 /* La recherche lancée dans Outlook : au clic, et seule à l'ouverture. */
 const ATTENTE_MACRO_MS = 60 * 1000;
@@ -159,6 +182,18 @@ const CRITERES: { cle: Critere; label: string }[] = [
   { cle: 'expediteur', label: 'Expéditeur' },
 ];
 const TOUS = '__tous';
+
+const EXPEDITEUR_INTERNE = /@(isofloor|isosign|so-signal|sti-fr)\./i;
+
+/** Un mail des listes à la demande (traités, supprimés). */
+interface LigneSecondaire {
+  m: MailAgent;
+  t?: TriMail;
+  valeurs: Record<Critere, string | undefined>;
+  cherchable: string[];
+}
+/** Au-delà, on affine la recherche : 570 cartes ne se lisent pas. */
+const LIMITE_LISTE_SECONDAIRE = 100;
 function lireGroupesReplies(): Set<string> {
   try { return new Set(JSON.parse(localStorage.getItem(CLE_GROUPES_REPLIES) || '[]')); } catch { return new Set(); }
 }
@@ -193,6 +228,12 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   const [filtreCategorie, setFiltreCategorie] = useState<string | null>(null);
   /** Le choix de chaque liste, par `cleDeFiltre` ; absent = tous. */
   const [selection, setSelection] = useState<Partial<Record<Critere, string>>>({});
+  const [voirRanges, setVoirRanges] = useState(false);
+  const [voirSupprimes, setVoirSupprimes] = useState(false);
+  const [mailsRanges, setMailsRangesEtat] = useState<MailAgent[]>(memoire.ranges);
+  const setMailsRanges = (m: MailAgent[]) => { memoire.ranges = m; setMailsRangesEtat(m); };
+  const [avancementRanges, setAvancementRanges] = useState<{ fait: number; total: number } | null>(null);
+  const cacheSecondaires = useRef(new Map<string, LigneSecondaire>());
   const [groupesReplies, setGroupesReplies] = useState(lireGroupesReplies);
   const [odoo, setOdoo] = useState<ReponseDevisOdoo | undefined>(memoire.odoo);
   const [erreurOdoo, setErreurOdoo] = useState('');
@@ -438,21 +479,10 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     setEnCours(m.id);
     try {
       let fichiers: File[];
-      if (m.source === 'outlook') {
-        fichiers = [await fichierEml(m)];
-      } else if (m.source === 'transfert') {
-        fichiers = await fichiersPourAnalyse(m as MailAgent & { transfert: DonneesTransfert });
-        await classerMailTransfere(m as MailAgent & { transfert: DonneesTransfert }, 'traite');
-        setMails(memoire.mails.filter(x => x.id !== m.id));
-      } else {
-        fichiers = [await copieEnMemoire(m.fichier!)];
-        if (m.duDossier && dossierOuvert) {
-          try {
-            await rangerTraite(dossierOuvert, m.fichier!);
-            setMails(memoire.mails.filter(x => x.id !== m.id));
-          } catch (e) { toast.error(`Mail non rangé : ${(e as Error).message}`); }
-        }
-      }
+      if (m.source === 'outlook') fichiers = [await fichierEml(m)];
+      else if (m.source === 'transfert') fichiers = await fichiersPourAnalyse(m as MailAgent & { transfert: DonneesTransfert });
+      else fichiers = [await copieEnMemoire(m.fichier!)];
+      /* Le mail reste à l'écran : à ce stade, aucun devis n'existe encore. */
       setTraites(noterId(CLE_TRAITES, m.id));
       onOpenChange(false);
       onProposerDevis(fichiers);
@@ -464,7 +494,14 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     try {
       if (m.source === 'outlook') await marquerLu(m.id);
       else if (m.source === 'transfert') await classerMailTransfere(m as MailAgent & { transfert: DonneesTransfert }, 'traite');
-      else if (m.duDossier && dossierOuvert) await rangerTraite(dossierOuvert, m.fichier!);
+      else if (m.duDossier && dossierOuvert) {
+        await rangerTraite(dossierOuvert, m.fichier!);
+        /* Le mail est rangé même si l'ordre à Outlook échoue : on le dit, sans bloquer. */
+        try {
+          await ecrireCommandesOutlook(dossierOuvert, [{ action: 'ARCHIVER', nom: m.fichier!.name }]);
+          lancerMacroOutlook();
+        } catch (e) { toast.warning(`Mail rangé, mais non archivé dans Outlook : ${(e as Error).message}`); }
+      }
       else setEcartes(noterId(CLE_ECARTES, m.id));
       setMails(memoire.mails.filter(x => x.id !== m.id));
     } catch (e) { echec(e); } finally { setEnCours(null); }
@@ -485,12 +522,59 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   };
 
   const ecarter = async (m: MailAgent) => {
-    if (m.source !== 'transfert') { setEcartes(noterId(CLE_ECARTES, m.id)); return; }
+    if (m.source !== 'transfert') {
+      setEcartes(noterId(CLE_ECARTES, m.id));
+      if (m.duDossier && dossierOuvert && lireIds(CLE_DRAPEAUX)[m.id]) {
+        retirerId(CLE_DRAPEAUX, m.id);
+        ecrireCommandesOutlook(dossierOuvert, [{ action: 'RETIRER', nom: m.fichier!.name }]).catch(echec);
+      }
+      return;
+    }
     /* Écarté en base : il disparaît aussi sur le téléphone. */
     try {
       await classerMailTransfere(m as MailAgent & { transfert: DonneesTransfert }, 'ecarte');
       setMails(memoire.mails.filter(x => x.id !== m.id));
     } catch (e) { echec(e); }
+  };
+
+  /* Les plus récents d'abord (le nom commence par la date), affichés au fil de la lecture. */
+  const chargerRanges = async () => {
+    if (!dossierOuvert) return;
+    try {
+      const sous = await dossierTraites(dossierOuvert);
+      if (!sous) { setMailsRanges([]); return; }
+      const fichiers = (await fichiersDuDossier(sous)).sort((a, b) => b.name.localeCompare(a.name));
+      const index = await lireIndexOutlook(dossierOuvert);
+      const connus = new Map(memoire.ranges.map(m => [m.id, m]));
+      const lus: MailAgent[] = [];
+      setAvancementRanges({ fait: 0, total: fichiers.length });
+      for (let i = 0; i < fichiers.length; i++) {
+        const f = fichiers[i];
+        const connu = connus.get(idFichier(f));
+        try {
+          lus.push(connu ? { ...connu, fichier: f } : { ...await lireMailFichier(f, false), entryId: index.get(f.name) });
+        } catch { /* illisible : la liste continue */ }
+        if ((i + 1) % 20 === 0) { setMailsRanges([...lus]); setAvancementRanges({ fait: i + 1, total: fichiers.length }); }
+      }
+      setMailsRanges(lus);
+    } catch (e) { echec(e); } finally { setAvancementRanges(null); }
+  };
+
+  const basculerRanges = () => {
+    const ouvrir = !voirRanges;
+    setVoirRanges(ouvrir);
+    if (ouvrir && !avancementRanges) chargerRanges();
+  };
+
+  const remettreRange = async (m: MailAgent) => {
+    if (!dossierOuvert || !m.fichier) return;
+    setEnCours(m.id);
+    try {
+      await remettreATraiter(dossierOuvert, m.fichier);
+      setMailsRanges(memoire.ranges.filter(x => x.id !== m.id));
+      await lireDossier(false, false, true);
+      toast.success('Mail remis à traiter');
+    } catch (e) { echec(e); } finally { setEnCours(null); }
   };
 
   const seConnecter = async () => {
@@ -530,7 +614,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
       .filter(m => m.duDossier || m.source !== 'fichier' || !duDossier.has(cle(m)))
       .map(m => {
         const t = tri.get(m.id);
-        const interne = /@(isofloor|isosign|so-signal|sti-fr)\./i.test(m.deEmail);
+        const interne = EXPEDITEUR_INTERNE.test(m.deEmail);
         const cl = interne ? { comment: 'inconnu' as const, candidats: [] } : clientDuMail(m.deEmail, `${m.deNom}\n${m.corps}`, clients);
         const ouverts = cl.client
           ? devis.filter(d => d.clientId === cl.client!.id && (d.statut === 'brouillon' || d.statut === 'envoyé'))
@@ -591,12 +675,26 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     };
   }), [lignesBrutes, odoo, pasCeDevis]);
 
+  /* Une demande de devis à réaliser porte le drapeau du jour dans Outlook. */
+  useEffect(() => {
+    if (!open || !dossierOuvert || !odoo || triEnCours) return;
+    const deja = lireIds(CLE_DRAPEAUX);
+    const aMarquer = lignes.filter(l => l.t?.categorie === 'demande_devis' && l.m.duDossier && l.m.fichier && l.odoo?.certitude !== 'sur' && !deja[l.m.id]);
+    if (!aMarquer.length) return;
+    aMarquer.forEach(l => noterId(CLE_DRAPEAUX, l.m.id));
+    ecrireCommandesOutlook(dossierOuvert, aMarquer.map(l => ({ action: 'DRAPEAU' as const, nom: l.m.fichier!.name })))
+      .catch(e => {
+        aMarquer.forEach(l => retirerId(CLE_DRAPEAUX, l.m.id));
+        echec(e);
+      });
+  }, [open, dossierOuvert, odoo, triEnCours, lignes, echec]);
+
   const mots = useMemo(() => motsCherches(filtre), [filtre]);
   const filtresActifs = filtreCategorie !== null || Object.keys(selection).length > 0;
   const enRecherche = mots.length > 0 || filtresActifs;
   const parMots = mots.length ? lignes.filter(l => contientTousLesMots(l.cherchable, mots)) : lignes;
-  const dansLaCategorie = (l: (typeof lignes)[number]) => !filtreCategorie || groupeDe(l.t) === filtreCategorie;
-  const passeLesListes = (l: (typeof lignes)[number], sauf?: Critere) =>
+  const dansLaCategorie = (l: { t?: TriMail }) => !filtreCategorie || groupeDe(l.t) === filtreCategorie;
+  const passeLesListes = (l: { valeurs: Record<Critere, string | undefined> }, sauf?: Critere) =>
     CRITERES.every(({ cle }) => cle === sauf || !selection[cle] || cleDeFiltre(l.valeurs[cle]) === selection[cle]);
   const retenus = parMots.filter(l => passeLesListes(l));
   const trouves = retenus.filter(dansLaCategorie);
@@ -621,6 +719,55 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   });
 
   const effacerFiltres = () => { setFiltre(''); setFiltreCategorie(null); setSelection({}); };
+
+  /* Une fois par mail : `chargerRanges` rafraîchit la liste toutes les 20 lectures. */
+  const ligneSecondaire = (m: MailAgent): LigneSecondaire => {
+    const deja = cacheSecondaires.current.get(m.id);
+    if (deja) return { ...deja, m };
+    const t = memoire.tri.get(m.id) ?? triGarde.get(m.id) ?? triSansModele(m) ?? undefined;
+    const cl = EXPEDITEUR_INTERNE.test(m.deEmail) ? undefined : clientDuMail(m.deEmail, `${m.deNom}\n${m.corps}`, clients);
+    const client = cl?.client ? cl.client.societe || cl.client.nom : t?.societe;
+    const ligne: LigneSecondaire = {
+      m, t,
+      valeurs: { client, chantier: t?.chantier, expediteur: m.deNom || m.deEmail },
+      cherchable: texteCherchable([
+        m.sujet, m.deNom, m.deEmail, m.corps, ...m.piecesJointes, client,
+        t && CATEGORIE_MAIL[t.categorie].label, t?.resume, t?.societe, t?.chantier, t?.delai, ...(t?.demandes ?? []),
+      ]),
+    };
+    cacheSecondaires.current.set(m.id, ligne);
+    return ligne;
+  };
+  const filtrerSecondaires = (liste: MailAgent[]) => liste.map(ligneSecondaire)
+    .filter(l => contientTousLesMots(l.cherchable, mots) && dansLaCategorie(l) && passeLesListes(l));
+
+  const rangesVus = voirRanges ? filtrerSecondaires(mailsRanges) : [];
+  const supprimesVus = filtrerSecondaires(mails.filter(m => ecartes[m.id]))
+    .sort((a, b) => (ecartes[b.m.id] ?? '').localeCompare(ecartes[a.m.id] ?? ''));
+
+  const boutonOuvrir = (m: MailAgent) => {
+    if (m.lienWeb) return <Button asChild size="sm" variant="ghost" className="h-6 text-xs"><a href={m.lienWeb} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3 h-3 mr-1" />Ouvrir dans Outlook</a></Button>;
+    if (m.entryId) return <Button asChild size="sm" variant="ghost" className="h-6 text-xs"><a href={lienOutlook(m.entryId)}><ExternalLink className="w-3 h-3 mr-1" />Ouvrir dans Outlook</a></Button>;
+    if (m.fichier) return <Button size="sm" variant="ghost" className="h-6 text-xs" onClick={() => ouvrirCopie(m)}><ExternalLink className="w-3 h-3 mr-1" />Ouvrir le .msg</Button>;
+    return null;
+  };
+
+  const carteSecondaire = ({ m, t, valeurs }: LigneSecondaire, action: ReactNode) => {
+    const cat = t ? CATEGORIE_MAIL[t.categorie] : null;
+    return (
+      <div key={m.id} className="space-y-1 p-3 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {cat && <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold', cat.couleur)}>{cat.label}</span>}
+          <span className="min-w-0 max-w-full truncate text-sm font-medium">{m.sujet}</span>
+        </div>
+        <p className="text-muted-foreground">
+          {[m.deNom || m.deEmail || 'expéditeur inconnu', dateCourte(m.recuLe), valeurs.client, valeurs.chantier && `Chantier : ${valeurs.chantier}`].filter(Boolean).join(' · ')}
+        </p>
+        {t?.resume && <p>{t.resume}</p>}
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">{action}{boutonOuvrir(m)}</div>
+      </div>
+    );
+  };
 
   const realises = trouves.filter(l => l.odoo?.certitude === 'sur');
   const aFaire = trouves.filter(l => l.odoo?.certitude !== 'sur');
@@ -904,8 +1051,8 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
           {!lecture && visibles.length === 0 && (
             <p className="py-6 text-center text-sm text-muted-foreground">
               {enRecherche
-                ? realises.length
-                  ? 'Rien à traiter ici : voir « Déjà réalisés » ci-dessous.'
+                ? realises.length || rangesVus.length || (voirSupprimes && supprimesVus.length)
+                  ? 'Rien à traiter ici : voir plus bas.'
                   : mots.length
                     ? `Aucun mail ne contient « ${filtre.trim()} »${filtresActifs ? ' avec ces filtres' : ''}.`
                     : 'Aucun mail pour ces filtres.'
@@ -1100,6 +1247,51 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
               )}
             </div>
           )}
+          {dossierOuvert && (
+            <div className="rounded-lg border border-border">
+              <button type="button" aria-expanded={voirRanges} className="flex w-full items-center gap-1.5 p-3 text-left text-sm font-medium" onClick={basculerRanges}>
+                <ChevronRight className={cn('w-4 h-4 transition-transform', voirRanges && 'rotate-90')} />
+                <Archive className="w-4 h-4 text-muted-foreground" />Mails déjà traités (archivés){voirRanges && !avancementRanges ? ` (${rangesVus.length})` : ''}
+                {avancementRanges && (
+                  <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />Lecture {avancementRanges.fait}/{avancementRanges.total}
+                  </span>
+                )}
+              </button>
+              {voirRanges && rangesVus.length > 0 && (
+                <div className="divide-y divide-border border-t border-border">
+                  {rangesVus.slice(0, LIMITE_LISTE_SECONDAIRE).map(l => carteSecondaire(l, (
+                    <Button size="sm" variant="outline" className="h-6 text-xs" disabled={enCours === l.m.id} onClick={() => remettreRange(l.m)}
+                      title="Le mail revient dans la liste à traiter. La macro le rangera de nouveau s'il a reçu une réponse ou n'est plus dans la boîte.">
+                      <Undo2 className="w-3 h-3 mr-1" />Remettre à traiter
+                    </Button>
+                  )))}
+                  {rangesVus.length > LIMITE_LISTE_SECONDAIRE && (
+                    <p className="p-3 text-xs text-muted-foreground">Les {LIMITE_LISTE_SECONDAIRE} plus récents sur {rangesVus.length} : affinez la recherche pour voir les autres.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {supprimesVus.length > 0 && (
+            <div className="rounded-lg border border-border">
+              <button type="button" aria-expanded={voirSupprimes} className="flex w-full items-center gap-1.5 p-3 text-left text-sm font-medium" onClick={() => setVoirSupprimes(v => !v)}>
+                <ChevronRight className={cn('w-4 h-4 transition-transform', voirSupprimes && 'rotate-90')} />
+                <Trash2 className="w-4 h-4 text-muted-foreground" />Supprimés ({supprimesVus.length})
+              </button>
+              {voirSupprimes && (
+                <div className="divide-y divide-border border-t border-border">
+                  {supprimesVus.slice(0, LIMITE_LISTE_SECONDAIRE).map(l => carteSecondaire(l, (
+                    <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => setEcartes(retirerId(CLE_ECARTES, l.m.id))}>
+                      <Undo2 className="w-3 h-3 mr-1" />Rétablir
+                    </Button>
+                  )))}
+                </div>
+              )}
+            </div>
+          )}
+
           {erreurOdoo && (
             <p className="text-xs text-muted-foreground">Rapprochement avec les devis Odoo indisponible : {erreurOdoo}</p>
           )}

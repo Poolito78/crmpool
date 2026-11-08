@@ -6,7 +6,7 @@
 '  REMPLACE tout le code precedent de l'Agent mail dans ThisOutlookSession.
 '  Si ThisOutlookSession a un autre Application_Startup, y ajouter ses lignes
 '  au lieu d'en coller un second.
-'  Exige le module ExporterMailsNonLus.
+'  Exige les modules ExporterMailsNonLus et DrapeauxAgentMail (a installer avant).
 '
 '  - Au demarrage d'Outlook : rattrapage silencieux (memes regles que le
 '    bouton) : exporte ce qui est arrive, range ce qui est deja traite.
@@ -32,6 +32,7 @@ Private Sub Application_Startup()
     Set mailsEnvoyes = Application.GetNamespace("MAPI").GetDefaultFolder(olFolderSentMail).Items
     On Error Resume Next
     ExporterMailsAgent True
+    AppliquerDrapeaux
 End Sub
 
 ' Le lien moncrm-agent: lance une recherche portant ce tag : sa fin est le signal.
@@ -47,6 +48,7 @@ Public Sub LancerAgentMail()
     Dim f As Integer
     On Error Resume Next
     ExporterMailsAgent True
+    AppliquerDrapeaux
     f = FreeFile
     Open Environ("USERPROFILE") & "\OneDrive - ISOSIGN\Documents\MonCRM\Mails a traiter\dernier-passage.txt" For Output As #f
     Print #f, Format(Now, "yyyy-mm-dd hh:nn:ss")
@@ -58,6 +60,7 @@ Private Sub mailsRecus_ItemAdd(ByVal Item As Object)
     On Error Resume Next
     If Item.Class = olMail Then ExporterUnMail Item
     RepasserSiBesoin
+    AppliquerDrapeauxSiBesoin
 End Sub
 
 Private Sub mailsRecus_ItemChange(ByVal Item As Object)
@@ -68,9 +71,11 @@ End Sub
 Private Sub mailsRecus_ItemRemove()
     On Error Resume Next
     RepasserSiBesoin
+    AppliquerDrapeauxSiBesoin
 End Sub
 
 Private Sub mailsEnvoyes_ItemAdd(ByVal Item As Object)
     On Error Resume Next
     RepasserSiBesoin
+    AppliquerDrapeauxSiBesoin
 End Sub

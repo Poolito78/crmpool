@@ -20,6 +20,10 @@ const gemini = vi.hoisted(() => vi.fn());
 const ouvrirDossier = vi.hoisted(() => vi.fn(async () => null as FileSystemDirectoryHandle | null));
 const lancerMacro = vi.hoisted(() => vi.fn());
 const passage = vi.hoisted(() => vi.fn(async () => null as number | null));
+const lireFichiersDossier = vi.hoisted(() => vi.fn(async (_d: FileSystemDirectoryHandle) => [] as File[]));
+const ranger = vi.hoisted(() => vi.fn(async () => undefined));
+const remettre = vi.hoisted(() => vi.fn(async () => undefined));
+const commander = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock('@/lib/StoreContext', () => ({ useCRM: () => ({ clients: [], devis: [] }) }));
 vi.mock('@/lib/modelesIA', () => ({ appelerGemini: gemini, texteGemini: () => '' }));
@@ -38,16 +42,20 @@ vi.mock('@/lib/dossierMails', async importOriginal => ({
   dossierMails: ouvrirDossier,
   lancerMacroOutlook: lancerMacro,
   dernierPassage: passage,
-  fichiersDuDossier: async () => [],
+  fichiersDuDossier: lireFichiersDossier,
+  rangerTraite: ranger,
+  remettreATraiter: remettre,
+  ecrireCommandesOutlook: commander,
+  dossierTraites: async () => ({ name: 'Traites' }),
   lireIndexOutlook: async () => new Map(),
   dernierExport: async () => null,
   nomDossierMails: async () => null,
   copieEnMemoire: async (f: File) => f,
-  lireMailFichier: async (f: File): Promise<MailAgent> => {
+  lireMailFichier: async (f: File, duDossier = false): Promise<MailAgent> => {
     const m = MAILS.find(x => `${x.id}.msg` === f.name)!;
     return {
       id: m.id, sujet: m.sujet, deNom: 'Client', deEmail: 'client@societe.fr',
-      recuLe: `${m.jour}T10:00:00.000Z`, corps: '', piecesJointes: [], source: 'fichier', fichier: f,
+      recuLe: `${m.jour}T10:00:00.000Z`, corps: '', piecesJointes: [], source: 'fichier', fichier: f, duDossier,
     };
   },
 }));
@@ -67,6 +75,11 @@ beforeEach(() => {
   ouvrirDossier.mockReset().mockResolvedValue(null);
   passage.mockReset().mockResolvedValue(null);
   lancerMacro.mockReset();
+  lireFichiersDossier.mockReset().mockResolvedValue([]);
+  ranger.mockClear();
+  remettre.mockClear();
+  commander.mockClear();
+  localStorage.removeItem('agent_mail_drapeaux');
 });
 afterEach(() => vi.useRealTimers());
 
@@ -240,5 +253,59 @@ describe('AgentMailDialog — repli par catégorie', () => {
     localStorage.setItem('agent_mail_groupes_replies', 'pas du json');
     await chargerLesMails();
     expect(boutonsReplier()).toHaveLength(3);
+  });
+});
+
+describe('AgentMailDialog — mails traités et supprimés', () => {
+  it('un mail écarté passe dans Supprimés et se rétablit', async () => {
+    await chargerLesMails();
+    const carte = screen.getByText('Commande seule').closest('div.rounded-lg') as HTMLElement;
+    fireEvent.click(within(carte).getByRole('button', { name: /Écarter/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Supprimés \(1\)/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Rétablir/ }));
+    expect(screen.queryByRole('button', { name: /Supprimés/ })).toBeNull();
+    expect(screen.getByText('Commande seule')).toBeTruthy();
+  });
+
+  it('« Proposer un devis » garde le mail à l\'écran et ne le range pas', async () => {
+    ouvrirDossier.mockResolvedValue(DOSSIER);
+    lireFichiersDossier.mockResolvedValue([new File(['x'], 'd1.msg')]);
+    const proposer = vi.fn();
+    render(<MemoryRouter><Dialogue open onOpenChange={() => {}} onProposerDevis={proposer} /></MemoryRouter>);
+    const titre = await screen.findByText('Demande récente');
+    await screen.findByRole('button', { name: /Mails déjà traités/ });
+    fireEvent.click(within(titre.closest('div.rounded-lg') as HTMLElement).getByRole('button', { name: /Proposer un devis/ }));
+    await waitFor(() => expect(proposer).toHaveBeenCalledOnce());
+    expect(ranger).not.toHaveBeenCalled();
+    expect(screen.getByText('Demande récente')).toBeTruthy();
+  });
+
+  it('les traités ne se lisent qu\'au clic, sans appeler le modèle, et peuvent revenir', async () => {
+    ouvrirDossier.mockResolvedValue(DOSSIER);
+    lireFichiersDossier.mockImplementation(async d => (d.name === 'Traites' ? [new File(['x'], 'c1.msg')] : []));
+    gemini.mockClear();
+    monter();
+    const bouton = await screen.findByRole('button', { name: /Mails déjà traités/ });
+    expect(lireFichiersDossier).not.toHaveBeenCalledWith({ name: 'Traites' });
+
+    fireEvent.click(bouton);
+    const section = bouton.closest('div.rounded-lg') as HTMLElement;
+    expect(await within(section).findByText('Commande seule')).toBeTruthy();
+    expect(gemini).not.toHaveBeenCalled();
+
+    fireEvent.click(within(section).getByRole('button', { name: /Remettre à traiter/ }));
+    await waitFor(() => expect(remettre).toHaveBeenCalledOnce());
+  });
+
+  it('« Ranger » archive dans Outlook', async () => {
+    ouvrirDossier.mockResolvedValue(DOSSIER);
+    lireFichiersDossier.mockResolvedValue([new File(['x'], 'd2.msg')]);
+    monter();
+    const titre = await screen.findByText('Demande moyenne');
+    await screen.findByRole('button', { name: /Mails déjà traités/ });
+    fireEvent.click(within(titre.closest('div.rounded-lg') as HTMLElement).getByRole('button', { name: /Ranger/ }));
+    await waitFor(() => expect(ranger).toHaveBeenCalledOnce());
+    await waitFor(() => expect(commander).toHaveBeenCalledWith(DOSSIER, [{ action: 'ARCHIVER', nom: 'd2.msg' }]));
+    expect(lancerMacro).toHaveBeenCalled();
   });
 });
