@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { LIBELLE_TYPE_FICHE, TYPES_FICHE, mentionTexte, type TypeFiche } from '@/lib/liensProduit';
 
 /**
- * Mention d'une fiche (« Fiche technique fournisseur », « Fiche système »…) :
+ * Mention d'une fiche (« Fiche technique », « Fiche système »…) :
  * un champ LIBRE, avec les mentions habituelles en suggestion. On peut donc
  * écrire la sienne — « Fiche de pose », « Fiche de données de sécurité »…
  *
@@ -38,6 +38,9 @@ export default function MentionFiche({ value, onCommit, live, className }: Props
   }, [value]);
 
   const valider = (t: string) => {
+    /* Même texte = rien à écrire : une fiche encore en `fournisseur` s'affiche
+       « Fiche technique », la traverser ne doit pas la réenregistrer. */
+    if (t.trim() === mentionTexte(value)) return;
     const cle = cleDe(t);
     if (cle !== value) onCommit(cle);
   };

@@ -52,7 +52,8 @@ describe('liens proposés', () => {
     expect(fiche.label).toBe('Fiche Flowfresh MF');
   });
 
-  it('fait précéder le libellé de la mention fournisseur / ISOFLOOR', () => {
+  /* Règle du 08/11/2026 : les anciennes mentions se lisent « Fiche technique ». */
+  it('lit les anciennes mentions fournisseur / ISOFLOOR en « Fiche technique »', () => {
     const liens = liensDuProduit(
       produit({
         id: 'p1', ficheUrl: 'https://ex/fournisseur.pdf', ficheLinkLabel: 'FP_Flowfast_107.pdf', ficheType: 'fournisseur',
@@ -60,8 +61,8 @@ describe('liens proposés', () => {
       }),
       { origine: ORIGINE },
     ).filter(l => l.cible === 'fiche');
-    expect(liens[0].label).toBe('Fiche technique fournisseur — FP_Flowfast_107.pdf');
-    expect(liens[1].label).toBe('Fiche technique ISOFLOOR — Article de démonstration');
+    expect(liens[0].label).toBe('Fiche technique — FP_Flowfast_107.pdf');
+    expect(liens[1].label).toBe('Fiche technique 2 — Article de démonstration');
   });
 
   it('construit un libellé porteur de la désignation à défaut', () => {
@@ -321,7 +322,7 @@ describe('intitulés posés d’office (04/11/2026)', () => {
       produit({ id: 'p1', ficheUrl: 'https://ex/f.pdf', ficheLinkLabel: LIBELLE_FICHE_TECHNIQUE, ficheType: 'fournisseur' }),
       { origine: ORIGINE },
     );
-    expect(fiche.label).toBe('Fiche technique fournisseur — Article de démonstration');
+    expect(fiche.label).toBe('Fiche technique — Article de démonstration');
   });
 
   it('nomme l’article et numérote la deuxième « Fiche technique »', () => {

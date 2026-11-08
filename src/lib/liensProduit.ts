@@ -32,20 +32,25 @@
 export type CibleLien = 'fiche' | 'image' | 'page' | 'categorie' | 'systeme';
 
 /**
- * D'où vient une fiche technique : du FOURNISSEUR (sa fiche d'origine) ou
- * d'ISOFLOOR (notre version, à notre nom). Facultatif : une fiche sans type
- * garde son libellé tel quel.
+ * La mention d'une fiche. Facultative : une fiche sans type garde son libellé
+ * tel quel.
+ *
+ * Règle du 08/11/2026 : plus de « fournisseur » ni d'« ISOFLOOR » dans la
+ * mention, une seule « Fiche technique ». Les clés `fournisseur` et `isofloor`
+ * restent lisibles parce que des fiches en base les portent encore ; elles ne
+ * sont plus proposées.
  */
 export type TypeFiche = string;
 
 export const LIBELLE_TYPE_FICHE: Record<string, string> = {
-  fournisseur: 'Fiche technique fournisseur',
-  isofloor: 'Fiche technique ISOFLOOR',
+  technique: 'Fiche technique',
+  fournisseur: 'Fiche technique',
+  isofloor: 'Fiche technique',
   systeme: 'Fiche système',
   focus: 'Focus Gamme',
 };
 
-export const TYPES_FICHE: string[] = ['fournisseur', 'isofloor', 'systeme', 'focus'];
+export const TYPES_FICHE: string[] = ['technique', 'systeme', 'focus'];
 
 /** Le texte d'une mention : le libellé d'une mention habituelle (par sa clé), sinon le texte libre tel quel. */
 export const mentionTexte = (t?: TypeFiche): string => (t ? (LIBELLE_TYPE_FICHE[t] ?? t) : '');
@@ -161,7 +166,7 @@ export function urlFichePublique(produitId: string, origine?: string): string {
  */
 /**
  * Texte du lien d'une fiche. Le libellé saisi gagne ; la mention du type
- * (fournisseur / ISOFLOOR) le précède quand elle existe, ou le remplace.
+ * le précède quand elle existe, ou le remplace.
  */
 /** L'inverse : le texte saisi, débarrassé de la mention qu'on lui a vu précéder. */
 export function sansMention(label: string, type?: TypeFiche): string {
@@ -186,7 +191,7 @@ const pourComparer = (s: string): string =>
 /**
  * Mention et libellé qui se recouvrent ne se doublent pas : « Fiche système »
  * devant « Fiche Système - Flowshield BC Uni » garde le libellé seul, et
- * « Fiche technique fournisseur » devant « Fiche technique » garde la mention.
+ * « Focus Gamme » devant « Focus » garde la mention.
  */
 function joindre(mention: string, label: string): string {
   if (!mention) return label;
@@ -209,7 +214,12 @@ function libelleFiche(f: { label: string; type?: TypeFiche }, rang: number, nom:
      vaut l'absence de libellé — la désignation de l'article le suit. */
   if (pourComparer(saisi) === pourComparer(LIBELLE_FICHE_TECHNIQUE)) saisi = '';
   if (saisi) return joindre(mention, saisi);
-  return `${mention || `${LIBELLE_CIBLE.fiche}${rang > 0 ? ` ${rang + 1}` : ''}`} — ${nom}`;
+  /* La mention « Fiche technique » vaut l'absence de mention : deux fiches
+     (ex-fournisseur et ex-ISOFLOOR) se distinguent alors par leur numéro. */
+  const titre = mention && mention !== LIBELLE_CIBLE.fiche
+    ? mention
+    : `${LIBELLE_CIBLE.fiche}${rang > 0 ? ` ${rang + 1}` : ''}`;
+  return `${titre} — ${nom}`;
 }
 
 export function liensDuProduit(

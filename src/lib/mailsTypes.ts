@@ -81,7 +81,7 @@ Restant à ta disposition pour tout complément d'information.`,
       validite: { libelle: 'Valable jusqu\'au', exemple: '12/11/2026' },
       /* Pas une valeur : un emplacement. Les liens cochés à l'envoi s'y placent
          (avant la signature, par exemple) ; sans lui, ils suivent le texte. */
-      fiches: { libelle: 'Fiches produit (liens cochés)', exemple: 'Fiches produit :\n• Fiche technique ISOFLOOR — FP_BAO_Mortar_ISOFLOOR.pdf' },
+      fiches: { libelle: 'Fiches produit (liens cochés)', exemple: 'Fiches produit :\n• Fiche technique — FP_BAO_Mortar_ISOFLOOR.pdf' },
     },
   },
   commande_fournisseur: {
