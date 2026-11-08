@@ -449,6 +449,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      règle s'applique : 2,10 m, ou la hauteur du panneau en pose basse. */
   const [hauteurSousPanneau, setHauteurSousPanneau] = useState<Record<string, number>>({});
   const analyseTexteRef = useRef<string>(''); // texte utilisé lors de la dernière analyse
+  /** Le mail AVEC sa signature, retirée de `analyseTexteRef` : c'est là que le signataire se nomme. */
+  const texteMailCompletRef = useRef<string>('');
   /* Signatures de l'émetteur du dernier document (SIREN, domaine) et ce que
      la mémoire en sait : c'est sous elles qu'une correction s'apprend. */
   const signaturesRef = useRef<string[]>([]);
@@ -1976,6 +1978,7 @@ const [contratOdoo, setContratOdoo] = useState<
        ⚠️ Signature retirée de CHAQUE message du fil (`coupeSignatures`) : couper
        au premier « Cordialement » jetait les échanges précédents — souvent ceux
        où le client liste les produits (mail transféré, réponse « voir ci-dessous »). */
+    if (emailTexte) texteMailCompletRef.current = emailTexte;
     if (emailTexte) emailTexte = coupeSignatures(emailTexte);
 
     /* Un dépôt s'AJOUTE à ce qui est déjà dans la zone (PDF et texte), il ne
@@ -2028,6 +2031,7 @@ const [contratOdoo, setContratOdoo] = useState<
   const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); }, []);
 
   function reset() {
+    texteMailCompletRef.current = '';
     setGrilleTransport(null);
     setPortEcrit(null); setPortModifs({}); setPortIntegre(false);
     setTexte(''); setFichier(null); setFichiersOrigine([]); setEmlPdfs([]); setResult(null); setMatchedCF(null); setDragging(false);
@@ -4731,7 +4735,8 @@ const [contratOdoo, setContratOdoo] = useState<
           .filter((e): e is string => !!e && !adresseGenerique(e))
           .map(e => e.toLowerCase());
         const parMail = cts.find(c => c.email && adresses.includes(c.email.toLowerCase()));
-        const contactPreselectionne = parNom || parMail || contactNommeDansTexte(cts, analyseTexteRef.current || '');
+        const contactPreselectionne = parNom || parMail
+          || contactNommeDansTexte(cts, texteMailCompletRef.current || analyseTexteRef.current || '');
         /* Ne jamais écraser un choix déjà fait. Cet effet se rejoue dès qu'une
            référence du devis change — donc au moindre article rectifié — et il
            remettait alors la présélection, effaçant le contact désigné à la

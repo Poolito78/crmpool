@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { coupeSignatures } from './chiffrage';
 import { contactDuSignataire, contactNommeDansTexte } from './contactAffaire';
 
 const CEDRIC = { nom: 'M. Cédric BAEHREL' };
@@ -14,6 +15,12 @@ describe('le contact de l’affaire', () => {
 
   it('retrouve le signataire écrit en texte, malgré la civilité et les accents', () => {
     const mail = 'peux tu me faire un devis stp\n\nCordialement\n\nCedric BAEHREL\nConducteur de travaux';
+    expect(contactNommeDansTexte(CONTACTS, mail)).toBe(CEDRIC);
+  });
+
+  it('le nom est dans la signature, que l’analyse retire : il faut lire le mail complet', () => {
+    const mail = 'Salut François,\n\npeux tu me faire un devis stp\n\nCordialement\n\nCédric BAEHREL\nConducteur de travaux';
+    expect(contactNommeDansTexte(CONTACTS, coupeSignatures(mail))).toBeUndefined();
     expect(contactNommeDansTexte(CONTACTS, mail)).toBe(CEDRIC);
   });
 
