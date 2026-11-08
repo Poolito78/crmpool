@@ -44,6 +44,39 @@ export function nomComplet(c: Pick<Contact, 'nom' | 'prenom'>): string {
   return [c.prenom, c.nom].filter(Boolean).join(' ').trim();
 }
 
+const motsDuNom = (v: string): string[] =>
+  v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z]+/).filter(Boolean);
+
+const CIVILITES = new Set(['m', 'mr', 'mme', 'mlle', 'monsieur', 'madame']);
+
+/**
+ * Le contact dont le nom est celui de qui écrit, dans l'ordre donné : l'image de
+ * signature d'abord, la ligne « De : » ensuite. La première seule ne suffit pas :
+ * une signature en TEXTE (Cédric BAEHREL, Top Signalisation) n'est pas lue, et
+ * son adresse `travaux@` est une boîte partagée qui ne désigne personne.
+ */
+export function contactDuSignataire<T extends { nom: string }>(contacts: T[], noms: (string | undefined)[]): T | undefined {
+  for (const nom of noms) {
+    const trouve = nom ? contacts.find(c => memePersonne(c.nom, nom)) : undefined;
+    if (trouve) return trouve;
+  }
+  return undefined;
+}
+
+/**
+ * Le seul contact dont le prénom ET le nom sont écrits dans le mail. Dernier
+ * recours : un mail peut citer quelqu'un sans être de lui, d'où l'exigence d'un
+ * nom entier et d'une réponse unique.
+ */
+export function contactNommeDansTexte<T extends { nom: string }>(contacts: T[], texte: string): T | undefined {
+  const motsTexte = new Set(motsDuNom(texte));
+  const nommes = contacts.filter(c => {
+    const mots = motsDuNom(c.nom).filter(m => !CIVILITES.has(m));
+    return mots.length >= 2 && mots.every(m => motsTexte.has(m));
+  });
+  return nommes.length === 1 ? nommes[0] : undefined;
+}
+
 /**
  * Rattache un interlocuteur aux contacts d'un client, sans doublon.
  *

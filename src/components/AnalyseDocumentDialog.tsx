@@ -40,7 +40,7 @@ type GrilleLue =
   | { mode: 'affretement'; grille: GrilleAffretement };
 import { parseEml, type EmlContent } from '@/lib/parseEml';
 import {
-  coupeSignatures, extraireIndices, societeDepuisEmail, adresseGenerique, memePersonne,
+  coupeSignatures, extraireIndices, societeDepuisEmail, adresseGenerique,
   adresseInterne,
 } from '@/lib/chiffrage';
 import ProduitCombobox from '@/components/ProduitCombobox';
@@ -79,6 +79,7 @@ import {
 import { ressembleASysteme } from '@/lib/fichesSysteme';
 import { ralsNommes, teinteDemandee } from '@/lib/referenceTeinte';
 import { joindreFichesRecap } from '@/lib/recapSysteme';
+import { contactDuSignataire, contactNommeDansTexte } from '@/lib/contactAffaire';
 import SystemeIntrouvable from '@/components/SystemeIntrouvable';
 import { fusionnerSystemes, noteDeComposant, systemesDeDevis } from '@/lib/systemesDevis';
 import {
@@ -4725,18 +4726,19 @@ const [contratOdoo, setContratOdoo] = useState<
            d'abord par l'adresse ramenait la personne qui tient cette boîte,
            l'assistante, et non le signataire. Les adresses génériques sont donc
            écartées de l'identification : elles désignent l'entreprise. */
-        const parNom = cts.find(c => memePersonne(c.nom, sigOdoo?.nom));
+        const parNom = contactDuSignataire(cts, [sigOdoo?.nom, indices.expediteur]);
         const adresses = [sigOdoo?.email, ...indices.emails]
           .filter((e): e is string => !!e && !adresseGenerique(e))
           .map(e => e.toLowerCase());
         const parMail = cts.find(c => c.email && adresses.includes(c.email.toLowerCase()));
+        const contactPreselectionne = parNom || parMail || contactNommeDansTexte(cts, analyseTexteRef.current || '');
         /* Ne jamais écraser un choix déjà fait. Cet effet se rejoue dès qu'une
            référence du devis change — donc au moindre article rectifié — et il
            remettait alors la présélection, effaçant le contact désigné à la
            main. C'est ce qui faisait « revenir en arrière ». */
         setContactRetenu(prev => {
           if (prev && cts.some(c => String(c.id) === prev)) return prev;
-          return String((parNom || parMail)?.id ?? '');
+          return String(contactPreselectionne?.id ?? '');
         });
         /* Client absent de MonCRM mais connu d'Odoo : on propose de l'importer.
          *
@@ -4769,7 +4771,7 @@ const [contratOdoo, setContratOdoo] = useState<
          * (`clientsParPersonne`, adresse personnelle ou prénom + nom), et on ne
          * retient qu'une réponse UNIQUE, sans jamais remplacer un client déjà
          * choisi. */
-        const ctPre = parNom || parMail;
+        const ctPre = contactPreselectionne;
         const connusParOdoo = cli ? [] : clientsParPersonne(
           [ctPre?.nom, data?.coordonnees?.nom].filter(Boolean).join('\n'),
           [ctPre?.email, data?.coordonnees?.email].filter((e): e is string => !!e),
