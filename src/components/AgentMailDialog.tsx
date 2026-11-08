@@ -99,17 +99,13 @@ function noterId(cle: string, id: string): Record<string, string> {
 const memoire: {
   mails: MailAgent[]; tri: Map<string, TriMail>; compte?: string;
   odoo?: ReponseDevisOdoo; odooCle?: string; odooHeure?: number; rechercheHeure?: number;
-} = { mails: [], tri: new Map() };
+  /** L'accès au dossier n'est demandé d'office qu'une fois par chargement de la page. */
+  accesDemande?: boolean;
+} ={ mails: [], tri: new Map() };
 
-/* La recherche lancée dans Outlook. Elle ne part seule à l'ouverture qu'une
-   fois prouvé qu'elle marche sur ce poste : sinon, chaque ouverture suivrait un
-   lien mort. */
-const CLE_MACRO_OK = 'agent_mail_macro_ok';
+/* La recherche lancée dans Outlook : au clic, et seule à l'ouverture. */
 const ATTENTE_MACRO_MS = 60 * 1000;
 const RECHERCHE_AUTO_MS = 5 * 60 * 1000;
-function macroConfirmee(): boolean {
-  try { return localStorage.getItem(CLE_MACRO_OK) === '1'; } catch { return false; }
-}
 
 /* …ni au rechargement de la page : la macro exporte aussi les mails lus sans
    réponse, ceux qui ne sont pas des demandes restent au dossier, et chaque
@@ -292,34 +288,43 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     } finally { setLecture(false); }
   }, [echec, integrer, lireFichiers]);
 
-  /** Fait chercher les mails par Outlook, attend son accusé de réception, relit le dossier. */
-  const rechercher = useCallback(async (auClic: boolean) => {
+  /** `demanderAcces` : au clic ou à la première ouverture, le dossier peut être choisi ou autorisé. Fait chercher les mails par Outlook, attend son accusé de réception, relit le dossier. */
+  const rechercher = useCallback(async (demanderAcces: boolean) => {
     if (rechercheEnVol.current) return;
-    if (!auClic && !(await dossierMails(false))) return;
     rechercheEnVol.current = true;
-    const depuis = Date.now();
-    memoire.rechercheHeure = depuis;
-    /* D'abord le lien : c'est lui qui a besoin du geste de l'utilisateur. */
-    lancerMacroOutlook();
-    setRecherche(true);
     try {
-      if (auClic) await lireDossier(true);
-      const d = await dossierMails(false);
+      if (demanderAcces) setErreur('');
+      /* ⚠️ L'accès au dossier AVANT le lien : suivre un lien externe consomme le
+         geste de l'utilisateur, et Chrome refuse alors d'ouvrir le sélecteur. */
+      let d: FileSystemDirectoryHandle | null;
+      try {
+        d = await dossierMails(demanderAcces);
+      } catch (e) {
+        const nom = (e as Error)?.name;
+        if (nom === 'AbortError') setErreur('Aucun dossier choisi : la fenêtre Windows a été fermée sans désigner « Mails a traiter ».');
+        /* Ouverture sans clic (lien de la macro) : l'écran invite au bouton. */
+        else if (nom !== 'SecurityError') echec(e);
+        return;
+      }
       if (!d) return;
+      const depuis = Date.now();
+      memoire.rechercheHeure = depuis;
+      lancerMacroOutlook();
+      setRecherche(true);
+      await lireDossier(false);
       while (Date.now() - depuis < ATTENTE_MACRO_MS) {
         await new Promise(r => setTimeout(r, 2000));
         if (((await dernierPassage(d)) ?? 0) >= depuis) {
-          try { localStorage.setItem(CLE_MACRO_OK, '1'); } catch { /* stockage indisponible */ }
           await lireDossier(false, false, true);
           return;
         }
       }
-      if (auClic) setErreur('Outlook n\'a pas répondu à la recherche. Vérifiez qu\'il est ouvert, et que ThisOutlookSession.vba et lien-outlook.reg (dossier outlook_macro) sont installés sur ce poste.');
+      if (demanderAcces) setErreur('Outlook n\'a pas répondu à la recherche. Vérifiez qu\'il est ouvert, et que ThisOutlookSession.vba et lien-outlook.reg (dossier outlook_macro) sont installés sur ce poste.');
     } finally {
       rechercheEnVol.current = false;
       setRecherche(false);
     }
-  }, [lireDossier]);
+  }, [echec, lireDossier]);
 
   const lireOutlook = useCallback(async () => {
     setErreur('');
@@ -355,8 +360,10 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     if (!open) return;
     lireTransferts();
     nomDossierMails().then(setNomDossier);
-    lireDossier(false);
-    if (dossierMailsDisponible() && macroConfirmee() && Date.now() - (memoire.rechercheHeure ?? 0) > RECHERCHE_AUTO_MS) rechercher(false);
+    const premiere = !memoire.accesDemande;
+    memoire.accesDemande = true;
+    if (dossierMailsDisponible() && (premiere || Date.now() - (memoire.rechercheHeure ?? 0) > RECHERCHE_AUTO_MS)) rechercher(premiere);
+    else lireDossier(false);
     if (configMicrosoft() && estConnecte()) lireOutlook();
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -752,7 +759,11 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
         <div className="space-y-3">
           {!lecture && visibles.length === 0 && (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              {lignes.length ? 'Aucune demande parmi ces mails.' : 'Aucun mail à traiter.'}
+              {lignes.length
+                ? 'Aucune demande parmi ces mails.'
+                : dossierMailsDisponible() && !dossierOuvert
+                  ? 'Les mails d\'Outlook ne sont pas encore accessibles dans cette fenêtre : cliquez sur le bouton bleu ci-dessus.'
+                  : 'Aucun mail à traiter.'}
             </p>
           )}
 

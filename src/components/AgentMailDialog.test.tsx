@@ -64,7 +64,6 @@ beforeAll(async () => {
 
 beforeEach(() => {
   localStorage.removeItem('agent_mail_groupes_replies');
-  localStorage.removeItem('agent_mail_macro_ok');
   ouvrirDossier.mockReset().mockResolvedValue(null);
   passage.mockReset().mockResolvedValue(null);
   lancerMacro.mockReset();
@@ -88,27 +87,40 @@ async function chargerLesMails() {
 const boutonsReplier = () => screen.getAllByRole('button', { name: 'Replier ce groupe' });
 
 describe('AgentMailDialog — recherche lancée dans Outlook', () => {
-  it('à l\'ouverture, rien ne part tant que la macro n\'a pas prouvé qu\'elle marche', async () => {
+  /* Ces trois tests se suivent : l'état de la première ouverture vit dans le module. */
+  it('ouverture sans clic : le refus de Chrome ne s\'affiche pas, l\'écran invite au bouton', async () => {
+    ouvrirDossier.mockRejectedValue(new DOMException('geste requis', 'SecurityError'));
+    monter();
+    expect(await screen.findByText(/pas encore accessibles dans cette fenêtre/)).toBeTruthy();
+    expect(screen.queryByText(/geste requis/)).toBeNull();
+    expect(lancerMacro).not.toHaveBeenCalled();
+  });
+
+  it('à l\'ouverture, la recherche part seule', async () => {
+    ouvrirDossier.mockResolvedValue(DOSSIER);
+    monter();
+    await waitFor(() => expect(lancerMacro).toHaveBeenCalledOnce());
+  });
+
+  it('rouverte dans les 5 minutes, elle ne repart pas', async () => {
     ouvrirDossier.mockResolvedValue(DOSSIER);
     monter();
     await screen.findByRole('button', { name: /Rechercher dans Outlook/ });
     expect(lancerMacro).not.toHaveBeenCalled();
   });
 
-  it('une fois prouvée, elle part seule à l\'ouverture', async () => {
-    localStorage.setItem('agent_mail_macro_ok', '1');
+  it('au clic : l\'accès au dossier passe AVANT le lien, puis l\'accusé fait relire', async () => {
     ouvrirDossier.mockResolvedValue(DOSSIER);
     monter();
-    await waitFor(() => expect(lancerMacro).toHaveBeenCalledOnce());
-  });
-
-  it('au clic : lance la macro, et son accusé de réception la confirme', async () => {
-    ouvrirDossier.mockResolvedValue(DOSSIER);
+    const bouton = await screen.findByRole('button', { name: /Rechercher dans Outlook/ });
+    ouvrirDossier.mockClear();
     passage.mockImplementation(async () => Date.now());
-    monter();
-    fireEvent.click(await screen.findByRole('button', { name: /Rechercher dans Outlook/ }));
-    expect(lancerMacro).toHaveBeenCalledOnce();
-    await waitFor(() => expect(localStorage.getItem('agent_mail_macro_ok')).toBe('1'), { timeout: 4000 });
+    fireEvent.click(bouton);
+    await waitFor(() => expect(lancerMacro).toHaveBeenCalledOnce());
+    expect(ouvrirDossier).toHaveBeenCalledWith(true);
+    expect(ouvrirDossier.mock.invocationCallOrder[0]).toBeLessThan(lancerMacro.mock.invocationCallOrder[0]);
+    await waitFor(() => expect(passage).toHaveBeenCalled(), { timeout: 4000 });
+    await waitFor(() => expect(screen.getByRole('button', { name: /Rechercher dans Outlook/ })).toBeTruthy(), { timeout: 4000 });
   });
 
   it('sans accusé de réception, l\'écran le dit au bout d\'une minute', async () => {
@@ -119,7 +131,6 @@ describe('AgentMailDialog — recherche lancée dans Outlook', () => {
     fireEvent.click(bouton);
     await act(async () => { await vi.advanceTimersByTimeAsync(62_000); });
     expect(screen.getByText(/Outlook n'a pas répondu à la recherche/)).toBeTruthy();
-    expect(localStorage.getItem('agent_mail_macro_ok')).toBeNull();
   });
 });
 
