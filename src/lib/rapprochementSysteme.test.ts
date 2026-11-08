@@ -65,11 +65,21 @@ describe('un système désigné par son seul sigle', () => {
   const BRILLANT = systeme('Flowseal EPW Brillant', '');
   const AVEC_EPW = [...CATALOGUE, EPW, MAT, BRILLANT, systeme('ISOMARK DIAMANT', 'Kit')];
 
-  it('reconnaît « EPW » sans la gamme et laisse choisir la finition', () => {
+  it('reconnaît « EPW » sans la gamme : sans finition écrite, le Mat', () => {
     const texte = 'peux tu me faire un devis pour 125 m² de EPW ral 5015';
-    expect(nomsCandidats(texte, AVEC_EPW)).toEqual(['Flowseal EPW', 'Flowseal EPW Mat', 'Flowseal EPW Brillant']);
-    expect(rapprocherSysteme(texte, AVEC_EPW)?.retenu).toBe(EPW);
+    expect(nomsCandidats(texte, AVEC_EPW)).toEqual(['Flowseal EPW Mat']);
+    expect(rapprocherSysteme(texte, AVEC_EPW)?.retenu).toBe(MAT);
     expect(rapprocherSysteme(texte, AVEC_EPW)?.surfaceM2).toBe(125);
+  });
+
+  it('le nom complet sans finition part aussi en Mat, et reste choisissable à la main', () => {
+    expect(rapprocherSysteme('Flowseal EPW 30 m²', AVEC_EPW)?.retenu).toBe(MAT);
+    expect(systemeImpose('Flowseal EPW', 'EPW 30 m²', AVEC_EPW)?.retenu).toBe(EPW);
+  });
+
+  it('sans Mat au catalogue, tous les candidats restent proposés', () => {
+    const sansMat = [EPW, BRILLANT];
+    expect(nomsCandidats('EPW 30 m²', sansMat)).toEqual(['Flowseal EPW', 'Flowseal EPW Brillant']);
   });
 
   it('la finition écrite désigne le système', () => {

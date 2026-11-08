@@ -426,8 +426,22 @@ export function nomsCandidats(texte: string, systemes: Systeme[]): string[] {
     /* Le nombre de mots reconnus départage, et à égalité la longueur du nom. */
     trouves.push({ nom, poids: mn.length * 1000 + nom.length });
   }
-  if (!trouves.length) return nomsParSigle(motsDemande, motsBruts, [...noms]);
-  return trouves.sort((x, y) => y.poids - x.poids).map(t => t.nom);
+  const candidats = trouves.length
+    ? trouves.sort((x, y) => y.poids - x.poids).map(t => t.nom)
+    : nomsParSigle(motsDemande, motsBruts, [...noms]);
+  return avecFinitionParDefaut(candidats, [...noms]);
+}
+
+/**
+ * SANS FINITION ÉCRITE, C'EST LE MAT (règle du 08/11/2026) : « EPW » comme
+ * « Flowseal EPW » désignent « Flowseal EPW Mat » dès que ce système existe.
+ * Le nom générique reste choisissable à la main (`systemeImpose`).
+ */
+function avecFinitionParDefaut(candidats: string[], noms: string[]): string[] {
+  if (!candidats.length) return candidats;
+  const attendu = `${candidats[0]} mat`.toLowerCase();
+  const mat = noms.find(n => n.toLowerCase() === attendu);
+  return mat ? [mat] : candidats;
 }
 
 /**
@@ -446,9 +460,9 @@ function siglesDuNom(nom: string): string[] {
  * Signalisation, 06/11/2026) ne contient pas « Flowseal », et aucun système ne
  * ressortait. N'intervient que si aucun nom complet ne répond.
  *
- * Une finition écrite (« EPW mat ») ne garde que ce qui la porte. Sans finition,
- * tous les systèmes du sigle restent candidats, le nom le plus court d'abord :
- * l'écran demande « lequel ? » au lieu de trancher en silence.
+ * Une finition écrite (« EPW brillant ») ne garde que ce qui la porte. Sans
+ * finition, tous les systèmes du sigle restent candidats, le nom le plus court
+ * d'abord ; `avecFinitionParDefaut` tranche ensuite s'il existe un Mat.
  */
 function nomsParSigle(motsDemande: Set<string>, motsBruts: Set<string>, noms: string[]): string[] {
   const notes = noms
