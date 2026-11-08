@@ -733,6 +733,9 @@ serve(async (req) => {
       }
     }
     const portDe = (l: Ligne) => (l.portNom && portIds[l.portNom]) || payload.port_id;
+    /* Un port sous son article PORTSH garde le prix d'Odoo (règle du 08/11 :
+       87 € pour PORTSH100, là où la grille MonCRM dit 85 €). */
+    const portAuPrixOdoo = (l: Ligne) => !!(l.port && l.portNom && portIds[l.portNom]);
     const codeNegDe = (l: Ligne) =>
       l.negoce && negIds[l.negoce] ? l.negoce : (payload.negoce_code || "NEG.ISO");
 
@@ -1047,7 +1050,7 @@ serve(async (req) => {
          * l'information. */
         if (!resolu) v.name = l.desc;
         v.product_uom_qty = l.qty || 1;
-        v.price_unit = l.pu || 0;
+        if (!portAuPrixOdoo(l)) v.price_unit = l.pu || 0;
         v.discount = 0;
         if (tvaId) v.tax_id = [[6, 0, [tvaId]]];
       }
@@ -1083,6 +1086,12 @@ serve(async (req) => {
       const maj: Record<string, unknown> = { price_unit: m.l.pu || 0, discount: 0 };
       if (m.garderLibelle) maj.name = m.l.desc;
       try {
+        /* Un prix nul ou factice (fiche à 0 ou 1 €) n'est pas un tarif : le port
+           garde alors le montant du devis plutôt que de partir offert. */
+        if (portAuPrixOdoo(m.l)) {
+          const lu = await o.kw("sale.order.line", "read", [[m.id], ["price_unit"]], { context: ctx }) as { price_unit?: number }[];
+          if ((lu[0]?.price_unit ?? 0) > 1) delete maj.price_unit;
+        }
         /* La désignation d'Odoo reste la sienne, mais une teinte ne s'y lit pas
            (AF041611 : FLOWSEAL EPW MAT sans son RAL 5015). On la lui ajoute. */
         if (!m.garderLibelle && m.l.teinte) {
