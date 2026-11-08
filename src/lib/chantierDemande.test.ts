@@ -1,6 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { chantierDansTexte } from './chantierDemande';
 
+describe('le chantier qui suit « devis » dans l’objet', () => {
+  it('reprend ce qui suit « devis »', () => {
+    expect(chantierDansTexte('Objet : devis ds smith\nDe : Cédric BAEHREL')).toBe('DS SMITH');
+    expect(chantierDansTexte('Objet : TR : Demande de devis Séméac')).toBe('SÉMÉAC');
+  });
+
+  it('ne prend pas ce qui ne nomme pas un lieu', () => {
+    for (const objet of ['demande devis', 'RE: Devis', 'Devis DEV-2026-161 — RAMPE', 'Demande de devis - Traceur de Chantier', "Demande d'un devis peinture / Blondel Méaulte", 'devis urgent', 'devis pochoirs blackline']) {
+      expect(chantierDansTexte(`Objet : ${objet}`, new Set(['POCHOIRS']))).toBeNull();
+    }
+  });
+
+  it('seul l’objet compte, pas le corps du mail', () => {
+    expect(chantierDansTexte('Objet : bonjour\n\ndevis ds smith')).toBeNull();
+  });
+});
+
 describe('le chantier lu dans la demande', () => {
   /* Le cas réel : le mail de MGD pour le devis Odoo AF036911, dont la case
      Chantier porte « CHANTIER PANTIN ». */

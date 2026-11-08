@@ -19,7 +19,8 @@ import { liensDocumentsCategorie, dbToDocumentCategorie } from '@/lib/categorieD
 import { dbToSysteme, liensFichesSystemes, systemeDuLien, systemeEstObjet } from '@/lib/systemes';
 import { useIdentiteDocument } from '@/hooks/useSocietes';
 import { imageEnDataUrl } from '@/lib/societes';
-import { useMailsTypes, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteDuMail, estHtmlMail, placerDansHtml, placerDansTexte, type ImageMail } from '@/lib/mailsTypes';
+import { noteDelaisTeintes } from '@/lib/referenceTeinte';
+import { useMailsTypes, avecEmplacementDelai, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteDuMail, estHtmlMail, placerDansHtml, placerDansTexte, type ImageMail } from '@/lib/mailsTypes';
 import EditeurMail from '@/components/EditeurMail';
 
 /* Nom de la pastille « tout cocher » par destination. « Documents de la
@@ -578,6 +579,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       destinataire: nomDestinataire, numero: devis.numero, reference: devis.referenceAffaire,
       societe: client?.societe, chantier: devis.chantier, systeme: devis.systeme, montantHT: formatMontant(totals.totalHT),
       montantTTC: formatMontant(totals.totalTTC), validite: devis.dateValidite ? formatDate(devis.dateValidite) : '',
+      delai: noteDelaisTeintes(devis.lignes, id => produits.find(p => p.id === id)),
     };
     const mailType = modeleMail('devis');
     setImagesMail(mailType.images ?? []);
@@ -597,7 +599,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       setProchaine(relanceProposee(aujourdhui, devis.dateRealisation));
     } else
     // Corps textarea : texte pur, sans section fiches (les liens sont injectés en HTML dans le .eml)
-    setBody(remplirMail(mailType.corps, valeursMail));
+    setBody(remplirMail(avecEmplacementDelai(mailType.corps), valeursMail));
 
     if (pdfContainerRef?.current) {
       setPdfReady(false);

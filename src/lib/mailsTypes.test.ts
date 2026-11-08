@@ -1,5 +1,27 @@
 import { describe, it, expect } from 'vitest';
-import { MAILS_DEFAUT, remplirMail, corpsEnHtml, imagesUtilisees, partieHtmlEml, texteSansImages, idImage, nettoyerHtml, texteDuMail, texteVersHtml, placerDansHtml, placerDansTexte } from './mailsTypes';
+import { MAILS_DEFAUT, avecEmplacementDelai, remplirMail, corpsEnHtml, imagesUtilisees, partieHtmlEml, texteSansImages, idImage, nettoyerHtml, texteDuMail, texteVersHtml, placerDansHtml, placerDansTexte } from './mailsTypes';
+
+describe('avecEmplacementDelai', () => {
+  const DELAI = 'Délai de livraison : 10 à 15 jours ouvrés pour la teinte 479 (RAL 5015, Sky Blue).';
+
+  it('place le délai avant la validité, dans le texte d’origine', () => {
+    const m = avecEmplacementDelai(MAILS_DEFAUT.devis.corps);
+    const rempli = remplirMail(m, { numero: 'D', montantHT: '1 €', validite: '12/11', delai: DELAI, destinataire: '', reference: '', chantier: '', systeme: '', coutChantierM2: '' });
+    expect(rempli).toContain(`${DELAI}\nCe devis est valable jusqu'au 12/11.`);
+  });
+
+  it('place le délai avant la validité dans un mail type HTML, et hors des passages [[ ]]', () => {
+    const corps = '<div>Devis {numero}.[[</div><div>Coût : {cout}]]</div><div>Ce devis est valable jusqu\'au {validite}.</div><div>Signature</div>';
+    const rempli = remplirMail(avecEmplacementDelai(corps), { numero: 'D', cout: '', validite: '12/11', delai: DELAI });
+    expect(rempli).toBe(`<div>Devis D.</div><div>${DELAI}</div><div>Ce devis est valable jusqu'au 12/11.</div><div>Signature</div>`);
+  });
+
+  it('ne laisse rien sans délai, et respecte un emplacement choisi', () => {
+    const corps = '<div>Ce devis est valable jusqu\'au {validite}.</div>';
+    expect(remplirMail(avecEmplacementDelai(corps), { validite: '12/11', delai: '' })).toBe("<div>Ce devis est valable jusqu'au 12/11.</div>");
+    expect(avecEmplacementDelai('{delai}\n{validite}')).toBe('{delai}\n{validite}');
+  });
+});
 
 describe('remplirMail', () => {
   it('retire un passage [[ ]] dont un champ est vide, garde les autres', () => {

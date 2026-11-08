@@ -80,7 +80,7 @@ import { ressembleASysteme } from '@/lib/fichesSysteme';
 import { ralsNommes, teinteDemandee } from '@/lib/referenceTeinte';
 import { joindreFichesRecap } from '@/lib/recapSysteme';
 import SystemeIntrouvable from '@/components/SystemeIntrouvable';
-import { fusionnerSystemes, systemesDeDevis } from '@/lib/systemesDevis';
+import { fusionnerSystemes, noteDeComposant, systemesDeDevis } from '@/lib/systemesDevis';
 import {
   rapprocherSysteme, nomsCandidats, systemeImpose, composantDemande, precisionDemande, surfaceDeDemande, zoneDeDemande,
   lineaireDeDemande, surfaceDepuisLineaire,
@@ -1490,7 +1490,7 @@ const [contratOdoo, setContratOdoo] = useState<
       /* Le chantier ne fait partie d'aucun champ extrait : le client l'écrit
          dans l'objet de son mail. On le PROPOSE — et rien du tout plutôt que
          n'importe quoi, voir `chantierDansTexte`. */
-      setCreerDevisChantier(chantierDansTexte(texte) || '');
+      setCreerDevisChantier(chantierDansTexte(texte, motsMetier) || '');
       setCreerDevisNotes(result.notes || '');
     } else {
       setCreerCCClientId(prev => garder(prev, foundClient?.id));
@@ -5404,7 +5404,7 @@ const [contratOdoo, setContratOdoo] = useState<
           /* Un système est une mise en œuvre Flowcrete : un composant sans
              article part en négoce ISOFLOOR (NEG.SH.ISO), pas ISOSIGN. */
           ...(p ? {} : { gamme: 'ISOFLOOR' }),
-          note: [ls.composant.role, ls.explication].filter(Boolean).join(' — '),
+          note: noteDeComposant(sys, ls.composant, ls.explication),
         };
       });
 
@@ -5565,7 +5565,7 @@ const [contratOdoo, setContratOdoo] = useState<
           ...(ls.composant.unite === 'm2' && ls.quantiteKg > 0
             ? { surfaceM2: Math.round(ls.quantiteKg / (ls.composant.consommation || 1) * 1000) / 1000 } : {}),
           ...(p ? {} : { gamme: 'ISOFLOOR' }),
-          note: [ls.composant.role, ls.explication].filter(Boolean).join(' — '),
+          note: noteDeComposant(sys, ls.composant, ls.explication),
         };
       });
       return [entete, ...zones, ...composants];

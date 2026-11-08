@@ -63,20 +63,47 @@ function chantierDansFragment(fragment: string): string | null {
   return retenus.length ? retenus.join(' ') : null;
 }
 
+const OBJET_DEVIS = /^\s*(?:objet|sujet|subject)\s*[:-]\s*(?:(?:re|tr|fw|fwd)\s*:\s*)*(?:demande\s+(?:de\s+|d['’]un\s+)?)?devis\s+(?:pour\s+)?(.+?)\s*$/i;
+
+/** Ce qui suit « devis » sans nommer un lieu : l'état du devis, ou ce qu'on chiffre. */
+const APRES_DEVIS_INTERDITS = new Set([
+  'PRIX', 'TARIF', 'URGENT', 'SIGNE', 'ACCEPTE', 'MODIFIE', 'COMPLEMENTAIRE', 'FOURNITURE',
+  'POSE', 'PEINTURE', 'RESINE', 'MARQUAGE', 'MATERIEL', 'PRODUIT', 'PRODUITS',
+]);
+
+/**
+ * « Objet : devis ds smith » (Top Signalisation, 06/11/2026) : ce qui suit
+ * « devis » est le chantier, même écrit en minuscules. Quatre mots au plus,
+ * sans chiffre ni ponctuation (« Devis DEV-2026-161 », « devis peinture /
+ * Blondel » ne se lisent pas ainsi), et aucun mot du métier : « devis pochoirs »
+ * dit ce qu'on chiffre, pas où.
+ */
+function chantierApresDevis(ligne: string, motsMetier: ReadonlySet<string>): string | null {
+  const reste = OBJET_DEVIS.exec(ligne)?.[1];
+  if (!reste) return null;
+  const mots = reste.split(/\s+/);
+  if (mots.length > 4 || !mots.every(m => /^\p{L}[\p{L}'’-]*$/u.test(m))) return null;
+  const cles = mots.map(m => sansAccents(m).toUpperCase());
+  if (cles.some(c => APRES_CHANTIER_INTERDITS.has(c) || APRES_DEVIS_INTERDITS.has(c) || motsMetier.has(c))) return null;
+  return reste.toUpperCase();
+}
+
 /**
  * Le chantier proposé pour cette demande, ou `null` quand rien ne se dégage.
  *
  * Rendre `null` est une réponse, pas un échec : une case vide se remplit en
  * trois secondes, un chantier inventé se recopie dans Odoo.
+ *
+ * `motsMetier` : le vocabulaire courant du catalogue (`motsFrequentsDuCatalogue`).
  */
-export function chantierDansTexte(texte: string): string | null {
+export function chantierDansTexte(texte: string, motsMetier: ReadonlySet<string> = new Set()): string | null {
   if (!texte?.trim()) return null;
   const lignes = texte.split(/\r?\n/);
 
   /* L'objet d'abord : c'est là que le chantier se nomme. */
   for (const ligne of lignes) {
     if (!/^\s*(objet|sujet|subject)\s*[:\-]/i.test(ligne)) continue;
-    const trouve = chantierDansFragment(ligne);
+    const trouve = chantierDansFragment(ligne) ?? chantierApresDevis(ligne, motsMetier);
     if (trouve) return trouve;
   }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Devis, LigneDevis } from './store';
-import { fusionnerSystemes, systemeDepuisDevis, systemesDeDevis } from './systemesDevis';
+import { fusionnerSystemes, noteDeComposant, systemeDepuisDevis, systemesDeDevis } from './systemesDevis';
 import { rapprocherSysteme } from './rapprochementSysteme';
 import { declinerSysteme, type Systeme } from './systemes';
 
@@ -12,6 +12,25 @@ const l = (o: Partial<LigneDevis>): LigneDevis => ({
 function modele(systeme: string, lignes: LigneDevis[], statut: Devis['statut'] = 'système'): Devis {
   return { id: `d-${systeme}`, numero: 'DEV-X', systeme, statut, lignes } as unknown as Devis;
 }
+
+describe('la note d’une ligne de système', () => {
+  const EPW_MAT = systemeDepuisDevis(modele('Flowseal EPW Mat', [
+    l({ produitId: 'p', description: 'EPW', consommation: 0.25, note: '1ère couche A diluer avec 20% H²O' }),
+    l({ produitId: 'p', description: 'EPW', consommation: 0.25 }),
+  ]))!;
+
+  it('reprend la note du modèle sur sa ligne', () => {
+    expect(noteDeComposant(EPW_MAT, EPW_MAT.composants[0], '0.25 kg/m² × 125 m²')).toBe('1ère couche A diluer avec 20% H²O');
+  });
+
+  it('sans note au modèle, le rôle et le calcul', () => {
+    expect(noteDeComposant(EPW_MAT, EPW_MAT.composants[1], '0.25 kg/m² × 125 m²')).toBe('base — 0.25 kg/m² × 125 m²');
+  });
+
+  it('la phrase d’une fiche de la table n’est pas une note de devis', () => {
+    expect(noteDeComposant({}, { role: 'primaire', phraseSource: 'phrase de la fiche' }, '3 kg')).toBe('primaire — 3 kg');
+  });
+});
 
 const ROAD_107_319 = modele('FLowfast 107 319 Road', [
   l({ type: 'groupe', description: 'Primaire' }),

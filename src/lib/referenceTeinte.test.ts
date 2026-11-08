@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { libelleAvecTeinte, ralDeLibelle, ralsNommes, referenceSelonTeinte, teinteDeReference, teinteDemandee } from './referenceTeinte';
+import { libelleAvecTeinte, noteDelaisTeintes, ralDeLibelle, ralsNommes, referenceSelonTeinte, teinteDeReference, teinteDemandee } from './referenceTeinte';
 import { buildOdooPayload } from './odooSync';
 import type { Client, Devis, Produit } from './store';
 
@@ -52,6 +52,15 @@ describe('la teinte que la demande nomme', () => {
 
   it('un RAL inconnu de la gamme reste écrit et se signale', () => {
     expect(teinteDemandee(EPW, '1003')).toEqual({ dimensionId: TEINTE, valeur: 'RAL 1003', auNuancier: false });
+  });
+
+  it('annonce le délai des teintes du devis, une fois chacune', () => {
+    const article = (id: string) => (id === 'epw' ? EPW : undefined);
+    const ligne = (teinte: string) => ({ produitId: 'epw', variantesChoisies: { [TEINTE]: teinte } });
+    expect(noteDelaisTeintes([
+      { type: 'groupe' }, ligne('479 (RAL 5015, Sky Blue)'), ligne('479 (RAL 5015, Sky Blue)'), ligne('050 (Signal White)'),
+    ], article)).toBe('Délai de livraison : 10 à 15 jours ouvrés pour la teinte 479 (RAL 5015, Sky Blue).\nDélai de livraison : disponible pour la teinte 050 (Signal White).');
+    expect(noteDelaisTeintes([{ produitId: 'epw' }, { produitId: 'autre' }], article)).toBe('');
   });
 
   it('rien sans RAL ni sans dimension de teinte', () => {

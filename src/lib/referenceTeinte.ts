@@ -86,6 +86,28 @@ export function teinteDemandee(
   return { dimensionId: dim.id, valeur, auNuancier: !!(option || nuancier), ...(delai ? { delai } : {}) };
 }
 
+/**
+ * LE DÉLAI À ANNONCER AU CLIENT, une ligne par teinte du devis : « Délai de
+ * livraison : 10 à 15 jours ouvrés pour la teinte 479 (RAL 5015, Sky Blue). »
+ * Vide quand aucune teinte du devis n'est au nuancier : le passage du mail
+ * disparaît alors, on n'annonce pas de délai qu'on ne connaît pas.
+ */
+export function noteDelaisTeintes(
+  lignes: Pick<LigneDevis, 'type' | 'produitId' | 'variantesChoisies'>[],
+  articleDe: (id: string) => (Pick<Produit, 'variantes'> & Partial<Pick<Produit, 'reference' | 'description'>>) | undefined,
+): string {
+  const notes = new Set<string>();
+  for (const l of lignes) {
+    if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte' || !l.produitId) continue;
+    const article = articleDe(l.produitId);
+    const dim = dimensionTeinte(article);
+    const teinte = dim ? l.variantesChoisies?.[dim.id] : undefined;
+    const d = delaiDeTeinte(article, teinte);
+    if (d) notes.add(`Délai de livraison : ${d.delai} pour la teinte ${teinte}.`);
+  }
+  return [...notes].join('\n');
+}
+
 export interface ReferenceTeinte {
   /** La référence à envoyer ; absente = la ligne part en négoce. */
   ref?: string;

@@ -79,6 +79,7 @@ Restant à ta disposition pour tout complément d'information.`,
       montantHT: { libelle: 'Montant HT', exemple: '846,80 €' },
       montantTTC: { libelle: 'Montant TTC', exemple: '1 016,16 €' },
       validite: { libelle: 'Valable jusqu\'au', exemple: '12/11/2026' },
+      delai: { libelle: 'Délai de livraison (teintes du devis)', exemple: 'Délai de livraison : 10 à 15 jours ouvrés pour la teinte 479 (RAL 5015, Sky Blue).' },
       /* Pas une valeur : un emplacement. Les liens cochés à l'envoi s'y placent
          (avant la signature, par exemple) ; sans lui, ils suivent le texte. */
       fiches: { libelle: 'Fiches produit (liens cochés)', exemple: 'Fiches produit :\n• Fiche technique — FP_BAO_Mortar_ISOFLOOR.pdf' },
@@ -185,6 +186,25 @@ export function remplirMail(modele: string, valeurs: Record<string, string | nul
   const rempli = sansOptions.replace(/\{(\w+)\}/g, (m, k: string) =>
     !connu(k) ? m : html ? echapper(val(k)).replace(/\n/g, '<br>') : val(k));
   return html ? rempli : rempli.replace(/\n{3,}/g, '\n\n');
+}
+
+/**
+ * Donne au modèle du mail de devis son emplacement `{delai}`, juste avant la
+ * phrase de validité, s'il n'en a pas : les mails types déjà enregistrés
+ * doivent annoncer le délai sans être réécrits. Entre `[[ ]]`, il disparaît
+ * quand aucune teinte n'a de délai.
+ */
+export function avecEmplacementDelai(corps: string): string {
+  if (corps.includes('{delai}')) return corps;
+  const html = estHtmlMail(corps);
+  const repere = corps.indexOf('{validite}');
+  if (repere < 0) return html ? `${corps}[[<div>{delai}</div>]]` : `${corps}[[\n{delai}]]`;
+  const debut = html
+    ? Math.max(corps.lastIndexOf('<div', repere), corps.lastIndexOf('<p', repere))
+    : corps.lastIndexOf('\n', repere) + 1;
+  if (html && debut < 0) return `[[<div>{delai}</div>]]${corps}`;
+  const bloc = html ? '[[<div>{delai}</div>]]' : '[[{delai}\n]]';
+  return corps.slice(0, debut) + bloc + corps.slice(debut);
 }
 
 /* ── Texte brut ou HTML ───────────────────────────────────────────────────── */

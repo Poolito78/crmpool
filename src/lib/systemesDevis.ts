@@ -82,6 +82,20 @@ export function systemeDepuisDevis(d: Devis): Systeme | null {
   };
 }
 
+/**
+ * La note d'une ligne de système au devis. Celle que le MODÈLE porte
+ * (« 1ère couche A diluer avec 20% H²O ») est écrite pour le chantier : elle
+ * passe avant le rôle et le calcul, qui n'en sont que le repli.
+ */
+export function noteDeComposant(
+  systeme: Pick<Systeme, 'depuisDevis'>,
+  composant: Pick<SystemeComposant, 'role' | 'phraseSource'>,
+  explication: string | undefined,
+): string {
+  if (systeme.depuisDevis && composant.phraseSource?.trim()) return composant.phraseSource.trim();
+  return [composant.role, explication].filter(Boolean).join(' — ');
+}
+
 /** Les systèmes que portent les devis modèles. */
 export function systemesDeDevis(devis: Devis[]): Systeme[] {
   const out: Systeme[] = [];
