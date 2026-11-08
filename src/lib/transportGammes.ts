@@ -213,6 +213,9 @@ export function portIsofloor(lignes: LigneGamme[]): PortGamme {
   return {
     gamme: 'ISOFLOOR', montant, offert, poids, poidsFranco, base,
     poidsIncomplet: incomplet,
+    /* Sans lui, le port partait sous l'article générique [PORT] (AF041611,
+       corrigé à la main en PORTSH100). */
+    ...(offert ? {} : { modeExpedition: modeExpeditionSH(poids) }),
     explication: `${poidsFranco.toFixed(1)} kg hors granulats, franco à `
       + `${FRANCO_ISOFLOOR_KG} kg : `
       + (offert ? 'offert' : `${poids.toFixed(1)} kg → ${montant.toFixed(2)} €`),

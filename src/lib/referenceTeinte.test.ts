@@ -144,6 +144,10 @@ describe('buildOdooPayload — la ligne pigment part sous sa teinte', () => {
     expect(p.lines[0].desc).toContain('RAL 7037');
     expect(p.avertissements).toBeUndefined();
   });
+  it('la teinte part à part : la désignation d’Odoo la reçoit aussi', () => {
+    const p = buildOdooPayload(devis('222 (RAL 7037, Goosewing Grey)'), client, [PIGMENT2KG]);
+    expect(p.lines[0].teinte).toBe('222 (RAL 7037, Goosewing Grey)');
+  });
   it('teinte sans RAL → pas de ref, avertissement', () => {
     const p = buildOdooPayload(devis('340 (Pastel Yellow)'), client, [PIGMENT2KG]);
     expect(p.lines[0].ref).toBeUndefined();

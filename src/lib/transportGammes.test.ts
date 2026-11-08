@@ -159,6 +159,11 @@ describe('le mode d’expédition Odoo d’une tranche de poids', () => {
     expect(modeExpeditionSH(900)).toBe('FRAIS DE PORT SH > 700KG');
   });
 
+  it('nomme aussi la tranche d’un port ISOFLOOR payant, pas d’un envoi franco', () => {
+    expect(portIsofloor([ligne('FLOWSEAL EPW MAT (10,1KG)', 8, 1360)]).modeExpedition).toBe('FRAIS DE PORT SH DE 26 A 100KG');
+    expect(portIsofloor([ligne('Résine (20 kg)', 100, 300)]).modeExpedition).toBeUndefined();
+  });
+
   it('ne le pose que sur un port payé au poids', () => {
     const l = [{ reference: 'ECLIPSE25', designation: 'COLLE ECLIPSE (FUT DE 25KG)', quantite: 3, montant: 300, niveau: 'H2' as const }];
     expect(portIsomark(l, true).modeExpedition).toBeUndefined();          // forfait H2

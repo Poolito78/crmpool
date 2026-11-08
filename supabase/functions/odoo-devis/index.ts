@@ -157,6 +157,16 @@ interface Ligne {
   portNom?: string;
   /** Article de négoce propre à la ligne (NEG.SH.ISO pour ISOMARK / ISOFLOOR). */
   negoce?: string;
+  /** Teinte choisie (« 479 (RAL 5015, Sky Blue) ») : la désignation d'Odoo ne la porte pas. */
+  teinte?: string;
+}
+
+/** La désignation d'Odoo complétée de la teinte, sauf si elle la dit déjà. */
+function avecTeinte(nom: string, teinte: string): string {
+  const ral = teinte.match(/\bRAL\s*(\d{4})\b/i)?.[1];
+  const dite = nom.toLowerCase().includes(teinte.toLowerCase())
+    || (!!ral && new RegExp(`\\bRAL\\s*${ral}\\b`, "i").test(nom));
+  return dite ? nom : `${nom} — Teinte ${teinte}`;
 }
 
 interface Payload {
@@ -1073,6 +1083,12 @@ serve(async (req) => {
       const maj: Record<string, unknown> = { price_unit: m.l.pu || 0, discount: 0 };
       if (m.garderLibelle) maj.name = m.l.desc;
       try {
+        /* La désignation d'Odoo reste la sienne, mais une teinte ne s'y lit pas
+           (AF041611 : FLOWSEAL EPW MAT sans son RAL 5015). On la lui ajoute. */
+        if (!m.garderLibelle && m.l.teinte) {
+          const lu = await o.kw("sale.order.line", "read", [[m.id], ["name"]], { context: ctx }) as { name?: string }[];
+          if (lu[0]?.name) maj.name = avecTeinte(lu[0].name, m.l.teinte);
+        }
         await o.kw("sale.order.line", "write", [[m.id], maj], { context: ctx });
       } catch (e) {
         erreurs.push(("P.U. « " + m.l.desc + " » : " + (e as Error).message).slice(0, 120));

@@ -114,6 +114,8 @@ interface LigneScript {
   portNom?: string;
   /** Article de négoce si la référence manque chez Odoo — défaut : celui du devis. */
   negoce?: string;
+  /** Teinte choisie : ajoutée à la désignation d'Odoo, qui ne la porte pas. */
+  teinte?: string;
 }
 
 function buildLignes(devis: Devis, produits: Produit[], avertissements?: string[]): LigneScript[] {
@@ -155,6 +157,7 @@ function buildLignes(devis: Devis, produits: Produit[], avertissements?: string[
         pu: l.prixUnitaireHT,
         rem: l.remise ?? 0,
         ...(codeNegoce(produit, l) ? { negoce: codeNegoce(produit, l) } : {}),
+        ...(t.teinte ? { teinte: t.teinte } : {}),
       });
     }
   }
