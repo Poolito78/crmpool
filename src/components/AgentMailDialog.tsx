@@ -273,7 +273,11 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
       });
       setLecture(false);
       await integrer(mailsDossier, m => !!m.duDossier);
-    } catch (e) { if (!silencieux) echec(e); } finally { setLecture(false); }
+    } catch (e) {
+      /* Le choix abandonné ne doit pas ressembler à un bouton en panne. */
+      if (interactif && (e as Error)?.name === 'AbortError') setErreur('Aucun dossier choisi : la fenêtre Windows a été fermée sans désigner « Mails a traiter ».');
+      else if (!silencieux) echec(e);
+    } finally { setLecture(false); }
   }, [echec, integrer, lireFichiers]);
 
   const lireOutlook = useCallback(async () => {

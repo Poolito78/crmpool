@@ -17,6 +17,7 @@ const MAILS: { id: string; sujet: string; categorie: TriMail['categorie']; jour:
 ];
 
 const gemini = vi.hoisted(() => vi.fn());
+const ouvrirDossier = vi.hoisted(() => vi.fn(async () => null as FileSystemDirectoryHandle | null));
 
 vi.mock('@/lib/StoreContext', () => ({ useCRM: () => ({ clients: [], devis: [] }) }));
 vi.mock('@/lib/modelesIA', () => ({ appelerGemini: gemini, texteGemini: () => '' }));
@@ -32,7 +33,7 @@ vi.mock('@/lib/devisOdooMails', async importOriginal => ({
 vi.mock('@/lib/dossierMails', async importOriginal => ({
   ...(await importOriginal<typeof import('@/lib/dossierMails')>()),
   dossierMailsDisponible: () => true,
-  dossierMails: async () => null,
+  dossierMails: ouvrirDossier,
   nomDossierMails: async () => null,
   copieEnMemoire: async (f: File) => f,
   lireMailFichier: async (f: File): Promise<MailAgent> => {
@@ -69,6 +70,15 @@ async function chargerLesMails() {
 }
 
 const boutonsReplier = () => screen.getAllByRole('button', { name: 'Replier ce groupe' });
+
+describe('AgentMailDialog — choix du dossier', () => {
+  it('une fenêtre fermée sans choix se dit à l\'écran', async () => {
+    monter();
+    ouvrirDossier.mockRejectedValueOnce(new DOMException('annulé', 'AbortError'));
+    fireEvent.click(await screen.findByRole('button', { name: /Choisir le dossier/ }));
+    expect(await screen.findByText(/Aucun dossier choisi/)).toBeTruthy();
+  });
+});
 
 describe('AgentMailDialog — repli par catégorie', () => {
   it('un bouton par catégorie, sur le premier mail du groupe seulement', async () => {

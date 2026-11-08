@@ -53,26 +53,33 @@ function ouvrirIdb(): Promise<IDBDatabase> {
   });
 }
 
+/* IndexedDB peut ne jamais répondre : sans borne, le clic sur « Choisir le
+   dossier » attendait sans fin, sans fenêtre ni message. La borne reste sous
+   les ~5 s pendant lesquelles Chrome tient le clic pour un geste de
+   l'utilisateur : au-delà, il refuserait d'ouvrir le sélecteur. */
+const ATTENTE_IDB_MS = 1500;
+function borne<T>(travail: Promise<T>, repli: T): Promise<T> {
+  return Promise.race([travail, new Promise<T>(resolve => setTimeout(() => resolve(repli), ATTENTE_IDB_MS))]);
+}
+
 async function lireHandle(): Promise<DirHandle | null> {
   try {
-    const db = await ouvrirIdb();
-    return await new Promise((resolve) => {
+    return await borne(ouvrirIdb().then(db => new Promise<DirHandle | null>((resolve) => {
       const req = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(IDB_KEY);
       req.onsuccess = () => resolve((req.result as DirHandle) ?? null);
       req.onerror = () => resolve(null);
-    });
+    })), null);
   } catch { return null; }
 }
 
 async function garderHandle(handle: FileSystemDirectoryHandle): Promise<void> {
   try {
-    const db = await ouvrirIdb();
-    await new Promise<void>((resolve) => {
+    await borne(ouvrirIdb().then(db => new Promise<void>((resolve) => {
       const tx = db.transaction(IDB_STORE, 'readwrite');
       tx.objectStore(IDB_STORE).put(handle, IDB_KEY);
       tx.oncomplete = () => resolve();
       tx.onerror = () => resolve();
-    });
+    })), undefined);
   } catch { /* le dossier sera redemandé */ }
 }
 
