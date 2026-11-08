@@ -20,6 +20,7 @@ import { dbToSysteme, liensFichesSystemes, systemeDuLien, systemeEstObjet } from
 import { useIdentiteDocument } from '@/hooks/useSocietes';
 import { imageEnDataUrl } from '@/lib/societes';
 import { noteDelaisTeintes } from '@/lib/referenceTeinte';
+import { citationHtml, entetesReponse, mailOrigineDuDevis, objetReponse, type MailOrigine } from '@/lib/mailOrigine';
 import { useMailsTypes, avecEmplacementDelai, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteDuMail, estHtmlMail, placerDansHtml, placerDansTexte, type ImageMail } from '@/lib/mailsTypes';
 import EditeurMail from '@/components/EditeurMail';
 
@@ -103,6 +104,8 @@ function htmlDuMail(params: {
   body: string;
   ficheLinks?: Array<{ label: string; url: string }>;
   images?: ImageMail[];
+  /** Le message du client, cité sous la réponse. */
+  citation?: string;
 }): { html: string; imagesPlacees: ImageMail[] } {
   const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const imagesPlacees = imagesUtilisees(params.body, params.images);
@@ -118,7 +121,7 @@ function htmlDuMail(params: {
 
   /* Le repère {fiches} du mail type place les liens (avant la signature) ;
      sans lui, ils suivent le texte. */
-  const html = `<html><body>${placerDansHtml(htmlBody, 'fiches', ficheHtml) ?? htmlBody + ficheHtml}</body></html>`;
+  const html = `<html><body>${placerDansHtml(htmlBody, 'fiches', ficheHtml) ?? htmlBody + ficheHtml}${params.citation ?? ''}</body></html>`;
   return { html, imagesPlacees };
 }
 
@@ -133,6 +136,9 @@ function generateEml(params: {
   ficheLinks?: Array<{ label: string; url: string }>;
   /** Images du mail type : seules celles placées dans le texte partent, en ligne. */
   images?: ImageMail[];
+  citation?: string;
+  /** `In-Reply-To` et `References` d'une réponse. */
+  entetes?: string[];
 }): string {
   const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const lines: string[] = [];
@@ -142,6 +148,7 @@ function generateEml(params: {
   lines.push(`From: ${params.from}`);
   lines.push(`To: ${params.to}`);
   lines.push(`Subject: ${encodeHeader(params.subject)}`);
+  lines.push(...(params.entetes ?? []));
   lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
   lines.push('');
 
@@ -467,6 +474,9 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  /** Le mail du client auquel ce devis répond ; `null` : nouveau mail. */
+  const [origine, setOrigine] = useState<MailOrigine | null>(null);
+  const objetNouveauMail = useRef('');
   // Objet et texte proposés : le mail type de l'utilisateur (Paramètres → Mails).
   const { modele: modeleMail } = useMailsTypes();
   const [imagesMail, setImagesMail] = useState<ImageMail[]>([]);
@@ -587,7 +597,12 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     /* Une relance garde l'objet de l'envoi, SANS « Relance » (demande du
        15/10) : le client ne lit pas le mot, et le mail se range avec l'envoi
        dans sa messagerie. */
-    setSubject(objet);
+    objetNouveauMail.current = objet;
+    /* Une relance suit NOTRE envoi : seul le premier envoi répond au client. */
+    const mailClient = relance ? null : mailOrigineDuDevis(devis.id);
+    setOrigine(mailClient);
+    setSubject(mailClient ? objetReponse(mailClient.sujet) : objet);
+    if (mailClient) setTo(mailClient.adresse);
 
     if (relance) {
       // Le rang de la relance choisit le mail type proposé (suivi, validité, dernière).
@@ -893,6 +908,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
         extraAttachments,
         ficheLinks: allLinks,
         images: imagesMail,
+        ...(origine ? { citation: citationHtml(origine), entetes: entetesReponse(origine) } : {}),
       });
       const result = await openEmlInOutlook({
         emlContent,
@@ -946,6 +962,15 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
           <div>
             <Label>Objet</Label>
             <Input value={subject} onChange={e => setSubject(e.target.value)} />
+            {origine && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Réponse au mail de {origine.adresse} : son message sera cité sous votre texte.{' '}
+                <button type="button" className="underline"
+                  onClick={() => { setOrigine(null); setSubject(objetNouveauMail.current); }}>
+                  Envoyer plutôt en nouveau mail
+                </button>
+              </p>
+            )}
           </div>
           {relance ? (
             <div className="flex flex-wrap gap-4">

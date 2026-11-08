@@ -29,6 +29,7 @@ const PROPRIETES: Record<string, string> = {
   '0C1F': 'expediteurAdresse',   // souvent une adresse interne Exchange
   '5D01': 'expediteurSmtp',      // la vraie adresse, quand elle est présente
   '3A16': 'societe',
+  '1035': 'messageId',           // Message-ID internet : rattache une réponse au fil
 };
 
 export interface MessageOutlook {
@@ -37,6 +38,7 @@ export interface MessageOutlook {
   expediteurNom: string;
   expediteurAdresse: string;
   societe: string;
+  messageId?: string;
   /** Texte prêt pour l'analyse : objet, expéditeur, puis corps. */
   texte: string;
 }
@@ -346,6 +348,7 @@ export async function lireMsg(fichier: File): Promise<MessageOutlook> {
     expediteurNom: (valeurs.expediteurNom || '').trim(),
     expediteurAdresse,
     societe: (valeurs.societe || '').trim(),
+    ...(valeurs.messageId ? { messageId: valeurs.messageId.trim() } : {}),
     texte: [entete, corps].filter(Boolean).join('\n\n'),
   };
 }

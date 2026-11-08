@@ -80,6 +80,7 @@ import { ressembleASysteme } from '@/lib/fichesSysteme';
 import { ralsNommes, teinteDemandee } from '@/lib/referenceTeinte';
 import { joindreFichesRecap } from '@/lib/recapSysteme';
 import { contactDuSignataire, contactNommeDansTexte } from '@/lib/contactAffaire';
+import { mailOrigineDeMsg, retenirMailOrigine, type MailOrigine } from '@/lib/mailOrigine';
 import SystemeIntrouvable from '@/components/SystemeIntrouvable';
 import { fusionnerSystemes, noteDeComposant, systemesDeDevis } from '@/lib/systemesDevis';
 import {
@@ -451,6 +452,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const analyseTexteRef = useRef<string>(''); // texte utilisé lors de la dernière analyse
   /** Le mail AVEC sa signature, retirée de `analyseTexteRef` : c'est là que le signataire se nomme. */
   const texteMailCompletRef = useRef<string>('');
+  /** Le mail déposé : le devis qui en naît lui répondra (`mailOrigine.ts`). */
+  const mailOrigineRef = useRef<MailOrigine | null>(null);
   /* Signatures de l'émetteur du dernier document (SIREN, domaine) et ce que
      la mémoire en sait : c'est sous elles qu'une correction s'apprend. */
   const signaturesRef = useRef<string[]>([]);
@@ -1918,6 +1921,7 @@ const [contratOdoo, setContratOdoo] = useState<
         if (eml.contact) emlContactRef.current = eml.contact;
       } catch { /* ignore */ }
     }
+    if (msgFiles[0]) mailOrigineRef.current = await mailOrigineDeMsg(msgFiles[0]);
     for (const f of msgFiles) {
       try {
         const { extraireTexteDeMsg } = await import('@/lib/parseMsgPdf');
@@ -2031,6 +2035,7 @@ const [contratOdoo, setContratOdoo] = useState<
   const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); }, []);
 
   function reset() {
+    mailOrigineRef.current = null;
     texteMailCompletRef.current = '';
     setGrilleTransport(null);
     setPortEcrit(null); setPortModifs({}); setPortIntegre(false);
@@ -5811,6 +5816,7 @@ const [contratOdoo, setContratOdoo] = useState<
       });
     }
     updateDevis(prev => [nouveauDevis, ...prev]);
+    if (mailOrigineRef.current) retenirMailOrigine(nouveauDevis.id, mailOrigineRef.current);
     /* Demande venue du Chiffrage ISOSIGN : son PDF (plan annoté + résumé) rejoint
        d'office « Notes & Fichiers » du devis. Pris seulement pour CE texte. */
     const pdfChiffrage = /Chiffrage ISOSIGN/i.test(texte) ? prendreFichierChiffrage() : null;
