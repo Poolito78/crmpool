@@ -78,6 +78,7 @@ import {
 } from '@/lib/systemes';
 import { ressembleASysteme } from '@/lib/fichesSysteme';
 import { ralsNommes, teinteDemandee } from '@/lib/referenceTeinte';
+import { joindreFichesRecap } from '@/lib/recapSysteme';
 import SystemeIntrouvable from '@/components/SystemeIntrouvable';
 import { fusionnerSystemes, systemesDeDevis } from '@/lib/systemesDevis';
 import {
@@ -5336,8 +5337,9 @@ const [contratOdoo, setContratOdoo] = useState<
 
     /* LE SYSTÈME DU DEVIS : le champ « Système » se remplit de ce qui part en
        système, et c'est lui qui fait cocher la fiche système et la FICHE RÉCAP
-       dans le mail d'envoi (`systemeEstObjet`). */
-    const nomsSystemesDevis = new Set<string>();
+       dans le mail d'envoi (`systemeEstObjet`) ; la récap rejoint aussi les
+       fichiers du devis (`recapSysteme.ts`). */
+    const systemesDuDevis = new Map<string, Systeme>();
     const teintesHorsNuancier = new Set<string>();
     const teintesTier2 = new Set<string>();
     /** Le RAL de la demande : celui de la ligne, sinon l'unique du document. Deux RAL : on ne choisit pas. */
@@ -5353,7 +5355,7 @@ const [contratOdoo, setContratOdoo] = useState<
       const sys = systemeDeLigne(i);
       const declinees = lignesSystemeDe(i, l.quantite);
       if (!sys || !declinees.length) return [];
-      nomsSystemesDevis.add(sys.nom);
+      systemesDuDevis.set(sys.nom, sys);
       const ral = ralDeLigne(i, l);
       const surface = surfaceDeLigne(i, l.quantite);
 
@@ -5521,7 +5523,7 @@ const [contratOdoo, setContratOdoo] = useState<
     const blocDocument = (): LigneDevis[] => {
       const sys = systemeDuDocument;
       if (!sys || !chiffrageDocument.length) return [];
-      nomsSystemesDevis.add(sys.nom);
+      systemesDuDevis.set(sys.nom, sys);
       const fr = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
       const entete: LigneDevis = {
         id: generateId(), type: 'groupe',
@@ -5752,7 +5754,7 @@ const [contratOdoo, setContratOdoo] = useState<
       lignes,
       referenceAffaire: creerDevisRefAffaire || undefined,
       chantier: creerDevisChantier || undefined,
-      systeme: [...nomsSystemesDevis].join(' + ') || undefined,
+      systeme: [...systemesDuDevis.keys()].join(' + ') || undefined,
       notes: creerDevisNotes || result?.notes || undefined,
       /* LE TRANSPORT SUIT LE DEVIS.
        *
@@ -5813,6 +5815,14 @@ const [contratOdoo, setContratOdoo] = useState<
     const nb = aEcrire.size;
     toast.success(`Devis ${creerDevisNumero} créé`,
       nb ? { description: `${nb} article(s) Odoo repris au catalogue.` } : undefined);
+    if (systemesDuDevis.size) {
+      joindreFichesRecap(nouveauDevis.id, [...systemesDuDevis.values()], systemesFiches)
+        .then(({ joints, absentes }) => {
+          if (joints.length) toast.success(`Fiche récap jointe au devis : ${joints.join(', ')}`);
+          if (absentes.length) toast.warning(`Aucune fiche récap trouvée pour : ${absentes.join(', ')}`);
+        })
+        .catch((e: Error) => toast.error(`Fiche récap non jointe : ${e.message}`));
+    }
     if (teintesTier2.size) {
       toast.info('Teinte en Tier 2', { description: [...teintesTier2].join(' · '), duration: 15000 });
     }

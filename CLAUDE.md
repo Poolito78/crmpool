@@ -172,6 +172,7 @@ explication.
 `odooAchat` (devis fournisseur : article Odoo retrouvé par code, en LECTURE seule — rien n'est jamais écrit dans Odoo ; un article absent se crée dans MonCRM, code et intitulé saisis) ·
 `kitFournisseur` (devis reçu : ligne chiffrée + lignes sans prix = un kit, quantités ramenées à UN kit, code de tête générique, coût porté par la 1re ligne de composant) ·
 `nuancierFlowcrete` (teintes par tier et par gamme : Tier 1 disponible, Tier 2 10 à 15 j ouvrés) ·
+`recapSysteme` (fiche récap copiée dans les fichiers du devis : devis modèle, sinon table `systemes`) ·
 `concurrents` · `ralColors`
 
 ## Supabase
