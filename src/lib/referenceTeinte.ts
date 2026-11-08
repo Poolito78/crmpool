@@ -24,6 +24,7 @@
  */
 
 import type { LigneDevis, Produit, VarianteDimension } from './store';
+import { codeDeTeinte, delaiDeTeinte, libelleNuancier, teinteParRal, type DelaiTeinte } from './nuancierFlowcrete';
 
 /** Une dimension de teinte : nommée comme telle. */
 const NOM_TEINTE = /teinte|couleur|coloris|\bral\b/i;
@@ -45,6 +46,44 @@ export function teinteDeReference(ref: string | undefined | null): string | null
 /** La dimension de teinte de l'article, s'il en a une. */
 export function dimensionTeinte(produit: Pick<Produit, 'variantes'> | undefined): VarianteDimension | undefined {
   return (produit?.variantes || []).find(d => NOM_TEINTE.test(d.nom || ''));
+}
+
+/** Les RAL distincts qu'un texte nomme, dans l'ordre : « EPW ral 5015 » → ['5015']. */
+export function ralsNommes(texte: string | undefined | null): string[] {
+  return [...new Set([...String(texte || '').matchAll(/\bRAL\s*[:.]?\s*(\d{4})\b/gi)].map(m => m[1]))];
+}
+
+export interface TeinteDemandee {
+  /** La dimension de teinte de l'article : clé de `variantesChoisies`. */
+  dimensionId: string;
+  valeur: string;
+  /** Faux : le RAL n'est ni sur la fiche ni au nuancier de sa gamme, à vérifier. */
+  auNuancier: boolean;
+  /** Tier et délai, quand la gamme a un nuancier. */
+  delai?: DelaiTeinte;
+}
+
+/**
+ * LA TEINTE QUE LA DEMANDE NOMME, SUR CET ARTICLE.
+ *
+ * Sans elle, la ligne s'affichait dans la première teinte du nuancier : le
+ * client demandait du RAL 5015, le devis DEV-2026-180 annonçait du RAL 7035.
+ * L'option du même RAL est préférée, puis le nuancier de la gamme (une fiche
+ * écrit « 217 (Silk Grey) », sans son RAL 7044). Un RAL absent des deux reste
+ * écrit tel quel, jamais remplacé par une teinte voisine (5017 n'est pas 5015).
+ */
+export function teinteDemandee(
+  produit: (Pick<Produit, 'variantes'> & Partial<Pick<Produit, 'reference' | 'description'>>) | undefined,
+  ral: string | undefined,
+): TeinteDemandee | undefined {
+  const dim = dimensionTeinte(produit);
+  if (!dim || !ral) return undefined;
+  const nuancier = teinteParRal(produit, ral);
+  const option = dim.options.find(o => ralDeLibelle(o.label) === ral)
+    ?? (nuancier && dim.options.find(o => codeDeTeinte(o.label) === nuancier.code));
+  const valeur = option?.label ?? (nuancier ? libelleNuancier(nuancier) : `RAL ${ral}`);
+  const delai = delaiDeTeinte(produit, valeur);
+  return { dimensionId: dim.id, valeur, auNuancier: !!(option || nuancier), ...(delai ? { delai } : {}) };
 }
 
 export interface ReferenceTeinte {

@@ -241,6 +241,21 @@ describe('composants vendus au m² et tranches de surface', () => {
   });
 });
 
+describe('la fiche récap suit le champ Système du devis', () => {
+  const EPW = { id: 's-epw', nom: 'Flowseal EPW', support: 'tous', actif: true, composants: [], ficheUrl: 'https://x/fs.pdf', recapUrl: 'https://x/recap.pdf' } as Systeme;
+
+  it('« Flowseal EPW Mat » amène la fiche et la récap de « Flowseal EPW »', () => {
+    expect(systemeEstObjet(EPW, ['Flowseal EPW Mat'])).toBe(true);
+    const liens = liensFichesSystemes([EPW], [], ['Flowseal EPW Mat']);
+    expect(liens.map(l => l.url)).toEqual(['https://x/fs.pdf', 'https://x/recap.pdf']);
+    expect(estLienRecap(liens[1].id)).toBe(true);
+  });
+
+  it('plusieurs systèmes au devis : chacun amène ses fiches', () => {
+    expect(systemeEstObjet(EPW, ['Flowfast 319 + Flowseal EPW'])).toBe(true);
+  });
+});
+
 describe('fiches des systèmes', () => {
   const avecFiche: Systeme = {
     ...FLOWFAST, ficheUrl: 'https://ex/fs319.pdf', ficheLabel: 'Flowfast 319 Route',

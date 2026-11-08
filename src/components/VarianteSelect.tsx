@@ -11,6 +11,8 @@ interface Props {
   className?: string;
   /** Texte affiché tant que `value` ne désigne aucune option. Sans lui, la première option s'affiche. */
   vide?: string;
+  /** Précision affichée à droite d'une option de liste (délai d'une teinte). */
+  info?: (label: string) => string | undefined;
 }
 
 function SwatchPreview({ opt, size = 'sm' }: { opt: VarianteOption; size?: 'sm' | 'lg' }) {
@@ -69,7 +71,7 @@ function RalBadge({ label, selected }: { label: string; selected?: boolean }) {
   );
 }
 
-export default function VarianteSelect({ dimension, value, onChange, className, vide }: Props) {
+export default function VarianteSelect({ dimension, value, onChange, className, vide, info }: Props) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState<VarianteOption | null>(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
@@ -84,11 +86,12 @@ export default function VarianteSelect({ dimension, value, onChange, className, 
 
   /* Avec `vide`, rien de choisi ne s'affiche pas comme la première option : une teinte
      présentée sans avoir été choisie passerait pour un choix. */
-  const selectedOpt = dimension.options.find(o => o.label === value) ?? (vide ? undefined : dimension.options[0]);
+  const selectedOpt = dimension.options.find(o => o.label === value) ?? (vide || value ? undefined : dimension.options[0]);
   const hasVisuals = dimension.options.some(o => o.couleur || o.imageUrl);
   const hasRal = !hasVisuals && dimension.options.some(o => getRalInfo(o.label));
   // RAL détecté depuis le label (prioritaire sur imageUrl qui peut être cassée)
-  const selectedRal = !selectedOpt?.couleur ? getRalInfo(selectedOpt?.label || '') : undefined;
+  // Une teinte hors nuancier (« RAL 5015 ») s'affiche telle quelle, pas comme la première option.
+  const selectedRal = !selectedOpt?.couleur ? getRalInfo(selectedOpt?.label || value || '') : undefined;
 
   useEffect(() => {
     if (!open) { setHovered(null); return; } // menu fermé → masque l'aperçu survol
@@ -156,7 +159,7 @@ export default function VarianteSelect({ dimension, value, onChange, className, 
             ? (selectedRal.quartz
                 ? `${selectedRal.quartz} · RAL ${selectedRal.num}`
                 : `RAL ${selectedRal.num}`)
-            : selectedOpt?.label ?? vide ?? '—'}
+            : selectedOpt?.label ?? (value || vide) ?? '—'}
           {!selectedRal && selectedOpt?.prixDiff ? ` (${selectedOpt.prixDiff > 0 ? '+' : ''}${selectedOpt.prixDiff}€)` : ''}
         </span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
@@ -265,6 +268,7 @@ export default function VarianteSelect({ dimension, value, onChange, className, 
                       />
                     )}
                     <span className="flex-1 truncate">{opt.label}</span>
+                    {info?.(opt.label) && <span className="text-[10px] text-muted-foreground ml-auto shrink-0">{info(opt.label)}</span>}
                     {opt.prixDiff ? <span className="text-xs text-muted-foreground ml-auto shrink-0">{opt.prixDiff > 0 ? '+' : ''}{opt.prixDiff}€</span> : ''}
                   </button>
                 );

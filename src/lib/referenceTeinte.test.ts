@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { libelleAvecTeinte, ralDeLibelle, referenceSelonTeinte, teinteDeReference } from './referenceTeinte';
+import { libelleAvecTeinte, ralDeLibelle, ralsNommes, referenceSelonTeinte, teinteDeReference, teinteDemandee } from './referenceTeinte';
 import { buildOdooPayload } from './odooSync';
 import type { Client, Devis, Produit } from './store';
 
@@ -20,6 +20,45 @@ const PIGMENT2KG = {
     ],
   }],
 } as unknown as Produit;
+
+describe('la teinte que la demande nomme', () => {
+  const EPW = {
+    reference: 'FLOWSEALEPWMAT.10,1',
+    description: 'FLOWSEAL EPW MAT (10,1KG)',
+    variantes: [{ id: TEINTE, nom: 'Teinte', options: [
+      { id: 'a', label: '232 (RAL 7035, Light Grey)' },
+      { id: 'b', label: '217 (Silk Grey)' },
+      { id: 'c', label: '466 (RAL 5017, Traffic Blue)' },
+    ] }],
+  } as unknown as Produit;
+
+  it('lit les RAL distincts d’un texte', () => {
+    expect(ralsNommes('125 m² de EPW ral 5015 stp')).toEqual(['5015']);
+    expect(ralsNommes('RAL 7035 et RAL: 7035, puis RAL 5015')).toEqual(['7035', '5015']);
+    expect(ralsNommes('sans teinte')).toEqual([]);
+  });
+
+  it('le RAL 5015 absent de la fiche vient du nuancier, jamais de la première option ni du 5017', () => {
+    expect(teinteDemandee(EPW, '5015')).toEqual({
+      dimensionId: TEINTE, valeur: '479 (RAL 5015, Sky Blue)', auNuancier: true,
+      delai: { tier: 2, delai: '10 à 15 jours ouvrés', minimum: '100 kg' },
+    });
+  });
+
+  it('préfère l’option de la fiche, même écrite sans son RAL', () => {
+    expect(teinteDemandee(EPW, '5017')?.valeur).toBe('466 (RAL 5017, Traffic Blue)');
+    expect(teinteDemandee(EPW, '7044')?.valeur).toBe('217 (Silk Grey)');
+  });
+
+  it('un RAL inconnu de la gamme reste écrit et se signale', () => {
+    expect(teinteDemandee(EPW, '1003')).toEqual({ dimensionId: TEINTE, valeur: 'RAL 1003', auNuancier: false });
+  });
+
+  it('rien sans RAL ni sans dimension de teinte', () => {
+    expect(teinteDemandee(EPW, undefined)).toBeUndefined();
+    expect(teinteDemandee({ variantes: [] } as unknown as Produit, '5015')).toBeUndefined();
+  });
+});
 
 describe('ralDeLibelle / teinteDeReference', () => {
   it('lit le RAL d\'un libellé de teinte', () => {

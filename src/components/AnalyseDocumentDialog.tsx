@@ -77,6 +77,7 @@ import {
   type Systeme, type LigneSysteme, type ZoneSysteme, type LigneChiffreeSysteme,
 } from '@/lib/systemes';
 import { ressembleASysteme } from '@/lib/fichesSysteme';
+import { ralsNommes, teinteDemandee } from '@/lib/referenceTeinte';
 import SystemeIntrouvable from '@/components/SystemeIntrouvable';
 import { fusionnerSystemes, systemesDeDevis } from '@/lib/systemesDevis';
 import {
@@ -5333,11 +5334,27 @@ const [contratOdoo, setContratOdoo] = useState<
       return article.id;
     };
 
+    /* LE SYSTÈME DU DEVIS : le champ « Système » se remplit de ce qui part en
+       système, et c'est lui qui fait cocher la fiche système et la FICHE RÉCAP
+       dans le mail d'envoi (`systemeEstObjet`). */
+    const nomsSystemesDevis = new Set<string>();
+    const teintesHorsNuancier = new Set<string>();
+    const teintesTier2 = new Set<string>();
+    /** Le RAL de la demande : celui de la ligne, sinon l'unique du document. Deux RAL : on ne choisit pas. */
+    const ralDeLigne = (i: number, l: { reference?: string; description?: string }): string | undefined => {
+      const surLaLigne = ralsNommes(texteDemande(l, i));
+      if (surLaLigne.length) return surLaLigne.length === 1 ? surLaLigne[0] : undefined;
+      const duDocument = ralsNommes([texte, analyseTexteRef.current, result?.notes].filter(Boolean).join('\n'));
+      return duDocument.length === 1 ? duDocument[0] : undefined;
+    };
+
     /** Lignes du devis pour une ligne de demande reconnue comme système. */
-    const lignesDuSysteme = (i: number, l: { quantite: number; tva?: number }): LigneDevis[] => {
+    const lignesDuSysteme = (i: number, l: { reference?: string; description?: string; quantite: number; tva?: number }): LigneDevis[] => {
       const sys = systemeDeLigne(i);
       const declinees = lignesSystemeDe(i, l.quantite);
       if (!sys || !declinees.length) return [];
+      nomsSystemesDevis.add(sys.nom);
+      const ral = ralDeLigne(i, l);
       const surface = surfaceDeLigne(i, l.quantite);
 
       /* Un en-tête de groupe porte le nom du système et la surface : sans lui,
@@ -5362,9 +5379,13 @@ const [contratOdoo, setContratOdoo] = useState<
            pas 135 kg. Sans article rattaché, la fiche ne dit pas le contenant :
            la ligne reste en kilogrammes et son prix est à saisir. */
         const quantite = quantiteComposant(i, ls);
+        const teinte = teinteDemandee(p, ral);
+        if (teinte && !teinte.auNuancier && p) teintesHorsNuancier.add(`${teinte.valeur} — ${designationProduit(p)}`);
+        if (teinte?.delai?.tier === 2) teintesTier2.add(`${teinte.valeur} : ${teinte.delai.delai}, minimum ${teinte.delai.minimum}`);
         return {
           id: generateId(),
           produitId: p?.id,
+          ...(teinte ? { variantesChoisies: { [teinte.dimensionId]: teinte.valeur } } : {}),
           description: (p ? designationProduit(p) : '') || ls.composant.libelle,
           quantite,
           /* Des pavés se facturent au m², quoi qu'en dise la fiche Odoo
@@ -5500,6 +5521,7 @@ const [contratOdoo, setContratOdoo] = useState<
     const blocDocument = (): LigneDevis[] => {
       const sys = systemeDuDocument;
       if (!sys || !chiffrageDocument.length) return [];
+      nomsSystemesDevis.add(sys.nom);
       const fr = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
       const entete: LigneDevis = {
         id: generateId(), type: 'groupe',
@@ -5730,6 +5752,7 @@ const [contratOdoo, setContratOdoo] = useState<
       lignes,
       referenceAffaire: creerDevisRefAffaire || undefined,
       chantier: creerDevisChantier || undefined,
+      systeme: [...nomsSystemesDevis].join(' + ') || undefined,
       notes: creerDevisNotes || result?.notes || undefined,
       /* LE TRANSPORT SUIT LE DEVIS.
        *
@@ -5790,6 +5813,14 @@ const [contratOdoo, setContratOdoo] = useState<
     const nb = aEcrire.size;
     toast.success(`Devis ${creerDevisNumero} créé`,
       nb ? { description: `${nb} article(s) Odoo repris au catalogue.` } : undefined);
+    if (teintesTier2.size) {
+      toast.info('Teinte en Tier 2', { description: [...teintesTier2].join(' · '), duration: 15000 });
+    }
+    if (teintesHorsNuancier.size) {
+      toast.warning('Teinte hors nuancier : à vérifier (disponibilité et prix)', {
+        description: [...teintesHorsNuancier].join(' · '), duration: 15000,
+      });
+    }
     onOpenChange(false);
     /* Le devis créé s'ouvre aussitôt : c'est là que le travail continue
        (relecture, envoi, export Odoo). Il fallait sinon aller le chercher dans

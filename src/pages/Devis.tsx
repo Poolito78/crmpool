@@ -8,7 +8,8 @@ import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Building2, MoveHorizontal, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, getOdooPartnerId, setOdooPartnerId, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, type OdooPayload } from '@/lib/odooSync';
-import { teinteDeReference } from '@/lib/referenceTeinte';
+import { dimensionTeinte, teinteDeReference } from '@/lib/referenceTeinte';
+import { delaiDeTeinte } from '@/lib/nuancierFlowcrete';
 import { motsRechercheOdoo, classerClientsOdoo, natureFicheOdoo, type CandidatOdoo } from '@/lib/clientOdoo';
 import { compterBrides } from '@/lib/bridesDevis';
 import { Button } from '@/components/ui/button';
@@ -4913,6 +4914,7 @@ export default function Devis() {
                         <span className={`text-xs truncate block ${aChoisir ? 'text-amber-600' : 'text-muted-foreground'}`}>{dim.nom || 'Variante'}{aChoisir ? ' (à choisir)' : ''}</span>
                         <VarianteSelect
                           dimension={dim}
+                          info={label => { const d = delaiDeTeinte(prod, label); return d ? `Tier ${d.tier} · ${d.delai}` : undefined; }}
                           vide={partagee ? '— à choisir —' : undefined}
                           value={l.variantesChoisies?.[dim.id] || (partagee ? '' : (dim.options[0]?.label ?? ''))}
                           onChange={label => {
@@ -5412,6 +5414,16 @@ ${dosage.source}` : ''}`}>
                                     <Pencil className="w-3 h-3 opacity-50" />
                                   </button>
                                 ))}
+                                {(() => {
+                                  const dimT = dimensionTeinte(prod);
+                                  const d = dimT ? delaiDeTeinte(prod, l.variantesChoisies?.[dimT.id]) : undefined;
+                                  if (!d) return null;
+                                  return (
+                                    <span className={d.tier === 2 ? 'text-amber-600' : 'text-muted-foreground'}>
+                                      Tier {d.tier} : {d.delai}{d.tier === 2 ? ` (minimum ${d.minimum})` : ''}
+                                    </span>
+                                  );
+                                })()}
                                 {/* Le calcul du catalyseur, en clair — et ce qu'il n'a pas su compter. */}
                                 {estCata && tempCata == null && (
                                   <span className="text-amber-600">Catalyse à {tempSaisie} °C : sous 0 °C, hors du tableau ISOFLOOR — quantité à vérifier</span>

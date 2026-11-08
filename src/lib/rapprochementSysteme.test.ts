@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rapprocherSysteme, systemeImpose, composantDemande, precisionDemande, lineaireDeDemande, surfaceDepuisLineaire, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte, zoneDeDemande, surfaceFleche, surfacePictogramme,
+  rapprocherSysteme, nomsCandidats, systemeImpose, composantDemande, precisionDemande, lineaireDeDemande, surfaceDepuisLineaire, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte, zoneDeDemande, surfaceFleche, surfacePictogramme,
 } from './rapprochementSysteme';
 import { declinerSysteme, type Systeme, type SystemeComposant } from './systemes';
 
@@ -56,6 +56,34 @@ describe('lecture des nombres dans une demande', () => {
 
   it("ne prend pas une épaisseur pour une surface", () => {
     expect(surfaceDansTexte('SYSTEME FLOWSHIELD COMFORT 3MM')).toBeUndefined();
+  });
+});
+
+describe('un système désigné par son seul sigle', () => {
+  const EPW = systeme('Flowseal EPW', '2 couches');
+  const MAT = systeme('Flowseal EPW Mat', '');
+  const BRILLANT = systeme('Flowseal EPW Brillant', '');
+  const AVEC_EPW = [...CATALOGUE, EPW, MAT, BRILLANT, systeme('ISOMARK DIAMANT', 'Kit')];
+
+  it('reconnaît « EPW » sans la gamme et laisse choisir la finition', () => {
+    const texte = 'peux tu me faire un devis pour 125 m² de EPW ral 5015';
+    expect(nomsCandidats(texte, AVEC_EPW)).toEqual(['Flowseal EPW', 'Flowseal EPW Mat', 'Flowseal EPW Brillant']);
+    expect(rapprocherSysteme(texte, AVEC_EPW)?.retenu).toBe(EPW);
+    expect(rapprocherSysteme(texte, AVEC_EPW)?.surfaceM2).toBe(125);
+  });
+
+  it('la finition écrite désigne le système', () => {
+    expect(nomsCandidats('EPW mat 125 m²', AVEC_EPW)).toEqual(['Flowseal EPW Mat']);
+    expect(nomsCandidats('EPW brillant', AVEC_EPW)).toEqual(['Flowseal EPW Brillant']);
+  });
+
+  it('le nom complet garde la priorité', () => {
+    expect(nomsCandidats('Flowseal EPW Mat 30 m²', AVEC_EPW)[0]).toBe('Flowseal EPW Mat');
+  });
+
+  it('un mot ordinaire n’est pas un sigle', () => {
+    expect(nomsCandidats('dalle en concrete', [...AVEC_EPW, systeme('Flowfast 319 Concrete', '')])).toEqual([]);
+    expect(nomsCandidats('un diamant', AVEC_EPW)).toEqual([]);
   });
 });
 
