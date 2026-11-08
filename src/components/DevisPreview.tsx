@@ -10,7 +10,7 @@ import { useIdentiteDocument } from '@/hooks/useSocietes';
 import { imageEnDataUrl } from '@/lib/societes';
 import { savePdfFromElement, getStoredDirHandle, writeFileToFolder, generatePdfFromElement, storeDirHandle } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
-import { genererScriptOdoo, promptOdooPartnerName, coutChantierLigne, coutChantier } from '@/lib/odooSync';
+import { coutChantierLigne, coutChantier } from '@/lib/odooSync';
 import { getRalInfo } from '@/lib/ralColors';
 import { supabase } from '@/integrations/supabase/client';
 import { articlesLiesDuDevis } from '@/lib/liensProduit';
@@ -144,6 +144,8 @@ interface Props {
   client?: Client;
   produits?: Produit[];
   onEdit?: () => void;
+  /** Crée le devis dans Odoo, par le même envoi que le menu du devis. Absent : pas de bouton. */
+  onOdoo?: () => void;
   hideControls?: boolean;
   initialShowConso?: boolean;
   initialShowRemise?: boolean;
@@ -173,7 +175,7 @@ export function parseImgPct(v: unknown): number {
   const n = parseFloat(String(v)); return isNaN(n) ? 100 : n;
 }
 
-export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, initialShowCoutLigne = false, initialShowCoutGroupe = false, initialShowLiens = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange, onUniteSurfaceChange, onImageTailleChange }: Props) {
+export default function DevisPreview({ devis, client, produits = [], onEdit, onOdoo, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, initialShowCoutLigne = false, initialShowCoutGroupe = false, initialShowLiens = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange, onUniteSurfaceChange, onImageTailleChange }: Props) {
   /** Société et marque du devis : logo, coordonnées et pied de page. */
   const identite = useIdentiteDocument(devis);
   const [showConso, setShowConso] = useState(initialShowConso);
@@ -713,38 +715,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <Pencil className="w-3.5 h-3.5 mr-1.5" /> Modifier
               </Button>
             )}
-            {client && (
-              <Button
-                variant="outline"
-                size="sm"
-                title="Générer le script Odoo et le copier dans le presse-papier"
-                onClick={async () => {
-                  try {
-                    const defaultName = client.societe || client.nom;
-                    const odooNom = promptOdooPartnerName(devis.clientId, defaultName);
-                    if (odooNom === null) return; // annulé
-                    const contact = devis.contactId
-                      ? client.contacts?.find(c => c.id === devis.contactId)
-                      : undefined;
-                    const contactNom = contact
-                      ? [contact.prenom, contact.nom].filter(Boolean).join(' ')
-                      : undefined;
-                    const script = genererScriptOdoo(devis, client, produits, {
-                      surface: surfaceGlobale || devis.surfaceGlobaleM2 || 0,
-                      contactNom,
-                      odooPartnerName: odooNom,
-                    });
-                    await navigator.clipboard.writeText(script);
-                    toast.success('Script Odoo copié !', {
-                      description: 'Ouvre Odoo → F12 → Console → Ctrl+V → Ctrl+Entrée',
-                      duration: 6000,
-                    });
-                  } catch (err) {
-                    toast.error('Erreur lors de la génération du script');
-                    console.error(err);
-                  }
-                }}
-              >
+            {onOdoo && (
+              <Button variant="outline" size="sm" title="Créer le devis dans Odoo" onClick={onOdoo}>
                 <Send className="w-3.5 h-3.5 mr-1.5" /> Odoo
               </Button>
             )}
