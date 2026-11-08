@@ -31,10 +31,13 @@ const ISOMARK_H1: Tranche[] = [
   { jusqua: null, prix: 235 },
 ];
 
-/** ISOFLOOR. Au-delà de deux tonnes, c'est le franco qui s'applique. */
+/**
+ * ISOFLOOR. Au-delà de deux tonnes, c'est le franco qui s'applique.
+ * 26-100 kg : prix de PORTSH100 chez Odoo, constaté le 08/11/2026 (85 € avant).
+ */
 const ISOFLOOR: Tranche[] = [
   { jusqua: 25, prix: 49 },
-  { jusqua: 100, prix: 85 },
+  { jusqua: 100, prix: 87 },
   { jusqua: 700, prix: 178 },
   { jusqua: null, prix: 230 },
 ];

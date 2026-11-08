@@ -54,7 +54,7 @@ describe('port ISOFLOOR', () => {
        avec ISOMARK. */
     const cher = portIsofloor([ligne('Résine (20 kg)', 5, 5000)]);
     expect(cher.offert).toBe(false);
-    expect(cher.montant).toBe(85);
+    expect(cher.montant).toBe(87);
 
     /* Deux tonnes : offert, même pour une somme modeste. */
     const lourd = portIsofloor([ligne('Résine (20 kg)', 100, 300)]);
