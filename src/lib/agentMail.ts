@@ -278,14 +278,48 @@ const sansAccent = (s: string): string =>
  * le client et le corps le chantier.
  */
 export const motsCherches = (saisie: string): string[] =>
-  sansAccent(saisie).split(/\s+/).filter(Boolean);
+  sansAccent(saisie).split(/[^a-z0-9]+/).filter(Boolean);
 
-/** Tout ce qu'une carte de mail montre ou contient, prêt à être comparé. */
-export const texteCherchable = (parties: (string | null | undefined)[]): string =>
-  sansAccent(parties.filter(Boolean).join('\n'));
+/** Les mots distincts de tout ce qu'une carte de mail montre ou contient. */
+export const texteCherchable = (parties: (string | null | undefined)[]): string[] =>
+  [...new Set(sansAccent(parties.filter(Boolean).join('\n')).split(/[^a-z0-9]+/).filter(Boolean))];
 
-export const contientTousLesMots = (texte: string, mots: string[]): boolean =>
-  mots.every(m => texte.includes(m));
+/**
+ * Un mot se compare au DÉBUT des mots du mail, jamais à leur milieu : « top »
+ * trouvait « Christophe », et tous ses mails sortaient pour TOP SIGNALISATION.
+ * Deux exceptions : un code se cherche partout (« 040974 » dans AF040974), et un
+ * mot du mail peut abréger celui qu'on cherche (« TOP SIGNA » pour « top
+ * signalisation », quatre lettres au moins).
+ */
+function motTrouve(motsDuMail: string[], m: string): boolean {
+  const estUnCode = /\d/.test(m);
+  return motsDuMail.some(t => (estUnCode ? t.includes(m) : t.startsWith(m) || (t.length >= 4 && m.startsWith(t))));
+}
+
+/** Deux mots cherchés peuvent être collés dans le mail : contact@topsignalisation.fr. */
+export function contientTousLesMots(motsDuMail: string[], mots: string[]): boolean {
+  /* Pas d'abréviation ici : « blondel lille » collés commencent par « blondel ». */
+  const colle = (i: number) => i >= 0 && i + 1 < mots.length && motsDuMail.some(t => t.startsWith(mots[i] + mots[i + 1]));
+  return mots.every((m, i) => motTrouve(motsDuMail, m) || colle(i) || colle(i - 1));
+}
+
+export interface OptionFiltre { cle: string; label: string; nombre: number }
+
+/** « Méaulte » et « MEAULTE » sont le même chantier : une seule entrée dans la liste. */
+export const cleDeFiltre = (v?: string): string => sansAccent(v ?? '').trim();
+
+/** Les entrées d'une liste déroulante (client, chantier…), une valeur absente n'en donne pas. */
+export function optionsDeFiltre(valeurs: (string | undefined)[]): OptionFiltre[] {
+  const parCle = new Map<string, OptionFiltre>();
+  for (const v of valeurs) {
+    const cle = cleDeFiltre(v);
+    if (!cle) continue;
+    const o = parCle.get(cle);
+    if (o) o.nombre++;
+    else parCle.set(cle, { cle, label: v!.trim(), nombre: 1 });
+  }
+  return [...parCle.values()].sort((a, b) => a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' }));
+}
 
 export interface ClientDuMail<C> {
   client?: C;

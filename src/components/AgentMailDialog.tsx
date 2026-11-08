@@ -36,6 +36,10 @@
  * devis). Chercher, c'est chercher partout : un mot tapé fait tomber le filtre
  * « Autre », les groupes repliés et le volet « Déjà réalisés ». Elle ne porte
  * que sur les mails chargés dans la fenêtre, jamais sur la boîte Outlook entière.
+ * Les pastilles de catégorie et les listes (client, chantier, expéditeur) se
+ * combinent aux mots ; le nombre affiché sur chaque choix tient compte des autres
+ * filtres. Le client d'une liste est la fiche retrouvée par l'adresse, à défaut
+ * la société que le mail annonce.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -48,6 +52,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useCRM } from '@/lib/StoreContext';
 import { numerosOdooCites, ouvrirDansOdoo, LIBELLE_MODELE } from '@/lib/numerosOdoo';
@@ -61,8 +66,8 @@ import {
   idFichier, lancerMacroOutlook, lienOutlook, lireIndexOutlook, lireMailFichier, nomDossierMails, rangerTraite,
 } from '@/lib/dossierMails';
 import {
-  type MailAgent, type TriMail, CATEGORIE_MAIL, clientDuMail, contientTousLesMots, estFichierMail, invitationTri, lireTri,
-  motsCherches, numerosDevisCites, texteCherchable, triSansModele,
+  type MailAgent, type TriMail, CATEGORIE_MAIL, cleDeFiltre, clientDuMail, contientTousLesMots, estFichierMail, invitationTri, lireTri,
+  motsCherches, numerosDevisCites, optionsDeFiltre, texteCherchable, triSansModele,
 } from '@/lib/agentMail';
 import {
   type AdressesMail, type DevisOdooLu, type ReponseDevisOdoo, ETAT_DEVIS_ODOO, adressesDuMail, lireDevisOdoo, rapprocherMail,
@@ -143,6 +148,17 @@ const RANG = { demande_devis: 0, suite_devis: 1, commande: 2, autre: 3 } as cons
 /* Les catégories repliées. La liste est triée par rang : un groupe se suit. */
 const CLE_GROUPES_REPLIES = 'agent_mail_groupes_replies';
 const groupeDe = (t?: TriMail) => t?.categorie ?? 'non_trie';
+const NON_TRIE = { label: 'Non trié', couleur: 'bg-muted text-muted-foreground' };
+const FILTRES_CATEGORIE: Record<string, { label: string; couleur: string }> = { ...CATEGORIE_MAIL, non_trie: NON_TRIE };
+
+/* Les listes déroulantes. Radix refuse une valeur vide : « Tous » a la sienne. */
+type Critere = 'client' | 'chantier' | 'expediteur';
+const CRITERES: { cle: Critere; label: string }[] = [
+  { cle: 'client', label: 'Client' },
+  { cle: 'chantier', label: 'Chantier' },
+  { cle: 'expediteur', label: 'Expéditeur' },
+];
+const TOUS = '__tous';
 function lireGroupesReplies(): Set<string> {
   try { return new Set(JSON.parse(localStorage.getItem(CLE_GROUPES_REPLIES) || '[]')); } catch { return new Set(); }
 }
@@ -173,6 +189,10 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   const [voirRealises, setVoirRealises] = useState(false);
   /** Les mots tapés dans la recherche de la liste (`recherche`, c'est la macro Outlook). */
   const [filtre, setFiltre] = useState('');
+  /** La catégorie retenue par les pastilles (`groupeDe`), `null` = toutes. */
+  const [filtreCategorie, setFiltreCategorie] = useState<string | null>(null);
+  /** Le choix de chaque liste, par `cleDeFiltre` ; absent = tous. */
+  const [selection, setSelection] = useState<Partial<Record<Critere, string>>>({});
   const [groupesReplies, setGroupesReplies] = useState(lireGroupesReplies);
   const [odoo, setOdoo] = useState<ReponseDevisOdoo | undefined>(memoire.odoo);
   const [erreurOdoo, setErreurOdoo] = useState('');
@@ -367,6 +387,8 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   useEffect(() => {
     if (!open) return;
     setFiltre('');
+    setFiltreCategorie(null);
+    setSelection({});
     lireTransferts();
     nomDossierMails().then(setNomDossier);
     const premiere = !memoire.accesDemande;
@@ -552,6 +574,11 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     return {
       ...l,
       odoo: rapproche,
+      valeurs: {
+        client: l.cl.client ? l.cl.client.societe || l.cl.client.nom : l.t?.societe,
+        chantier: l.t?.chantier,
+        expediteur: l.m.deNom || l.m.deEmail,
+      } as Record<Critere, string | undefined>,
       /* Calculé une fois par mail, pas à chaque frappe : le corps porte tout le fil. */
       cherchable: texteCherchable([
         l.m.sujet, l.m.deNom, l.m.deEmail, l.m.corps, ...l.m.piecesJointes,
@@ -565,8 +592,35 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   }), [lignesBrutes, odoo, pasCeDevis]);
 
   const mots = useMemo(() => motsCherches(filtre), [filtre]);
-  const enRecherche = mots.length > 0;
-  const trouves = enRecherche ? lignes.filter(l => contientTousLesMots(l.cherchable, mots)) : lignes;
+  const filtresActifs = filtreCategorie !== null || Object.keys(selection).length > 0;
+  const enRecherche = mots.length > 0 || filtresActifs;
+  const parMots = mots.length ? lignes.filter(l => contientTousLesMots(l.cherchable, mots)) : lignes;
+  const dansLaCategorie = (l: (typeof lignes)[number]) => !filtreCategorie || groupeDe(l.t) === filtreCategorie;
+  const passeLesListes = (l: (typeof lignes)[number], sauf?: Critere) =>
+    CRITERES.every(({ cle }) => cle === sauf || !selection[cle] || cleDeFiltre(l.valeurs[cle]) === selection[cle]);
+  const retenus = parMots.filter(l => passeLesListes(l));
+  const trouves = retenus.filter(dansLaCategorie);
+  const nombreDeCategorie = (c: string) => retenus.filter(l => groupeDe(l.t) === c).length;
+
+  /** Les choix d'une liste selon les AUTRES filtres ; le choix en cours y reste, même à 0. */
+  const optionsDe = (critere: Critere) => {
+    const options = optionsDeFiltre(parMots.filter(l => dansLaCategorie(l) && passeLesListes(l, critere)).map(l => l.valeurs[critere]));
+    const choisi = selection[critere];
+    if (choisi && !options.some(o => o.cle === choisi)) {
+      const label = lignes.find(l => cleDeFiltre(l.valeurs[critere]) === choisi)?.valeurs[critere];
+      if (label) options.unshift({ cle: choisi, label: label.trim(), nombre: 0 });
+    }
+    return options;
+  };
+
+  const choisir = (critere: Critere, valeur: string) => setSelection(s => {
+    const suivant = { ...s };
+    if (valeur === TOUS) delete suivant[critere];
+    else suivant[critere] = valeur;
+    return suivant;
+  });
+
+  const effacerFiltres = () => { setFiltre(''); setFiltreCategorie(null); setSelection({}); };
 
   const realises = trouves.filter(l => l.odoo?.certitude === 'sur');
   const aFaire = trouves.filter(l => l.odoo?.certitude !== 'sur');
@@ -784,6 +838,43 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
           )}
         </div>
 
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrer par catégorie">
+          <button type="button" aria-pressed={filtreCategorie === null}
+            className={cn('rounded-full border px-2.5 py-1 text-xs font-medium', filtreCategorie === null ? 'border-primary bg-primary text-primary-foreground' : 'border-border text-muted-foreground hover:text-foreground')}
+            onClick={() => setFiltreCategorie(null)}>
+            Toutes · {retenus.length}
+          </button>
+          {Object.entries(FILTRES_CATEGORIE).map(([cle, { label, couleur }]) => {
+            const nombre = nombreDeCategorie(cle);
+            const actif = filtreCategorie === cle;
+            if (cle === 'non_trie' && !nombre && !actif) return null;
+            return (
+              <button key={cle} type="button" aria-pressed={actif}
+                className={cn('rounded-full border px-2.5 py-1 text-xs font-medium', actif ? cn('border-current', couleur) : 'border-border text-muted-foreground hover:text-foreground')}
+                onClick={() => setFiltreCategorie(actif ? null : cle)}>
+                {label} · {nombre}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-3">
+          {CRITERES.map(({ cle, label }) => {
+            const options = optionsDe(cle);
+            return (
+              <Select key={cle} value={selection[cle] ?? TOUS} onValueChange={v => choisir(cle, v)}>
+                <SelectTrigger className={cn('h-8 min-w-0 text-xs', selection[cle] && 'border-primary text-primary')} aria-label={`Filtrer par ${label.toLowerCase()}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem value={TOUS} className="text-xs">{label} : tous ({options.length})</SelectItem>
+                  {options.map(o => <SelectItem key={o.cle} value={o.cle} className="text-xs">{o.label} · {o.nombre}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            );
+          })}
+        </div>
+
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {lecture ? (
             <span className="inline-flex items-center gap-1.5"><Loader2 className="w-3.5 h-3.5 animate-spin" />Lecture des mails…</span>
@@ -797,6 +888,11 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
             </span>
           )}
           {triEnCours && <span className="inline-flex items-center gap-1.5"><Sparkles className="w-3.5 h-3.5 animate-pulse" />tri en cours…</span>}
+          {enRecherche && (
+            <Button variant="ghost" size="sm" className="ml-auto h-7 text-xs" onClick={effacerFiltres}>
+              <X className="w-3.5 h-3.5 mr-1" />Effacer les filtres
+            </Button>
+          )}
           {!enRecherche && aFaire.length > utiles.length && (
             <Button variant="ghost" size="sm" className="ml-auto h-7 text-xs" onClick={() => setToutVoir(v => !v)}>
               {toutVoir ? 'Masquer les autres' : `Tout voir (${aFaire.length - utiles.length} autres)`}
@@ -809,8 +905,10 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
             <p className="py-6 text-center text-sm text-muted-foreground">
               {enRecherche
                 ? realises.length
-                  ? `Rien à traiter pour « ${filtre.trim()} » : voir « Déjà réalisés » ci-dessous.`
-                  : `Aucun mail ne contient « ${filtre.trim()} ».`
+                  ? 'Rien à traiter ici : voir « Déjà réalisés » ci-dessous.'
+                  : mots.length
+                    ? `Aucun mail ne contient « ${filtre.trim()} »${filtresActifs ? ' avec ces filtres' : ''}.`
+                    : 'Aucun mail pour ces filtres.'
                 : lignes.length
                 ? 'Aucune demande parmi ces mails.'
                 : dossierMailsDisponible() && !dossierOuvert

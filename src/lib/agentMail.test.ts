@@ -3,7 +3,7 @@ import {
   corpsUtile, lireTri, clientDuMail, numerosDevisCites, invitationTri,
   enteteEml, decoderMotsEncodes, dateDuNom, estFichierMail, pieceJointeUtile,
   mailTransfere, dateEnFrancais, emlSynthetique, corpsEtFil,
-  triSansModele, motsCherches, texteCherchable, contientTousLesMots,
+  triSansModele, motsCherches, texteCherchable, contientTousLesMots, optionsDeFiltre, cleDeFiltre,
 } from './agentMail';
 import { decouperFil, coupeSignatures } from './chiffrage';
 
@@ -21,8 +21,40 @@ describe('recherche dans la liste', () => {
   it('trouve un morceau de numéro de devis', () => {
     expect(contientTousLesMots(texte, motsCherches('2026-165'))).toBe(true);
   });
+  it('ne trouve pas un mot au milieu d\'un autre : « top » n\'est pas Christophe', () => {
+    const mail = texteCherchable(['VECTEUR du 28/10', 'Christophe VERNOCHET', 'marchés de signalisation']);
+    expect(contientTousLesMots(mail, motsCherches('top signalisation'))).toBe(false);
+  });
+  it('accepte l\'abréviation écrite dans le mail : TOP SIGNA', () => {
+    const mail = texteCherchable(['AF040974 TOP SIGNA']);
+    expect(contientTousLesMots(mail, motsCherches('top signalisation'))).toBe(true);
+    expect(contientTousLesMots(mail, motsCherches('040974'))).toBe(true);
+  });
+  it('trouve le début d\'un mot', () => {
+    expect(contientTousLesMots(texteCherchable(['Top Signalisation']), motsCherches('signal'))).toBe(true);
+  });
+  it('trouve deux mots collés dans une adresse', () => {
+    const mail = texteCherchable(['contact@topsignalisation.fr']);
+    expect(contientTousLesMots(mail, motsCherches('top signalisation'))).toBe(true);
+    expect(contientTousLesMots(mail, motsCherches('top lille'))).toBe(false);
+  });
   it('une saisie blanche ne donne aucun mot', () => {
     expect(motsCherches('   ')).toEqual([]);
+  });
+});
+
+describe('listes de filtres', () => {
+  it('regroupe une même valeur écrite autrement, et compte', () => {
+    expect(optionsDeFiltre(['Méaulte', ' MEAULTE ', 'Lille'])).toEqual([
+      { cle: 'lille', label: 'Lille', nombre: 1 },
+      { cle: 'meaulte', label: 'Méaulte', nombre: 2 },
+    ]);
+  });
+  it('une valeur absente ou blanche ne donne pas d\'entrée', () => {
+    expect(optionsDeFiltre([undefined, '', '  '])).toEqual([]);
+  });
+  it('la clé d\'une ligne est celle de son option', () => {
+    expect(cleDeFiltre('  Méaulte')).toBe(optionsDeFiltre(['Méaulte'])[0].cle);
   });
 });
 

@@ -169,6 +169,26 @@ describe('AgentMailDialog — recherche par mots', () => {
     expect(screen.queryByText('Demande ancienne')).toBeNull();
   });
 
+  it('filtre par catégorie, avec les mots, et le nombre suit la saisie', async () => {
+    await chargerLesMails();
+    const pastille = (nom: RegExp) => within(screen.getByRole('group', { name: 'Filtrer par catégorie' })).getByRole('button', { name: nom });
+
+    expect(pastille(/^Demande de devis/).textContent).toContain('3');
+    fireEvent.click(pastille(/^Suite de devis/));
+    expect(screen.getByText('Suite récente')).toBeTruthy();
+    expect(screen.getByText('Suite ancienne')).toBeTruthy();
+    expect(screen.queryByText('Demande récente')).toBeNull();
+
+    chercher('ancienne');
+    expect(pastille(/^Demande de devis/).textContent).toContain('1');
+    expect(screen.getByText('Suite ancienne')).toBeTruthy();
+    expect(screen.queryByText('Suite récente')).toBeNull();
+    expect(screen.queryByText('Demande ancienne')).toBeNull();
+
+    fireEvent.click(pastille(/^Suite de devis/));
+    expect(screen.getByText('Demande ancienne')).toBeTruthy();
+  });
+
   it('dit quand rien ne correspond', async () => {
     await chargerLesMails();
     chercher('introuvable');
