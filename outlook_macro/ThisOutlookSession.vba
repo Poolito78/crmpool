@@ -13,8 +13,9 @@
 '  - A l'arrivee d'un mail dans la boite de reception : export immediat.
 '  - Mail repondu : range tout de suite. Mail envoye, recu ou retire de la
 '    boite : nouveau passage complet, au plus toutes les 10 minutes.
-'  - Bouton "Rechercher dans Outlook" de l'Agent mail : LancerAgentMail,
-'    appelee via le lien moncrm-agent: (lien-outlook.reg).
+'  - Bouton "Rechercher dans Outlook" de l'Agent mail : le lien moncrm-agent:
+'    (lien-outlook.reg) lance une recherche Outlook invisible, dont la fin
+'    declenche LancerAgentMail (Application_AdvancedSearchComplete).
 '  MonCRM relit le dossier toutes les minutes tant que l'Agent mail est
 '  ouvert, et quand on revient sur son onglet.
 '
@@ -33,10 +34,15 @@ Private Sub Application_Startup()
     ExporterMailsAgent True
 End Sub
 
-' Appelee de l'exterieur par MonCRM : seules les Sub publiques de
-' ThisOutlookSession sont joignables, pas celles d'un module. Le fichier ecrit
-' a la fin est l'accuse de reception que l'Agent mail attend (meme dossier que
-' DossierMailsCRM, prive au module).
+' Le lien moncrm-agent: lance une recherche portant ce tag : sa fin est le signal.
+' (Outlook refuse qu'on appelle une macro de l'exterieur : "Nom inconnu".)
+Private Sub Application_AdvancedSearchComplete(ByVal SearchObject As Search)
+    On Error Resume Next
+    If SearchObject.Tag = "MonCRM-Recherche" Then LancerAgentMail
+End Sub
+
+' Le fichier ecrit a la fin est l'accuse de reception que l'Agent mail attend
+' (meme dossier que DossierMailsCRM, prive au module).
 Public Sub LancerAgentMail()
     Dim f As Integer
     On Error Resume Next

@@ -18,8 +18,10 @@
  * Microsoft 365 (`microsoftGraph.ts`) sait le marquer lu.
  *
  * Une page web ne peut pas exécuter une macro : `lancerMacroOutlook` suit le
- * lien `moncrm-agent:` (`outlook_macro/lien-outlook.reg`), qui demande à
- * l'Outlook ouvert de lancer `LancerAgentMail`. Un lien mort ne lève aucune
+ * lien `moncrm-agent:` (`outlook_macro/lien-outlook.reg`), qui lance dans
+ * l'Outlook ouvert une recherche invisible dont la fin déclenche
+ * `LancerAgentMail` : Outlook refuse qu'on appelle une macro de l'extérieur
+ * (« Nom inconnu », mesuré le 08/11/2026). Un lien mort ne lève aucune
  * erreur : c'est `dernier-passage.txt`, écrit par la macro, qui prouve qu'elle
  * a tourné (`dernierPassage`).
  *
