@@ -173,6 +173,8 @@ explication.
 `kitFournisseur` (devis reçu : ligne chiffrée + lignes sans prix = un kit, quantités ramenées à UN kit, code de tête générique, coût porté par la 1re ligne de composant) ·
 `nuancierFlowcrete` (teintes par tier et par gamme : Tier 1 disponible, Tier 2 10 à 15 j ouvrés) ·
 `recapSysteme` (fiche récap copiée dans les fichiers du devis : devis modèle, sinon table `systemes`) ·
+`demandeTeintes` (dictée/email du devis : tableau de surfaces par couleur lu sans IA → zones en m², un pigment par teinte à la dose du devis modèle, règle par teinte lue dans les devis réalisés ; ml sans largeur et pictos = « à préciser », jamais supposés) ·
+`claudeIA` (bouton « Claude » : la même lecture confiée à Claude à la demande, fonction `claude`, secret `ANTHROPIC_API_KEY` = clé d'API, pas l'abonnement) ·
 `concurrents` · `ralColors`
 
 ## Supabase
@@ -193,7 +195,7 @@ s'exécutent dans un **terminal**, jamais dans l'éditeur SQL.
 **Edge Functions** (`supabase/functions/*`) : déployer avec
 `.\deploy-function.ps1 <nom>` (ou `-All`). Fonctions : `extract-client`,
 `extract-contact`, `analyze-email`, `ai-calculator`, `devis-assistant`,
-`send-devis-email`, `odoo-prix`, `gemini`, `agent-mail-depot`, `odoo-achat`, `odoo-devis-mails`.
+`send-devis-email`, `odoo-prix`, `gemini`, `claude`, `agent-mail-depot`, `odoo-achat`, `odoo-devis-mails`.
 
 **Diagnostic « ça ne persiste pas »** : les `updateXxx` écrivent en
 fire-and-forget. Un upsert qui envoie une colonne inexistante reçoit un 400 et

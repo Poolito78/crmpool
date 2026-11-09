@@ -616,6 +616,37 @@ dans le libellé) et `payload.avertissements` « À vérifier » à l'écran.
 une autre teinte (L7035 pour L7037). **À déployer** :
 `.\deploy-function.ps1 odoo-devis`.
 
+## Dictée / email du devis : surfaces par couleur et pigments (9 nov.)
+
+Demande EMPREINTE SIGNA « système flowcoat sf41 version Blank et pigment » +
+tableau « RAL 5017 bleu · Anti glissant · 13 allées… · 493,6 m² », traçages
+en ml, pictos. `demandeTeintes.ts` lit le texte **sans IA** (l'IA ne complète
+que client et chantier) : une ligne avec teinte + mesure = une zone ; le
+détail (« 1 + 17,6 + 2 + 58 ») est recalculé et un écart se signale.
+
+- **Le modèle fait la dose** : devis modèle (statut « système ») portant une
+  ligne pigment, choisi à l'écran (`modelesPourDemande` : antiglisse si la
+  demande dit anti glissant / dérapant). Résine et quartz à la surface
+  PEINTE, **un pigment par teinte** à la dose de la ligne pigment du modèle
+  (0,072 kg/m² = un pot d'1 kg par kit de 14 kg).
+- **La règle d'une teinte se lit dans les devis réalisés** (`reglePigment`) :
+  RAL 1023 → PIGMENT2KG à dose × 2 (DEV-2026-168), comparé à la dose que le
+  plus de pigments du devis partagent ; seuls comptent les devis qui partagent
+  la RÉSINE du modèle (le quartz est commun à trop de systèmes). Couleur sans
+  RAL (« jaune », « noir ») → RAL le plus employé (`ralDeCouleur`), modifiable.
+- ⚠️ **Rien n'est supposé** : des ml sans largeur, des pictos à l'unité
+  restent « à préciser », hors du calcul, tant que la cote n'est pas saisie.
+  **Zébra bicolore** = 1re teinte sur toute la surface, 2de sur la moitié
+  (DEV-2026-029 : 221 m² jaune, 110 m² noir).
+- `duplicateSystemeEtRemplir` (seul appelant : ce dialogue) : note des zones
+  en tête, pigments du modèle remplacés (`remplacerPigments`), lignes « Qté
+  chantier » arrondies une fois (`quantitesChantier`), et une ligne qui
+  portait la surface du modèle prend celle du chantier.
+- **Bouton « Claude »** (`claudeIA.ts`, fonction `claude`, `claude-opus-5-5`) :
+  même consigne, à la demande. ⚠️ Secret `ANTHROPIC_API_KEY` = clé d'API
+  platform.claude.com — l'abonnement claude.ai n'ouvre pas l'API.
+  **À déployer** : `.\deploy-function.ps1 claude`, après avoir posé le secret.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du

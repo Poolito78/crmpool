@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { exportToExcel } from '@/lib/exportExcel';
 import { logHistorique } from '@/lib/historique';
 import { produitParId } from '@/lib/indexProduits';
+import { estLignePigment, quantitesChantier, remplacerPigments } from '@/lib/demandeTeintes';
 import { useVeilleParProduit } from '@/lib/concurrents';
 import { comparerAuConcurrent } from '@/lib/veilleComparaison';
 import DevisPreview, { parseImgPct } from '@/components/DevisPreview';
@@ -1316,7 +1317,13 @@ export default function Devis() {
   }
 
   // Duplique un modèle « système » puis le remplit avec les infos dictées (client, chantier, surface…)
-  async function duplicateSystemeEtRemplir(sysDevis: DevisType, opts: { client?: typeof clients[number]; chantier?: string; systeme?: string; surf: number; dictees: LigneDevis[] }) {
+  async function duplicateSystemeEtRemplir(sysDevis: DevisType, opts: {
+    client?: typeof clients[number]; chantier?: string; systeme?: string; surf: number; dictees: LigneDevis[];
+    /** Demande par teinte (`demandeTeintes.ts`) : un pigment par teinte, à la place de celui du modèle. */
+    teintes?: LigneDevis[];
+    /** Les zones de la demande et leur calcul, en note de tête. */
+    noteZones?: string;
+  }) {
     const numero = prochainNumeroDevis(devis, undefined, numerosLiberes, serieDe('DEV', undefined, false));
     const newId = generateId();
     const surf = opts.surf;
@@ -1333,10 +1340,31 @@ export default function Devis() {
         ? calcQuantiteSurface(prod, surf, consoDeLigne(l, unite), undefined, unite)
         : l.quantite;
       const prix = getPrixLigne(prod, quantite, l.variantesChoisies, opts.client?.estRevendeur, opts.client?.niveauTarif ?? null, opts.client?.remisesParCategorie);
-      return { ...l, quantite, prixUnitaireHT: prix };
+      /* Une ligne qui portait la surface du MODÈLE (215 m²) porte celle du chantier :
+         sinon elle affiche 215 m² en face d'une quantité calculée pour 637. */
+      const suitLeChantier = surf > 0 && l.surfaceM2 != null && l.surfaceM2 === sysDevis.surfaceGlobaleM2;
+      return { ...l, quantite, prixUnitaireHT: prix, ...(suitLeChantier ? { surfaceM2: surf } : {}) };
     };
-    const lignes = [
-      ...copierLignes(sysDevis.lignes, generateId).map(applySurface),
+    const article = (id: string | undefined) => produitParId(produits, id);
+    let duModele = copierLignes(sysDevis.lignes, generateId).map(applySurface);
+    /* « Qté chantier » : les couches d'un même article s'arrondissent une fois
+       au conditionnement (0,4 + 0,6 kg/m² de SF41 Blank = 46 kits, pas 19 + 28). */
+    const chantier = unite === 'm2' ? quantitesChantier(duModele, surf, id => article(id)?.poids) : new Map<string, number>();
+    if (chantier.size) {
+      duModele = duModele.map((l) => {
+        const q = chantier.get(l.id);
+        const prod = article(l.produitId);
+        if (q == null || !prod) return l;
+        return { ...l, quantite: q, ...(q > 0 ? { prixUnitaireHT: getPrixLigne(prod, q, l.variantesChoisies, opts.client?.estRevendeur, opts.client?.niveauTarif ?? null, opts.client?.remisesParCategorie) } : {}) };
+      });
+    }
+    /* Demande par teinte : le pigment unique du modèle laisse la place à un pigment par teinte. */
+    if (opts.teintes?.length) duModele = remplacerPigments(duModele, opts.teintes, l => estLignePigment(l, article));
+    const lignes: LigneDevis[] = [
+      ...(opts.noteZones?.trim()
+        ? [{ id: generateId(), type: 'texte' as const, description: opts.noteZones.trim(), quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 }]
+        : []),
+      ...duModele,
       ...opts.dictees.map(applySurface),
     ];
     const newDevis: DevisType = {
@@ -6961,6 +6989,7 @@ ${dosage.source}` : ''}`}>
         produits={produits}
         clients={clients.map(c => ({ id: c.id, nom: c.nom, societe: c.societe }))}
         systemes={devis.filter(d => d.statut === 'système').map(d => ({ id: d.id, nom: d.systeme || d.referenceAffaire || d.numero }))}
+        devis={devis}
         onApply={(parsed: VoiceDevis) => {
           // Client : correspondance souple sur société / nom
           let matchedClient: typeof clients[number] | undefined;
@@ -6991,16 +7020,40 @@ ${dosage.source}` : ''}`}>
             };
           });
 
-          // Système dicté → cherche un devis modèle (statut « système »)
+          /* Demande par teinte : un pigment par teinte, chiffré à l'écran d'après le
+             modèle et les devis réalisés (`demandeTeintes.ts`). Le prix suit le client. */
+          const teintes: LigneDevis[] = (parsed.teintes || []).flatMap(t => {
+            const prod = produitParId(produits, t.produitId);
+            if (!prod) return [];
+            return [{
+              id: generateId(),
+              produitId: prod.id,
+              description: designationProduit(prod),
+              quantite: t.quantite,
+              unite: prod.unite || 'U',
+              prixUnitaireHT: getPrixLigne(prod, t.quantite, t.variantesChoisies, matchedClient?.estRevendeur, matchedClient?.niveauTarif || null, matchedClient?.remisesParCategorie),
+              tva: prod.tva ?? 20,
+              remise: 0,
+              surfaceM2: t.surfaceM2,
+              consommation: t.consommation,
+              ...(t.variantesChoisies ? { variantesChoisies: t.variantesChoisies } : {}),
+            }];
+          });
+          if (parsed.aVerifier?.length) {
+            toast.warning(`À vérifier : ${parsed.aVerifier.join(' — ')}`, { duration: 12000 });
+          }
+
+          // Système dicté → cherche un devis modèle (statut « système ») ; celui choisi à l'écran passe avant
           const nq = (parsed.systeme || '').trim().toLowerCase();
-          const sysDevis = nq ? devis.find(d => d.statut === 'système' && [d.systeme, d.referenceAffaire, d.numero].some(n => {
-            const v = (n || '').toLowerCase();
-            return v && (v === nq || v.includes(nq) || nq.includes(v));
-          })) : undefined;
+          const sysDevis = (parsed.modeleId ? devis.find(d => d.id === parsed.modeleId) : undefined)
+            ?? (nq ? devis.find(d => d.statut === 'système' && [d.systeme, d.referenceAffaire, d.numero].some(n => {
+              const v = (n || '').toLowerCase();
+              return v && (v === nq || v.includes(nq) || nq.includes(v));
+            })) : undefined);
 
           // ── Cas modèle reconnu : VRAIE duplication (lignes + MO + pièces jointes) puis remplissage
           if (sysDevis) {
-            duplicateSystemeEtRemplir(sysDevis, { client: matchedClient, chantier: parsed.chantier?.trim(), systeme: parsed.systeme?.trim(), surf, dictees });
+            duplicateSystemeEtRemplir(sysDevis, { client: matchedClient, chantier: parsed.chantier?.trim(), systeme: parsed.systeme?.trim(), surf, dictees, teintes, noteZones: parsed.noteZones });
             return;
           }
 
@@ -7020,7 +7073,11 @@ ${dosage.source}` : ''}`}>
             }
             return l;
           }) : ls;
-          const newLignes = applySurface(dictees);
+          /* Sans modèle, les zones de la demande partent quand même en note : rien ne se perd. */
+          const noteZones: LigneDevis[] = parsed.noteZones?.trim()
+            ? [{ id: generateId(), type: 'texte', description: parsed.noteZones.trim(), quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 }]
+            : [];
+          const newLignes = [...noteZones, ...applySurface(dictees), ...teintes];
           if (newLignes.length > 0) {
             setLignes(prev => {
               const base = prev.filter(l => !((!l.type || l.type === 'ligne') && !l.produitId && !(l.description || '').trim()));
