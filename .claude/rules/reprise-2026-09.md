@@ -645,7 +645,16 @@ détail (« 1 + 17,6 + 2 + 58 ») est recalculé et un écart se signale.
 - **Bouton « Claude »** (`claudeIA.ts`, fonction `claude`, `claude-opus-5-5`) :
   même consigne, à la demande. ⚠️ Secret `ANTHROPIC_API_KEY` = clé d'API
   platform.claude.com — l'abonnement claude.ai n'ouvre pas l'API.
-  **À déployer** : `.\deploy-function.ps1 claude`, après avoir posé le secret.
+  **Déployé** (claude version 1, 09/11), secret posé. ⚠️ Essai du 09/11 :
+  Anthropic répond 400 « credit balance is too low » — clé acceptée, compte
+  d'API sans crédit (à ajouter sur platform.claude.com, Plans & Billing).
+  `messageLisible` le dit en clair à l'écran.
+- **Une phrase dictée à plusieurs surfaces ET plusieurs teintes** (« 120 m² en
+  RAL 5017, 30 m² en RAL 3020 ») n'est pas lue sans IA : rien ne dit quelle
+  surface va avec quelle teinte. L'IA range les zones (`zonesDepuisIA`).
+- **Client tapé avec une faute** (`clientAUneFautePres`, `rapprochementClient.ts`) :
+  « empriente signa » reprend « Empreinte Signa » — une faute par mot de cinq
+  lettres ou plus, une seule société, sinon rien.
 
 ## Pièges d'implémentation rencontrés
 

@@ -28,6 +28,32 @@ export interface ReponseClaude {
   dureeMs?: number;
 }
 
+/**
+ * Le message d'Anthropic, sorti de son enveloppe. L'API répond
+ * « 400 {"type":"error","error":{"message":"Your credit balance is too low…"}} » :
+ * affiché tel quel, c'était du JSON dans une notification (essai du 09/11/2026).
+ *
+ * ⚠️ UNE CLÉ SANS CRÉDIT EST REFUSÉE EN 400, pas en 401 : la clé est bonne,
+ * c'est le compte de la plateforme qui n'a pas de crédit — distinct, lui
+ * aussi, de l'abonnement claude.ai. On le dit en clair.
+ */
+export function messageLisible(detail: string): string {
+  let message = detail;
+  const json = detail.match(/\{[\s\S]*\}/)?.[0];
+  if (json) {
+    try {
+      const corps = JSON.parse(json);
+      const interne = corps?.error?.message ?? corps?.message;
+      if (typeof interne === 'string' && interne.trim()) message = interne.trim();
+    } catch { /* pas du JSON : le message brut */ }
+  }
+  if (/credit balance is too low/i.test(message)) {
+    return "crédit Anthropic insuffisant — la clé est acceptée, mais le compte n'a pas de crédit d'API. "
+      + 'À ajouter sur platform.claude.com (Plans & Billing) ; l\'abonnement claude.ai ne compte pas.';
+  }
+  return message;
+}
+
 export async function appelerClaude(args: {
   system?: string;
   messages: MessageClaude[];
@@ -56,8 +82,8 @@ export async function appelerClaude(args: {
     if (/not found|404/i.test(detail)) {
       detail = "la fonction « claude » n'est pas déployée (.\\deploy-function.ps1 claude)";
     }
-    throw new Error(`[claude] ${detail}`);
+    throw new Error(`[claude] ${messageLisible(detail)}`);
   }
-  if (data?.erreur) throw new Error(`[claude] ${data.erreur}`);
+  if (data?.erreur) throw new Error(`[claude] ${messageLisible(String(data.erreur))}`);
   return { texte: String(data?.texte ?? ''), modele: String(data?.modele ?? ''), dureeMs: data?.dureeMs };
 }

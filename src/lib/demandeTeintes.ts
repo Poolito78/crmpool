@@ -157,6 +157,11 @@ export function lireDemandeTeintes(texte: string): DemandeLue {
     }
 
     const propres = teintesDeTexte(ligne);
+    /* UNE PHRASE DICTÉE N'EST PAS UNE LIGNE DE TABLEAU : « 120 m² en RAL 5017
+       et 30 m² en RAL 3020 » porte deux surfaces et deux teintes, et rien ici
+       ne dit laquelle va avec laquelle — retenir la dernière surface donnerait
+       30 m² aux deux. La ligne est laissée à l'IA, qui range les zones. */
+    if (surfaces.length >= 2 && propres.length >= 2) continue;
     const trace = derniere ? undefined : traceDansTexte(ligne);
     const ml = derniere || trace ? null : t.match(ML);
     const nb = derniere || trace || ml || !A_L_UNITE.test(t) ? null : t.match(NOMBRE_FINAL);

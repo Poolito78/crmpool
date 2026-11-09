@@ -126,6 +126,14 @@ describe('lireDemandeTeintes', () => {
     expect(lireDemandeTeintes('Devis société Dubois, 250 m², système Flowfast 319').zones).toEqual([]);
   });
 
+  it('laisse à l\'IA une phrase qui porte plusieurs surfaces et plusieurs teintes', () => {
+    expect(lireDemandeTeintes('devis flowcoat sf41, 120 m² en RAL 5017 bleu et 30 m² en RAL 3020 rouge').zones).toEqual([]);
+    /* Même avec un zébra dans la phrase : « bleu 100 %, rouge 50 % » sur 16 m² était faux deux fois. */
+    expect(lireDemandeTeintes('120 m² en RAL 5017 bleu, 30 m² en RAL 3020 rouge et un zébra jaune et noir de 16 m²').zones).toEqual([]);
+    /* Une seule teinte : la dernière surface est le total de la ligne. */
+    expect(lireDemandeTeintes('RAL 5017 bleu : 290 m² + 48 m² = 338 m²').zones[0].surfaceM2).toBe(338);
+  });
+
   it('calcule un tracé dont la largeur est écrite', () => {
     const z = lireDemandeTeintes('Ligne jaune 0,10 m de largeur x 965 ml').zones[0];
     expect(z.surfaceM2).toBe(96.5);
