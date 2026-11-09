@@ -1,7 +1,34 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rapprocherClient, motsCles, normaliser, motsFrequentsDuCatalogue, clientsParPersonne,
+  rapprocherClient, motsCles, normaliser, motsFrequentsDuCatalogue, clientsParPersonne, clientAUneFautePres,
 } from './rapprochementClient';
+
+describe('clientAUneFautePres', () => {
+  const fichier = [
+    { id: 'emp', societe: 'Empreinte Signa', nom: 'Martial Marlière' },
+    { id: 'app', societe: 'APPLIQU SIGNA', nom: 'APPLIQU SIGNA' },
+    { id: 'r1', societe: 'REFLEX SIGNALISATION', nom: '' },
+    { id: 'r2', societe: 'REFLEX SIGNALISATION', nom: 'Thierry BARAILLER' },
+    { id: 'top', societe: 'TOP SIGNALISATION', nom: 'M. Cédric BAEHREL' },
+  ];
+
+  it('retrouve « empriente signa » : deux lettres inversées', () => {
+    expect(clientAUneFautePres('empriente signa', fichier)?.id).toBe('emp');
+  });
+  it('tolère une lettre en moins ou changée', () => {
+    expect(clientAUneFautePres('Empreinte Signa', fichier)?.id).toBe('emp');
+    expect(clientAUneFautePres('emprinte signa', fichier)?.id).toBe('emp');
+    expect(clientAUneFautePres('reflax signalisation', fichier)?.id).toBe('r1');   // deux fiches, une société
+  });
+  it('ne retient rien à deux fautes, ni sur un mot court', () => {
+    expect(clientAUneFautePres('empirente sinia', fichier)).toBeUndefined();
+    expect(clientAUneFautePres('tip signalisation', fichier)).toBeUndefined();
+  });
+  it('ne tranche pas entre deux sociétés', () => {
+    expect(clientAUneFautePres('signalisation', fichier)).toBeUndefined();
+    expect(clientAUneFautePres('signa', fichier)).toBeUndefined();
+  });
+});
 
 const c = (id: string, societe: string, nom = '') => ({ id, societe, nom });
 

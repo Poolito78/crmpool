@@ -315,3 +315,40 @@ export function motsFrequentsDuCatalogue(
   for (const [mot, n] of compte) if (n >= seuil) frequents.add(mot);
   return frequents;
 }
+
+/* ── Un nom tapé avec une faute ──────────────────────────────────────────── */
+
+/** Deux mots à UNE faute près : une lettre en trop, en moins, changée, ou deux lettres voisines inversées. */
+function aUneFautePres(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  const [ra, rb] = [a.slice(i), b.slice(i)];
+  return ra.slice(1) === rb.slice(1)                                              // lettre changée
+    || ra.slice(1) === rb || ra === rb.slice(1)                                   // lettre en trop / en moins
+    || (ra.length > 1 && rb.length > 1 && ra[0] === rb[1] && ra[1] === rb[0] && ra.slice(2) === rb.slice(2)); // inversées
+}
+
+/**
+ * Le client qu'un nom TAPÉ AVEC UNE FAUTE désigne : « empriente signa » pour
+ * « Empreinte Signa » (dictée du devis, 09/11/2026). Le rapprochement par
+ * mots entiers ne le trouve pas, et l'IA ne corrige la faute qu'une fois sur
+ * deux.
+ *
+ * Tous les mots du nom doivent se retrouver dans la raison sociale, chacun à
+ * une faute près au plus — tolérée seulement sur un mot de cinq lettres ou
+ * plus, « SUD » n'est pas « SUR ». Une seule société doit répondre : à deux,
+ * on ne tranche pas.
+ */
+export function clientAUneFautePres<C extends ClientNommable>(nom: string, clients: C[]): C | undefined {
+  const cherches = motsCles(nom);
+  if (!cherches.length) return undefined;
+  const trouves = clients.filter((c) => {
+    const mots = motsCles(c.societe || c.nom || '');
+    return mots.length > 0 && cherches.every(q =>
+      mots.some(m => m === q || (q.length >= 5 && m.length >= 5 && aUneFautePres(q, m))));
+  });
+  const societes = new Set(trouves.map(c => normaliser(c.societe || c.nom || '')));
+  return societes.size === 1 ? trouves[0] : undefined;
+}

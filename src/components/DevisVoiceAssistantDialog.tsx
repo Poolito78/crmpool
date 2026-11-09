@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import type { Devis, Produit } from '@/lib/store';
 import { produitParId } from '@/lib/indexProduits';
 import { appelerClaude } from '@/lib/claudeIA';
+import { clientAUneFautePres } from '@/lib/rapprochementClient';
 import { getRalInfo, libelleTeinte } from '@/lib/ralColors';
 import { teinteDemandee } from '@/lib/referenceTeinte';
 import {
@@ -205,6 +206,22 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
     return [...candidats, ...autres];
   }, [demande, texteAnalyse, devis, articleDe]);
 
+  /** Le client est-il dans la base, au nom près (l'un pouvant contenir l'autre) ? */
+  const clientConnu = (nom: string) => {
+    const q = nom.trim().toLowerCase();
+    return !!q && clients.some(c => {
+      const soc = (c.societe || '').toLowerCase(); const n = (c.nom || '').toLowerCase();
+      return soc === q || n === q || (soc && (soc.includes(q) || q.includes(soc))) || (n && (n.includes(q) || q.includes(n)));
+    });
+  };
+  /** Un nom tapé avec une faute (« empriente signa ») reprend celui de la fiche, si une seule répond. */
+  const nomClient = (nom: string | undefined) => {
+    const lu = (nom || '').trim();
+    if (!lu || clientConnu(lu)) return lu;
+    const proche = clientAUneFautePres(lu, clients);
+    return proche ? (proche.societe || proche.nom) : lu;
+  };
+
   /** Adopte des zones : retient le modèle le plus probable et le nomme comme système. */
   function adopterZones(lue: DemandeLue, texte: string) {
     const [premier] = modelesPourDemande(texte, devis, articleDe);
@@ -231,7 +248,7 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
     const zonesLues = lue.zones.length > 0;
     if (zonesLues) {
       const premier = adopterZones(lue, text);
-      setParsed({ client: lue.client || '', chantier: lue.chantier || '', systeme: premier?.nom ?? lue.systeme ?? '', surface: null, lignes: [] });
+      setParsed({ client: nomClient(lue.client), chantier: lue.chantier || '', systeme: premier?.nom ?? lue.systeme ?? '', surface: null, lignes: [] });
     }
 
     /* 2. L'IA — Gemini/Groq par « Analyser », Claude par son bouton — pour le
@@ -258,9 +275,15 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
         return;
       }
       const { zones: zonesIA, ...reste } = result;
+      reste.client = nomClient(reste.client);
       if (zonesLues) {
-        // Les zones lues sans IA font foi : l'IA ne complète que le client et le chantier.
-        setParsed(p => ({ ...p, client: reste.client || p?.client || '', chantier: reste.chantier || p?.chantier || '' }));
+        /* Les zones lues sans IA font foi : l'IA ne complète que le client et le
+           chantier — et ne remplace pas un client déjà retrouvé dans la base. */
+        setParsed(p => ({
+          ...p,
+          client: p?.client && clientConnu(p.client) ? p.client : (reste.client || p?.client || ''),
+          chantier: reste.chantier || p?.chantier || '',
+        }));
         return;
       }
       const zones = zonesDepuisIA(zonesIA);
@@ -387,13 +410,8 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
                     {clients.map(c => <option key={c.id} value={c.societe || c.nom} />)}
                   </datalist>
                   {(() => {
-                    const q = (parsed.client || '').trim().toLowerCase();
-                    if (!q) return null;
-                    const found = clients.some(c => {
-                      const soc = (c.societe || '').toLowerCase(); const nom = (c.nom || '').toLowerCase();
-                      return soc === q || nom === q || (soc && (soc.includes(q) || q.includes(soc))) || (nom && (nom.includes(q) || q.includes(nom)));
-                    });
-                    return found
+                    if (!(parsed.client || '').trim()) return null;
+                    return clientConnu(parsed.client || '')
                       ? <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5">✓ Client trouvé dans la base</p>
                       : <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">Client non trouvé — choisissez dans la liste ou tapez le nom exact</p>;
                   })()}
@@ -486,7 +504,7 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
                             {z.ecart && <p className="text-[11px] text-amber-600 dark:text-amber-400 truncate" title={z.ecart}>⚠ {z.ecart}</p>}
                           </div>
                           <Input className="h-7 w-20 text-sm text-right" inputMode="decimal" placeholder="—"
-                            defaultValue={z.surfaceM2 ?? ''} key={`${z.id}:${z.surfaceM2 ?? ''}`}
+                            defaultValue={z.surfaceM2 != null ? enFrancais(z.surfaceM2) : ''}
                             title="Surface de la zone en m² (corrigeable)"
                             onChange={e => setReglages(r => ({ ...r, surfaces: { ...r.surfaces, [z.id]: nombreSaisi(e.target.value) } }))} />
                           <span className="text-xs text-muted-foreground w-6 shrink-0">m²</span>
