@@ -3,13 +3,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Mic, Sparkles, Building2, Ruler, Layers, Package, Check, Trash2, Bot, AlertTriangle, Palette } from 'lucide-react';
+import { Loader2, Mic, Sparkles, Building2, Ruler, Layers, Package, Check, Trash2, AlertTriangle, Palette } from 'lucide-react';
 import VoiceButton from '@/components/ui/VoiceButton';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { Devis, Produit } from '@/lib/store';
 import { produitParId } from '@/lib/indexProduits';
-import { appelerClaude } from '@/lib/claudeIA';
 import { clientAUneFautePres } from '@/lib/rapprochementClient';
 import { getRalInfo, libelleTeinte } from '@/lib/ralColors';
 import { teinteDemandee } from '@/lib/referenceTeinte';
@@ -132,11 +131,10 @@ function zonesDepuisIA(zones: ZoneIA[] | undefined): ZoneLue[] {
 }
 
 const AUCUN_MODELE = 'aucun';
-type Moteur = 'ia' | 'claude';
 
 export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits = [], clients = [], systemes, devis = [], onApply }: Props) {
   const [transcript, setTranscript] = useState('');
-  const [loading, setLoading] = useState<Moteur | null>(null);
+  const [loading, setLoading] = useState(false);
   const [parsed, setParsed] = useState<VoiceDevis | null>(null);
   /* Demande « par teinte » : zones lues, cotes saisies, modèle et RAL retenus. */
   const [demande, setDemande] = useState<DemandeLue | null>(null);
@@ -144,12 +142,11 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
   const [reglages, setReglages] = useState<ReglagesZones>({});
   const [modeleId, setModeleId] = useState(AUCUN_MODELE);
   const [ralChoisi, setRalChoisi] = useState<Record<string, string>>({});
-  const [reponduPar, setReponduPar] = useState('');
 
   useEffect(() => {
     if (open) {
-      setTranscript(''); setParsed(null); setLoading(null); setDemande(null);
-      setReglages({}); setModeleId(AUCUN_MODELE); setRalChoisi({}); setReponduPar('');
+      setTranscript(''); setParsed(null); setLoading(false); setDemande(null);
+      setReglages({}); setModeleId(AUCUN_MODELE); setRalChoisi({});
     }
   }, [open]);
 
@@ -233,14 +230,13 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
     return premier;
   }
 
-  async function analyser(moteur: Moteur) {
+  async function analyser() {
     const text = normalizeTerms(transcript.trim());
     if (text !== transcript) setTranscript(text);
     if (!text || loading) return;
-    setLoading(moteur);
+    setLoading(true);
     setParsed(null);
     setDemande(null);
-    setReponduPar('');
 
     /* 1. SANS IA : un tableau de surfaces par teinte se lit ligne à ligne, et
           s'affiche tout de suite — l'IA ne fait ensuite que compléter. */
@@ -251,24 +247,14 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
       setParsed({ client: nomClient(lue.client), chantier: lue.chantier || '', systeme: premier?.nom ?? lue.systeme ?? '', surface: null, lignes: [] });
     }
 
-    /* 2. L'IA — Gemini/Groq par « Analyser », Claude par son bouton — pour le
-          client (fautes de frappe), le chantier, et une dictée sans tableau. */
+    /* 2. L'IA, pour le client (fautes de frappe), le chantier, et une dictée
+          sans tableau. */
     try {
-      let raw = '';
-      if (moteur === 'claude') {
-        const r = await appelerClaude({
-          system: `Tu es l'assistant de chiffrage de MonCRM (revêtements de sol, résines, signalisation).${produitsCatalog ? `\n\nCATALOGUE (extrait) :\n${produitsCatalog}` : ''}`,
-          messages: [{ role: 'user', content: EXTRACT_PROMPT(text, systemes) }],
-        });
-        raw = r.texte;
-        setReponduPar(`${r.modele}${r.dureeMs ? ` · ${(r.dureeMs / 1000).toFixed(1)} s` : ''}`);
-      } else {
-        const { data, error } = await supabase.functions.invoke('devis-assistant', {
-          body: { message: EXTRACT_PROMPT(text, systemes), history: [], produitsCatalog },
-        });
-        if (error) throw error;
-        raw = data?.response || '';
-      }
+      const { data, error } = await supabase.functions.invoke('devis-assistant', {
+        body: { message: EXTRACT_PROMPT(text, systemes), history: [], produitsCatalog },
+      });
+      if (error) throw error;
+      const raw: string = data?.response || '';
       const result = parseVoiceDevis(raw);
       if (!result) {
         if (!zonesLues) toast.error("L'IA n'a pas pu structurer la demande. Reformulez ou complétez la dictée.");
@@ -295,11 +281,10 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
       }
     } catch (e) {
       console.error('[voice assistant]', e);
-      const detail = moteur === 'claude' && e instanceof Error ? e.message.replace(/^\[claude\]\s*/, '') : '';
-      if (zonesLues) toast.warning(`Zones lues sans IA${detail ? ` — Claude : ${detail}` : ' — client et chantier à vérifier.'}`);
-      else toast.error(detail ? `Claude : ${detail}` : "Erreur lors de l'analyse vocale.");
+      if (zonesLues) toast.warning('Zones lues sans IA — client et chantier à vérifier.');
+      else toast.error("Erreur lors de l'analyse vocale.");
     } finally {
-      setLoading(null);
+      setLoading(false);
     }
   }
 
@@ -383,18 +368,10 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
               placeholder='Dictez ou collez un email. Ex : « Devis pour la société Dubois, chantier parking Nord, 250 m², système Flowfast 319, ajoute 250 m² de résine et 12 seaux de primaire. »'
               className="w-full min-h-[110px] text-sm rounded-md border border-input bg-background px-3 py-2 resize-y"
             />
-            <div className="flex gap-2">
-              <Button onClick={() => analyser('ia')} disabled={!!loading || !transcript.trim()} className="flex-1 gap-2">
-                {loading === 'ia' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {loading === 'ia' ? 'Analyse en cours…' : 'Analyser'}
-              </Button>
-              <Button variant="outline" onClick={() => analyser('claude')} disabled={!!loading || !transcript.trim()} className="gap-2"
-                title="Confier cette lecture à Claude (à la demande, facturé à votre clé d'API Anthropic)">
-                {loading === 'claude' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
-                {loading === 'claude' ? 'Claude lit…' : 'Claude'}
-              </Button>
-            </div>
-            {reponduPar && <p className="text-[11px] text-muted-foreground">Lu par {reponduPar}</p>}
+            <Button onClick={analyser} disabled={loading || !transcript.trim()} className="w-full gap-2">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {loading ? 'Analyse en cours…' : 'Analyser'}
+            </Button>
           </div>
 
           {/* Résultat extrait */}

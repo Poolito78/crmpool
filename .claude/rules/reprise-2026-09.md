@@ -642,13 +642,13 @@ détail (« 1 + 17,6 + 2 + 58 ») est recalculé et un écart se signale.
   en tête, pigments du modèle remplacés (`remplacerPigments`), lignes « Qté
   chantier » arrondies une fois (`quantitesChantier`), et une ligne qui
   portait la surface du modèle prend celle du chantier.
-- **Bouton « Claude »** (`claudeIA.ts`, fonction `claude`, `claude-opus-5-5`) :
-  même consigne, à la demande. ⚠️ Secret `ANTHROPIC_API_KEY` = clé d'API
-  platform.claude.com — l'abonnement claude.ai n'ouvre pas l'API.
-  **Déployé** (claude version 1, 09/11), secret posé. ⚠️ Essai du 09/11 :
-  Anthropic répond 400 « credit balance is too low » — clé acceptée, compte
-  d'API sans crédit (à ajouter sur platform.claude.com, Plans & Billing).
-  `messageLisible` le dit en clair à l'écran.
+- ⚠️ **Le bouton « Claude » a été RETIRÉ le 09/11** (décision de
+  l'utilisateur) : l'API Claude demande une clé ET du crédit sur
+  platform.claude.com, distincts de l'abonnement claude.ai — Anthropic
+  répondait 400 « credit balance is too low ». `claudeIA.ts` et la fonction
+  `claude` sont supprimés du dépôt ; la fonction déployée (version 1) et le
+  secret `ANTHROPIC_API_KEY` restent chez Supabase tant que l'utilisateur ne
+  les supprime pas. Ne pas le reproposer sans qu'il le demande.
 - **Une phrase dictée à plusieurs surfaces ET plusieurs teintes** (« 120 m² en
   RAL 5017, 30 m² en RAL 3020 ») n'est pas lue sans IA : rien ne dit quelle
   surface va avec quelle teinte. L'IA range les zones (`zonesDepuisIA`).
