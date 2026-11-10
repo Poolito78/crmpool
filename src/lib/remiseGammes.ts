@@ -115,6 +115,47 @@ export function familleRemise(categorie?: string): string | undefined {
 }
 
 /**
+ * La remise que la fiche client porte pour une catégorie d'article.
+ *
+ * ⚠️ **LA CATÉGORIE ODOO FAIT FOI** (règle du 10/11/2026) : la fiche client
+ * liste les catégories telles que le catalogue les porte, chemin complet
+ * compris — « ISOMARK / FLOORING / MMA » à côté de « MMA ». Seule la clé
+ * nue était lue : une remise saisie sur la ligne Odoo restait lettre morte.
+ * Ordre de lecture :
+ *   1. la clé égale à la catégorie de l'article (sans casse ni espaces) ;
+ *   2. la clé de sa famille (« MMA ») ;
+ *   3. une autre catégorie de la même famille (« ISOMARK / FLOORING / MMA »
+ *      pour un article rangé en « MMA »), si toutes disent le même taux —
+ *      deux taux différents ne se départagent pas.
+ */
+export function tauxRemiseClient(
+  categorie?: string,
+  remisesParCategorie?: Record<string, number>,
+): number | undefined {
+  if (!remisesParCategorie) return undefined;
+  const cle = (s: string) => s.trim().replace(/\s+/g, ' ').toUpperCase();
+  const lire = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const entrees = Object.entries(remisesParCategorie);
+  const cat = cle(String(categorie || ''));
+  if (cat) {
+    const exacte = entrees.find(([k]) => cle(k) === cat);
+    if (exacte && lire(exacte[1]) !== undefined) return lire(exacte[1]);
+  }
+  const famille = familleRemise(categorie);
+  if (!famille) return undefined;
+  const nue = entrees.find(([k]) => cle(k) === famille);
+  if (nue && lire(nue[1]) !== undefined) return lire(nue[1]);
+  const taux = new Set(entrees
+    .filter(([k]) => familleRemise(k) === famille)
+    .map(([, v]) => lire(v))
+    .filter((v): v is number => v !== undefined));
+  return taux.size === 1 ? [...taux][0] : undefined;
+}
+
+/**
  * Prix revendeur : le prix PUBLIC moins la remise que porte la fiche client
  * pour la famille de l'article.
  *
@@ -138,7 +179,7 @@ export function prixRevendeur(
   const famille = familleRemise(categorie);
   if (!famille) return null;
 
-  const taux = Number(remisesParCategorie[famille]);
+  const taux = tauxRemiseClient(categorie, remisesParCategorie) ?? NaN;
   if (!Number.isFinite(taux) || taux <= 0) return null;
 
   const remise = taux / 100;

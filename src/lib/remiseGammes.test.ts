@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   niveauGamme, prixApplicateur, prixRevendeur, familleRemise, REMISE_GAMME, prixGamme,
-  publicPourQuantite,
+  publicPourQuantite, tauxRemiseClient,
 } from './remiseGammes';
 
 describe('niveau lu dans la catégorie Odoo', () => {
@@ -136,6 +136,29 @@ describe('prix revendeur — la fiche client avant le tarif de gamme', () => {
     expect(prixRevendeur(264.70, 'ISOMARK / FLOORING / EPOXY', HORUS)!.prix).toBeCloseTo(185.29, 2);
     expect(prixRevendeur(296.43, 'PU', HORUS)!.prix).toBeCloseTo(207.50, 2);
     expect(prixRevendeur(192.53, 'PU', HORUS)!.prix).toBeCloseTo(134.77, 2);
+  });
+
+  /* Règle du 10/11/2026 : la fiche client liste « ISOMARK / FLOORING / MMA »
+     à côté de « MMA » ; la remise saisie sur la ligne Odoo n'était pas lue. */
+  it('lit la remise saisie sur la catégorie Odoo complète', () => {
+    const fiche = { MMA: 30, 'ISOMARK / FLOORING / MMA': 25 };
+    expect(tauxRemiseClient('ISOMARK / FLOORING / MMA', fiche)).toBe(25);
+    expect(prixRevendeur(460, 'ISOMARK / FLOORING / MMA', fiche)!.prix).toBeCloseTo(345, 2);
+    // L'article rangé en « MMA » nu garde sa clé.
+    expect(tauxRemiseClient('MMA', fiche)).toBe(30);
+    // Sans clé nue, la catégorie Odoo de la même famille sert.
+    expect(prixRevendeur(460, 'MMA', { 'ISOMARK / FLOORING / MMA': 30 })!.prix).toBeCloseTo(322, 2);
+    // Casse et espaces ne comptent pas.
+    expect(tauxRemiseClient('isomark /  flooring / mma', fiche)).toBe(25);
+  });
+
+  it('ne départage pas deux catégories de même famille en désaccord', () => {
+    const fiche = { 'ISOMARK / FLOORING / MMA': 25, 'AUTRE / MMA': 40 };
+    expect(tauxRemiseClient('MMA', fiche)).toBeUndefined();
+  });
+
+  it('ne remise pas une catégorie hors famille même si la fiche la porte', () => {
+    expect(prixRevendeur(100, 'ELEMENTS DE FIXATION / Brides', { 'ELEMENTS DE FIXATION / Brides': 30 })).toBeNull();
   });
 
   it('se tait quand la fiche client ne dit rien de cette famille', () => {
