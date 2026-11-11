@@ -677,6 +677,22 @@ fusionnés (lignes repointées, fiches supprimées) et 2 écartées (ISOSIGN SAS
 Import **2025** fait le 11/11 (97 factures + 1 avoir, 146 863,42 € HT ; 98
 commandes ; 6 fiches créées). Comparaison annuelle : lignes « Mois de
 l'année (N / N-1) » (`moisAnnee`) × colonnes « Année ».
+À vérifier par l'utilisateur : « ASM Alpha Sud » (2e fiche du contact
+d'ALPHA SUD MEDITERANNEE, non touchée) et « CADDENZ 92 - GENNEVILLIERS »
+(créée en 2025, à côté de CADDENZ / CADDENZ Paris Sud).
+- **Listes** : pastille violette « Odoo (N) » dans Commandes Client et
+  Factures Client (`DocumentsOdooListe.tsx`), lecture seule, lignes Flooring
+  dépliables. ⚠️ Les pages Devis / Commandes / Factures s'ouvrent **toujours
+  sur la liste** : mémoriser la vue Analyse faisait croire les commandes
+  disparues.
+- **Ergonomie Odoo** (choix de l'utilisateur, « comme Odoo ») : ⊞/⊟ sur les
+  en-têtes de lignes ET de colonnes (colonnes à plusieurs niveaux), ⊞ après
+  un repli redemande le regroupement (pas le précédent), un choix ne détaille
+  **que l'en-tête cliqué** (« Tout déplier » pour le reste). Barre à
+  facettes, menus Filtres (périodes glissantes) / Regrouper par / Favoris.
+  Favoris en base, propres à l'utilisateur et à l'écran (table créée le
+  11/11). Périodes sans vente affichées vides (T1…T4, 3 mois), jamais au-delà
+  des dates lues.
 
 ## L'agent apprend des corrections faites dans le devis (11 nov.)
 
@@ -704,6 +720,48 @@ POWDER 17,8 KG). Une ligne sans article ou sans prix sort de la comparaison,
 et le total CRM n'est donné que si tout est comparé. Seule écriture, au clic :
 le coût lu d'un kit sur sa fiche (`reportDuKit`), refusé pour un kit à
 composants ou un prix tiré d'un palier.
+
+## Agent mail : ne garder que ce qui attend, rapprocher Odoo (8-11 nov.)
+
+Macros `outlook_macro/` : `ExporterMailsNonLus.bas` (module),
+`ThisOutlookSession.vba` (export à l'arrivée, passage au démarrage, rangement
+au fil de l'eau), `lien-outlook.reg` (protocole `outlook:` → `OUTLOOK.EXE
+/select`, HKCU). Dossier `OneDrive - ISOSIGN\Documents\MonCRM\Mails a
+traiter`, index `entryids.txt` (ANSI) pour « Ouvrir dans Outlook ».
+- **Export** : non lus 14 j, lus sans réponse 7 j, drapeau 30 j, tout sur 2 j.
+- **Règle : un mail traité part dans `Traites`, jamais supprimé** : répondu /
+  transféré, fil ayant reçu un envoi après lui, sorti de la boîte (supprimé,
+  **archivé ou classé**, même sans réponse), ou > 30 j. Premier passage le
+  10-11/11 : 709 → 195 fichiers, 536 dans `Traites`.
+- **Rapprochement Odoo** (`devisOdooMails.ts`, fonction `odoo-devis-mails`,
+  lecture seule, **déployée**) : `sur` (même société, devis postérieur ≤ 60 j
+  + preuve chantier/réf./articles) → section repliée « Déjà réalisés dans
+  Odoo » ; `possible` (sans preuve) → bandeau « C'est lui » / « Non ». Jamais
+  classé sans preuve. Pas encore vu tourner sur données réelles.
+- Tri IA : no-reply hors modèle, plus récents d'abord, pause 15 min après 2
+  échecs (quota Gemini gratuit = 20 requêtes, qui menace aussi l'analyse de
+  documents). Tri gardé en localStorage. Repli par catégorie (bouton −/+ et
+  nombre sur le 1er mail du groupe, mémorisé par navigateur).
+- Bouton « Rechercher dans Outlook » (remplace « Relire ») : lance la macro
+  via le lien, relit le dossier ; automatique à l'ouverture (≤ 1 fois / 5 min)
+  après un premier succès. ⚠️ **Demander le dossier AVANT de suivre le lien**
+  : sinon Chrome refuse le sélecteur (« Must be handling a user gesture »).
+  L'accès au dossier est mémorisé par navigateur ET par adresse.
+- « Écarter » = masqué dans ce navigateur seulement (le fichier reste) ;
+  proposition d'un sous-dossier `Ecartes` restée sans réponse.
+- **Reste à faire (utilisateur)** : coller la dernière
+  `ThisOutlookSession.vba` (Ctrl+S, redémarrer Outlook) et double-cliquer
+  `lien-outlook.reg` — non faits au 11/11 ; puis me demander de lancer la
+  commande pour vérifier qu'Outlook répond. Dire ce que donne « Déjà réalisés
+  dans Odoo ».
+
+## Mémoire au /clear (11 nov.)
+
+Crochet `SessionEnd` dans `.claude/settings.json` : un script résume la
+conversation et lance une session `claude` en arrière-plan qui met à jour
+cette reprise (commit « Reprise : … ») et la mémoire. Journal :
+`%TEMP%\claude-memoire-au-clear\`. ⚠️ Exige `claude auth login` sur le poste ;
+le crochet ne vaut que pour les sessions démarrées après son ajout.
 
 ## Pièges d'implémentation rencontrés
 
