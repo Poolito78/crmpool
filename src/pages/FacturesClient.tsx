@@ -6,6 +6,9 @@ import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
 import AnalyseCroisee, { BoutonAnalyse, useVueAnalyse } from '@/components/AnalyseCroisee';
+import DocumentsOdooListe from '@/components/DocumentsOdooListe';
+import { useQuery } from '@tanstack/react-query';
+import { CLE_VENTES_ODOO, dansPerimetreOdoo, documentsOdoo, lireVentesOdoo } from '@/lib/ventesOdoo';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterDateInput, { matchDateFilter, parseDateFilter } from '@/components/FilterDateInput';
 import FilterAmountInput, { matchAmountFilter, parseAmountFilter } from '@/components/FilterAmountInput';
@@ -74,6 +77,12 @@ export default function FacturesClient() {
   const { isAdmin, userId } = useCurrentUser();
   const { commercials, nameOf } = useCommercials();
   const [vueAnalyse, setVueAnalyse] = useVueAnalyse('factures');
+  // Factures Odoo (copie en lecture seule) : pastille « Odoo » de la liste.
+  const ventesOdoo = useQuery({ queryKey: CLE_VENTES_ODOO, queryFn: lireVentesOdoo, staleTime: 5 * 60_000 });
+  const nbFacturesOdoo = useMemo(() => {
+    const moi = commercials.find(c => c.userId === userId)?.name || '';
+    return documentsOdoo((ventesOdoo.data ?? []).filter(l => dansPerimetreOdoo(l, isAdmin, moi)), 'facture').length;
+  }, [ventesOdoo.data, commercials, userId, isAdmin]);
   const fcCols = useTableColumns<FCColKey>('factures_client_table', FC_COLS.map(c => c.key));
 
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -475,6 +484,10 @@ export default function FacturesClient() {
               {STATUTS_FACTURE_CLIENT[s].label}
             </button>
           ))}
+          <button onClick={() => setFilterStatut('odoo')} title="Factures et avoirs Odoo Flooring, en lecture seule"
+            className={`px-3 py-1 rounded text-xs font-medium transition-colors ${filterStatut === 'odoo' ? 'bg-violet-600 text-white' : 'bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-900/40 dark:text-violet-300'}`}>
+            Odoo ({nbFacturesOdoo})
+          </button>
         </div>
       </div>
 
@@ -492,7 +505,8 @@ export default function FacturesClient() {
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — la pastille « Odoo » montre à la place les factures Odoo, en lecture seule */}
+      {filterStatut === 'odoo' ? <DocumentsOdooListe source="facture" recherche={search} /> : (
       <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead>
@@ -581,6 +595,7 @@ export default function FacturesClient() {
           </tbody>
         </table>
       </div>
+      )}
       </>)}
 
       {/* Create / Edit Dialog */}

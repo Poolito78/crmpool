@@ -7,7 +7,7 @@ import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
 import AnalyseCroisee, { BoutonAnalyse, useVueAnalyse } from '@/components/AnalyseCroisee';
-import CommandesOdooListe from '@/components/CommandesOdooListe';
+import DocumentsOdooListe from '@/components/DocumentsOdooListe';
 import { useQuery } from '@tanstack/react-query';
 import { CLE_VENTES_ODOO, dansPerimetreOdoo, documentsOdoo, lireVentesOdoo } from '@/lib/ventesOdoo';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
@@ -502,7 +502,7 @@ export default function CommandesClient() {
       )}
 
       {/* Table — la pastille « Odoo » montre à la place les commandes Odoo, en lecture seule */}
-      {filterStatut === 'odoo' ? <CommandesOdooListe recherche={search} /> : (
+      {filterStatut === 'odoo' ? <DocumentsOdooListe source="commande" recherche={search} /> : (
       <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead>
