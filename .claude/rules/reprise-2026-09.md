@@ -704,6 +704,15 @@ l'année (N / N-1) » (`moisAnnee`) × colonnes « Année ».
 - **Traitement long** : curseur sur une colonne unique et ordonnable (la
   référence), jamais un offset, et un fichier d'état pour reprendre.
 
+- ⚠️ **Écran blanc au démarrage après un déploiement** (11/11, Chrome,
+  /produits) : une ancienne copie d'`index.html` réclamait un
+  `/assets/index-….js` remplacé ; Vercel renvoyait index.html (« MIME type
+  text/html ») et le garde-fou d'`App.tsx` ne tournait jamais, l'entrée
+  n'ayant pas chargé. Désormais un script EN LIGNE dans `index.html` purge
+  service worker + caches et recharge une fois, puis affiche un bouton ;
+  `vercel.json` ne réécrit plus `/assets/*` (404 franc) et sert `index.html`
+  et `sw.js` en `no-cache`.
+
 ## Ce qui reste ouvert
 
 1. **La RÉFÉRENCE de la bride** reste à trancher. La section est désormais

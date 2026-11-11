@@ -24,6 +24,67 @@
   <meta name="twitter:title" content="MonCRM - Gestion clients, devis, stock et fournisseurs">
   <meta property="og:description" content="CRM complet pour gérer vos clients, devis, produits, stock et fournisseurs. Accessible sur mobile et PC.">
   <meta name="twitter:description" content="CRM complet pour gérer vos clients, devis, produits, stock et fournisseurs. Accessible sur mobile et PC.">
+    <!--
+      Garde-fou de DÉMARRAGE (11/11/2026). Une ancienne copie de cette page
+      (cache du navigateur ou du service worker) réclame un /assets/index-….js
+      qu'un déploiement a remplacé : le script d'entrée ne se charge pas, et le
+      garde-fou des chunks périmés d'App.tsx n'a jamais l'occasion de tourner —
+      écran blanc (Chrome, /produits). Ce script, en ligne et sans dépendance,
+      s'exécute AVANT : au premier fichier /assets/ introuvable, il purge
+      service worker et caches puis recharge, une fois par session ; sinon il
+      affiche un message et un bouton au lieu d'une page blanche.
+    -->
+    <script>
+      (function () {
+        var CLE = 'demarrage-repare';
+        function purgerEtRecharger() {
+          var etapes = [];
+          try {
+            if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+              etapes.push(navigator.serviceWorker.getRegistrations().then(function (regs) {
+                return Promise.all(regs.map(function (r) { return r.unregister(); }));
+              }));
+            }
+            if (window.caches && caches.keys) {
+              etapes.push(caches.keys().then(function (cles) {
+                return Promise.all(cles.map(function (k) { return caches.delete(k); }));
+              }));
+            }
+          } catch (e) { /* on recharge quand même */ }
+          Promise.all(etapes).catch(function () {}).then(function () {
+            location.reload();
+          });
+        }
+        window.__purgerEtRecharger = purgerEtRecharger;
+        window.addEventListener('error', function (ev) {
+          var el = ev && ev.target;
+          if (!el || (el.tagName !== 'SCRIPT' && el.tagName !== 'LINK')) return;
+          var url = el.src || el.href || '';
+          if (url.indexOf('/assets/') === -1) return;
+          // Application déjà affichée : un chunk paresseux raté relève d'App.tsx.
+          var racine = document.getElementById('root');
+          if (racine && racine.childElementCount) return;
+          var dejaFait = false;
+          try { dejaFait = sessionStorage.getItem(CLE) === '1'; sessionStorage.setItem(CLE, '1'); } catch (e) { /* stockage bloqué */ }
+          if (!dejaFait) { purgerEtRecharger(); return; }
+          var root = document.getElementById('root');
+          if (root && !root.childElementCount) {
+            root.innerHTML = '<div id="demarrage-echec" style="font-family:system-ui,sans-serif;max-width:28rem;margin:15vh auto;padding:0 16px;text-align:center;color:#334155">'
+              + '<p style="font-size:1.1rem;font-weight:600">MonCRM n’a pas pu démarrer.</p>'
+              + '<p style="font-size:.9rem">Une ancienne version est restée en cache après une mise à jour.</p>'
+              + '<button style="margin-top:12px;padding:8px 16px;border-radius:8px;border:0;background:#2563eb;color:#fff;font-size:.9rem;cursor:pointer" '
+              + 'onclick="try{sessionStorage.removeItem(\'demarrage-repare\')}catch(e){};window.__purgerEtRecharger()">Recharger la dernière version</button></div>';
+          }
+        }, true);
+        // Démarrage réussi : la prochaine panne pourra de nouveau se réparer seule.
+        window.addEventListener('load', function () {
+          setTimeout(function () {
+            var root = document.getElementById('root');
+            if (root && root.childElementCount && !document.getElementById('demarrage-echec')) { try { sessionStorage.removeItem(CLE); } catch (e) { /* ignore */ } }
+          }, 3000);
+        });
+      })();
+    </script>
 </head>
 
   <body>
