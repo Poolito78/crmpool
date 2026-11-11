@@ -755,13 +755,27 @@ traiter`, index `entryids.txt` (ANSI) pour « Ouvrir dans Outlook ».
   commande pour vérifier qu'Outlook répond. Dire ce que donne « Déjà réalisés
   dans Odoo ».
 
-## Mémoire au /clear (11 nov.)
+## Mémoire des sessions terminées (11 nov.)
 
-Crochet `SessionEnd` dans `.claude/settings.json` : un script résume la
-conversation et lance une session `claude` en arrière-plan qui met à jour
-cette reprise (commit « Reprise : … ») et la mémoire. Journal :
-`%TEMP%\claude-memoire-au-clear\`. ⚠️ Exige `claude auth login` sur le poste ;
-le crochet ne vaut que pour les sessions démarrées après son ajout.
+Crochet **`SessionStart`** (`.claude/hooks/memoire-sessions.mjs`) : au
+démarrage d'une session, les conversations TERMINÉES du projet (dernière
+ligne `cost-state`, /clear compris) pas encore traitées (registre
+`memoire-sessions.json` à côté des conversations) partent dans une session
+`claude -p` de fond. Elle écrit des COPIES de cette reprise et de la mémoire
+dans un dossier de travail ; le script les reporte par fusion à trois et
+committe « Reprise : … » seul. Journal : `%TEMP%\claude-memoire-au-clear\`.
+Premier passage réussi le 11/11 (3 sessions).
+- ⚠️ **`SessionEnd` ne marche pas** : le /clear de l'application de bureau
+  ne le déclenche pas (deux essais, aucune trace).
+- ⚠️ Claude Code protège tout `.claude/` : même autorisée nommément, une
+  session de fond n'y écrit pas — d'où les copies.
+- ⚠️ `%TEMP%` en nom court (`FCCDA~1.MOU`) : Claude Code n'y reconnaît pas
+  son dossier courant et refuse d'écrire → `realpathSync.native`.
+- ⚠️ Exige `claude auth login` dans un terminal (identifiants de `~/.claude`,
+  pas ceux de l'application) ; refus de connexion et limite d'usage sont
+  retentés au démarrage suivant.
+- Un crochet n'est lu qu'au démarrage d'une session. Pas encore vu se
+  déclencher seul : vérifier `journal.log` après l'ouverture d'une session.
 
 ## Pièges d'implémentation rencontrés
 
