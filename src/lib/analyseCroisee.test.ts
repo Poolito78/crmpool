@@ -98,4 +98,15 @@ describe('pivot', () => {
     const trie = trierParMesure(p.racine, 'totalHT', null, 'desc');
     expect(trie.enfants.map(n => n.libelle)).toEqual(['TOP SIGNALISATION', 'AUBRAC SIGNAL']);
   });
+
+  it("mois de l'année × année : N et N-1 alignés", () => {
+    const f = faitsDevis([
+      devis('A', 'c1', '2025-03-10', [ligne('p1', 1, 100)]),
+      devis('B', 'c1', '2026-03-12', [ligne('p1', 1, 150)]),
+    ], ctx);
+    const p = construirePivot(f, ['moisAnnee'], 'annee');
+    expect(p.racine.enfants.map(n => n.libelle)).toEqual(['mars']);
+    expect(p.colonnes.map(c => c.libelle)).toEqual(['2025', '2026']);
+    expect(valeurMesure(p.racine.enfants[0].parColonne.get('2026'), 'totalHT')).toBe(150);
+  });
 });

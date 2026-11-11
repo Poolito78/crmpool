@@ -72,18 +72,20 @@ export interface FaitVente {
 
 export type DimensionId =
   | 'client' | 'commercial' | 'statut' | 'famille' | 'categorie' | 'article' | 'reference'
-  | 'document' | 'affaire' | 'annee' | 'trimestre' | 'mois';
+  | 'document' | 'affaire' | 'annee' | 'trimestre' | 'mois' | 'moisAnnee';
 
 interface Valeur { cle: string; libelle: string }
 
 const MOIS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
-function valeurDate(date: string, grain: 'annee' | 'trimestre' | 'mois'): Valeur {
+function valeurDate(date: string, grain: 'annee' | 'trimestre' | 'mois' | 'moisAnnee'): Valeur {
   const m = /^(\d{4})-(\d{2})/.exec(date || '');
   if (!m) return { cle: '~', libelle: '(sans date)' };
   const an = m[1];
   const mois = Number(m[2]);
   if (grain === 'annee') return { cle: an, libelle: an };
+  // Le mois SANS l'année : croisé avec des colonnes « Année », il aligne N et N-1.
+  if (grain === 'moisAnnee') return { cle: m[2], libelle: MOIS[mois - 1] };
   if (grain === 'trimestre') { const t = Math.ceil(mois / 3); return { cle: `${an}-T${t}`, libelle: `T${t} ${an}` }; }
   return { cle: `${an}-${m[2]}`, libelle: `${MOIS[mois - 1]} ${an}` };
 }
@@ -103,6 +105,7 @@ export const DIMENSIONS: { id: DimensionId; label: string; chronologique?: boole
   { id: 'annee', label: 'Année', chronologique: true, valeur: f => valeurDate(f.date, 'annee') },
   { id: 'trimestre', label: 'Trimestre', chronologique: true, valeur: f => valeurDate(f.date, 'trimestre') },
   { id: 'mois', label: 'Mois', chronologique: true, valeur: f => valeurDate(f.date, 'mois') },
+  { id: 'moisAnnee', label: "Mois de l'année (N / N-1)", chronologique: true, valeur: f => valeurDate(f.date, 'moisAnnee') },
 ];
 
 export const dimension = (id: DimensionId) => DIMENSIONS.find(d => d.id === id)!;

@@ -674,6 +674,9 @@ en négatif. Client absent → fiche CRÉÉE (choix du 11/11).
 `ca-refresh` mois par mois), 153 commandes ; 33 fiches créées, dont 4 doublons
 fusionnés (lignes repointées, fiches supprimées) et 2 écartées (ISOSIGN SAS
 (MS), COROS « NE PAS UTILISER ») → `client_id = 'ecarte'`, jamais recréées.
+Import **2025** fait le 11/11 (97 factures + 1 avoir, 146 863,42 € HT ; 98
+commandes ; 6 fiches créées). Comparaison annuelle : lignes « Mois de
+l'année (N / N-1) » (`moisAnnee`) × colonnes « Année ».
 
 ## Pièges d'implémentation rencontrés
 
