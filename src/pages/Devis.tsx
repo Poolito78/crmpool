@@ -365,9 +365,10 @@ export default function Devis() {
 
   // ── Vue tableau devis ───────────────────────────────────────────────────────
   const [devisView, setDevisView] = useState<'liste' | 'tableau' | 'analyse'>(() => {
-    try { return (localStorage.getItem('devis_view') as 'liste' | 'tableau' | 'analyse') || 'liste'; } catch { return 'liste'; }
+    // L'analyse croisée n'est jamais rouverte d'office : la page s'ouvre sur ses devis.
+    try { return localStorage.getItem('devis_view') === 'tableau' ? 'tableau' : 'liste'; } catch { return 'liste'; }
   });
-  useEffect(() => { try { localStorage.setItem('devis_view', devisView); } catch {} }, [devisView]);
+  useEffect(() => { if (devisView === 'analyse') return; try { localStorage.setItem('devis_view', devisView); } catch {} }, [devisView]);
   const [openFilterColsD, setOpenFilterColsD] = useState<Set<DevisTableColKey>>(new Set());
   const [colFiltersD, setColFiltersD] = useState<Partial<Record<DevisTableColKey, string>>>({});
   const [visDevisTableCols, setVisDevisTableCols] = useState<Set<DevisTableColKey>>(() => {

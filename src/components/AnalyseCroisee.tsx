@@ -82,11 +82,13 @@ function lireReglage(cle: string, sources: SourceAnalyse[], ficheClient: boolean
 
 type Tri = { mesure: MesureId; colonne: string | null; sens: 'asc' | 'desc' } | null;
 
-/** Liste ↔ analyse d'une page, mémorisé par page. */
+/**
+ * Liste ↔ analyse d'une page. ⚠️ NON mémorisé : la page s'ouvre TOUJOURS sur
+ * sa liste. Mémorisé, l'analyse revenait à la visite suivante et l'on ne
+ * trouvait plus ses commandes (11/11/2026). `cle` reste pour l'appelant.
+ */
 export function useVueAnalyse(cle: string) {
-  const [actif, setActif] = useState(() => { try { return localStorage.getItem(`vue_analyse_${cle}`) === '1'; } catch { return false; } });
-  useEffect(() => { try { localStorage.setItem(`vue_analyse_${cle}`, actif ? '1' : '0'); } catch { /* ignore */ } }, [cle, actif]);
-  return [actif, setActif] as const;
+  return useState(false);
 }
 
 /** Bouton d'en-tête de page : bascule entre la liste et l'analyse croisée. */
