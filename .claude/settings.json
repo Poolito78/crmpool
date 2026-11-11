@@ -6,13 +6,12 @@
     ]
   },
   "hooks": {
-    "SessionEnd": [
+    "SessionStart": [
       {
-        "matcher": "clear",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/memoire-au-clear.mjs\"",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/memoire-sessions.mjs\"",
             "timeout": 15
           }
         ]
