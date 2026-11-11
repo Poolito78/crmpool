@@ -14,16 +14,18 @@
  * ligne déjà traitée.
  *
  * Les messages de l'utilisateur et les réponses de Claude (sans les sorties
- * d'outils) partent EN ARRIÈRE-PLAN dans une session `claude -p` qui met à jour
- * `.claude/rules/reprise-2026-09.md` (commit + push de ce seul fichier) et la
- * mémoire de l'utilisateur. Le démarrage n'attend pas.
+ * d'outils) partent EN ARRIÈRE-PLAN (`--executer`, processus détaché) dans une
+ * session `claude -p` qui met à jour des COPIES de la reprise et de la mémoire ;
+ * ce script les reporte ensuite (voir REPRISE plus bas), committe et pousse la
+ * reprise seule. Le démarrage n'attend pas.
  *
  * - Moins de deux messages de l'utilisateur : marquée traitée, rien lancé.
  * - Rien d'avant DEPUIS (mise en place du crochet) n'est repris.
  * - La session lancée porte MEMOIRE_AU_CLEAR=1 et ne garde pas de conversation
  *   (--no-session-persistence) : elle ne relance rien.
  * - Journal : %TEMP%\claude-memoire-au-clear\journal.log (chaque démarrage)
- *   et <session>-<horodatage>.log (sortie de chaque session de fond).
+ *   et <session>-<horodatage>.log (sortie de chaque session de fond et ce qui
+ *   a été reporté) ; le dossier <session>-<horodatage>\ garde les copies.
  * - Essai sans rien lancer ni marquer : MEMOIRE_AU_CLEAR_ESSAI=1.
  * - À la main : `echo {"cwd":"<projet>"} | node .claude/hooks/memoire-sessions.mjs`
  *   (dossier des conversations déduit du projet).
@@ -31,7 +33,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const MAX_CARACTERES = 150_000;
 const MIN_MESSAGES_UTILISATEUR = 2;
@@ -167,35 +170,47 @@ function bashWindows() {
   return candidats.map(c => path.resolve(c)).find(c => fs.existsSync(c)) || null;
 }
 
-function invite(conversation, dossierMemoire, date) {
+/*
+ * ⚠️ Claude Code protège tout le dossier `.claude` : une session de fond ne
+ * peut pas écrire la reprise, même autorisée nommément (essayé le 11/11). Elle
+ * travaille donc sur des COPIES, dans un dossier de travail qui est son seul
+ * droit d'écriture (acceptEdits, sans Edit/Write ni Bash dans --allowedTools) :
+ * `reprise-2026-09.md` et `memoire/`. Ce script compare ensuite chaque copie à
+ * l'état de départ et reporte la différence par fusion à trois
+ * (`git merge-file`) — ce qu'une autre session a écrit entre-temps est gardé ;
+ * un conflit n'applique rien. La reprise est seule committée (choix du 11/11).
+ */
+const REPRISE = path.join('.claude', 'rules', 'reprise-2026-09.md');
+
+function invite(conversation, date) {
   return `Tu es lancé automatiquement (le ${date}) : une ou plusieurs sessions de travail
-sur ce projet se sont terminées (/clear ou fermeture). Ci-dessous, leurs conversations :
+sur un projet se sont terminées (/clear ou fermeture). Ci-dessous, leurs conversations :
 messages de l'utilisateur et réponses de Claude, sans les sorties d'outils (une
 « SUITE » ne reprend que ce qui a été dit depuis une mise en mémoire précédente).
 Ta seule tâche : mettre en mémoire ce qui doit leur survivre, puis t'arrêter.
 Réponds et écris en français.
 
-1. ÉTAT DU PROJET → \`.claude/rules/reprise-2026-09.md\`. Relis-le d'abord en entier.
-   Ajoute une section datée (titre court + date), ou complète celle du même sujet :
-   ce qui a été fait et où, ce qui reste à faire (gestes de l'utilisateur, fonctions
-   « À déployer : \`.\\deploy-function.ps1 nom\` »), les règles métier décidées, les
-   pièges rencontrés. Style du fichier : concis, ⚠️ devant un piège. Corrige ce que
-   la conversation a rendu faux. N'écris pas ce que le code ou git disent déjà
-   (\`git log\` au besoin), ni une hypothèse non confirmée.
+Tu travailles dans le dossier courant, sur des COPIES : un script reporte ensuite
+tes changements dans le projet. N'écris nulle part ailleurs.
+
+1. ÉTAT DU PROJET → \`reprise-2026-09.md\` (dossier courant). Relis-le d'abord en
+   entier. Ajoute une section datée (titre court + date), ou complète celle du même
+   sujet : ce qui a été fait et où, ce qui reste à faire (gestes de l'utilisateur,
+   fonctions « À déployer : \`.\\deploy-function.ps1 nom\` »), les règles métier
+   décidées, les pièges rencontrés. Style du fichier : concis, ⚠️ devant un piège.
+   Corrige ce que la conversation a rendu faux. N'écris pas une hypothèse non
+   confirmée. Touche le moins de lignes possible : ajouts et corrections ciblées,
+   jamais de réécriture d'ensemble.
 2. PRÉFÉRENCES ET CONSIGNES DE L'UTILISATEUR (façon de travailler, décisions
-   valables pour toutes les tâches) → mémoire dans \`${dossierMemoire}\` : un
-   fichier par fait, avec le frontmatter name / description / metadata.type
-   (user, feedback, project, reference), corps suivi de **Why:** et **How to apply:**,
-   et une ligne d'index dans MEMORY.md. Lis MEMORY.md avant : mets à jour un
-   fichier existant plutôt que d'en créer un doublon.
-3. Rien qui mérite de survivre (question isolée, conversation sans décision) :
-   ne modifie rien.
-4. Ne touche à aucun autre fichier. N'invente rien : seulement ce que la
-   conversation établit.
-5. Si la reprise a changé : \`git pull --rebase --autostash\`, \`git add\` de CE
-   fichier seulement, commit « Reprise : <sujet> » terminé par la ligne
-   « Co-Authored-By: Claude <noreply@anthropic.com> », puis \`git push\`. Jamais
-   de force. Si le push échoue, laisse le commit local et dis-le.
+   valables pour toutes les tâches) → \`memoire/\` (dossier courant) : un fichier
+   par fait, avec le frontmatter name / description / metadata.type (user,
+   feedback, project, reference), corps suivi de **Why:** et **How to apply:**, et
+   une ligne d'index dans \`memoire/MEMORY.md\`. Lis MEMORY.md avant : mets à jour
+   un fichier existant plutôt que d'en créer un doublon.
+3. Si la reprise a changé, écris dans \`sujet.txt\` (dossier courant) le sujet en
+   quelques mots, sur une ligne : il deviendra le commit « Reprise : <sujet> ».
+4. Rien qui mérite de survivre (question isolée, conversation sans décision) :
+   ne modifie rien. N'invente rien : seulement ce que la conversation établit.
 
 Termine par une ligne : ce que tu as écrit, ou « rien à retenir ».
 
@@ -203,16 +218,101 @@ ${conversation}
 `;
 }
 
-const entree = lireEntree();
-if (process.env.MEMOIRE_AU_CLEAR) process.exit(0);
-const essai = !!process.env.MEMOIRE_AU_CLEAR_ESSAI;
+function git(args, cwd) {
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
+  return { code: r.status, sortie: `${r.stdout || ''}${r.stderr || ''}`.trim() };
+}
 
-const projet = entree.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
-const dossier = entree.transcript_path ? path.dirname(entree.transcript_path) : dossierConversations(projet);
-const courante = String(entree.session_id || '');
+function lire(chemin) {
+  try { return fs.readFileSync(chemin, 'utf8'); } catch { return null; }
+}
+
+/**
+ * Reporte `propose` (la copie modifiée) sur `reel`, `base` étant l'état de
+ * départ. Rend 'inchangé', 'écrit', 'conflit' ou 'erreur'.
+ */
+function reporter(reel, base, propose) {
+  const p = lire(propose), b = lire(base), r = lire(reel);
+  if (p === null || p === b || r === p) return 'inchangé';
+  if (r === null || r === b) { fs.writeFileSync(reel, p, 'utf8'); return 'écrit'; }
+  let baseFusion = base;
+  if (b === null) { baseFusion = `${propose}.base-vide`; fs.writeFileSync(baseFusion, '', 'utf8'); }
+  const f = spawnSync('git', ['merge-file', '-p', reel, baseFusion, propose], { encoding: 'utf8', windowsHide: true });
+  if (f.status === 0) { fs.writeFileSync(reel, f.stdout, 'utf8'); return 'écrit'; }
+  return f.status > 0 ? 'conflit' : 'erreur';
+}
+
 const noterGeneral = m => fs.appendFileSync(path.join(dossierJournal, 'journal.log'), `[${new Date().toISOString()}] ${m}\n`);
 
-try {
+/** Processus détaché : lance la session de fond, puis reporte ses copies. */
+function executer(cheminTache) {
+  const t = JSON.parse(fs.readFileSync(cheminTache, 'utf8'));
+  const noter = m => { fs.appendFileSync(t.journal, `[${new Date().toISOString()}] ${m}\n`); noterGeneral(m); };
+  const sortie = fs.openSync(t.journal, 'a');
+  const r = spawnSync(t.lanceur.programme, [...t.lanceur.avant, '-p',
+    '--permission-mode', 'acceptEdits',
+    '--allowedTools', 'Read,Grep,Glob',
+    '--no-session-persistence'], {
+    cwd: t.travail,
+    windowsHide: true,
+    stdio: [fs.openSync(t.invite, 'r'), sortie, sortie],
+    env: process.env,
+    timeout: 20 * 60 * 1000,
+  });
+  fs.closeSync(sortie);
+  const dernier = lire(t.journal) || '';
+  if (r.error || ECHEC_CONNEXION.test(dernier.slice(dernier.lastIndexOf('] lancée (pid')))) {
+    noter(`session de fond arrêtée sans résultat${r.error ? ` (${r.error.message})` : ''} : rien reporté`);
+    return;
+  }
+
+  // Mémoire de l'utilisateur : chaque fichier créé ou modifié.
+  const ecrits = [];
+  for (const nom of fs.readdirSync(path.join(t.travail, 'memoire'))) {
+    if (!nom.endsWith('.md')) continue;
+    const etat = reporter(path.join(t.dossierMemoire, nom), path.join(t.travail, 'base-memoire', nom), path.join(t.travail, 'memoire', nom));
+    if (etat !== 'inchangé') ecrits.push(`${nom} : ${etat}`);
+  }
+  noter(`mémoire : ${ecrits.join(', ') || 'rien de neuf'}`);
+
+  // Reprise : fusionnée dans le dépôt à jour, committée seule.
+  const fichier = path.join(t.projet, REPRISE);
+  const propose = path.join(t.travail, 'reprise-2026-09.md');
+  const base = path.join(t.travail, 'base', 'reprise-2026-09.md');
+  if (lire(propose) === lire(base)) { noter('reprise : rien de neuf'); return; }
+  const tire = git(['pull', '--rebase', '--autostash'], t.projet);
+  if (tire.code !== 0) noter(`reprise : git pull a échoué (${tire.sortie.split('\n').pop()}), fusion sur la copie locale`);
+  if (git(['diff', '--quiet', 'HEAD', '--', REPRISE], t.projet).code !== 0) {
+    noter(`reprise : modifiée et non committée par une autre session — rien reporté, proposition dans ${propose}`);
+    return;
+  }
+  const etat = reporter(fichier, base, propose);
+  if (etat !== 'écrit') { noter(`reprise : ${etat}${etat === 'conflit' ? ` — rien reporté, proposition dans ${propose}` : ''}`); return; }
+  const sujet = ((lire(path.join(t.travail, 'sujet.txt')) || '').split(/\r?\n/)[0].trim() || 'mise en mémoire des sessions').slice(0, 72);
+  const message = path.join(t.travail, 'commit.txt');
+  fs.writeFileSync(message, `Reprise : ${sujet}\n\nMise en mémoire automatique des sessions ${t.sessions.join(', ')}.\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n`, 'utf8');
+  const commit = git(['commit', '-F', message, '--', REPRISE], t.projet);
+  if (commit.code !== 0) { noter(`reprise : écrite mais commit refusé (${commit.sortie.split('\n').pop()})`); return; }
+  const pousse = git(['push'], t.projet);
+  noter(`reprise : committée « Reprise : ${sujet} »${pousse.code === 0 ? ' et poussée' : ` — push refusé, commit local (${pousse.sortie.split('\n').pop()})`}`);
+}
+
+function copierDossier(source, cible) {
+  fs.mkdirSync(cible, { recursive: true });
+  if (!fs.existsSync(source)) return;
+  for (const nom of fs.readdirSync(source)) {
+    if (nom.endsWith('.md')) fs.copyFileSync(path.join(source, nom), path.join(cible, nom));
+  }
+}
+
+/** Le crochet SessionStart : trouve les sessions terminées et lance l'exécution détachée. */
+function crochet() {
+  const entree = lireEntree();
+  const essai = !!process.env.MEMOIRE_AU_CLEAR_ESSAI;
+  const projet = entree.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
+  const dossier = entree.transcript_path ? path.dirname(entree.transcript_path) : dossierConversations(projet);
+  const courante = String(entree.session_id || '');
+
   noterGeneral(`démarrage ${entree.source || '(à la main)'} de ${courante || '?'} dans ${dossier}`);
   const cheminRegistre = path.join(dossier, 'memoire-sessions.json');
   const registre = lireRegistre(cheminRegistre);
@@ -220,8 +320,8 @@ try {
   // Une session de fond qui n'a pas pu se connecter n'a rien écrit : on retente.
   for (const [id, r] of Object.entries(registre)) {
     if (!r.lance || !r.journal) continue;
-    let sortie = '';
-    try { sortie = fs.readFileSync(path.join(dossierJournal, r.journal), 'utf8'); } catch { continue; }
+    let sortie = lire(path.join(dossierJournal, r.journal));
+    if (sortie === null) continue;
     sortie = sortie.slice(Math.max(0, sortie.lastIndexOf('] lancée (pid'))); // le dernier lancement seulement
     if (ECHEC_CONNEXION.test(sortie)) { delete registre[id]; noterGeneral(`à refaire (connexion refusée) : ${id}`); }
   }
@@ -245,7 +345,7 @@ try {
     aTraiter.push({ id: m[1], suite: deja > 0, fin: stat.mtimeMs, taille: stat.size, ...c });
   }
   if (!essai) ecrireRegistre(cheminRegistre, registre);
-  if (!aTraiter.length) { noterGeneral('rien à mettre en mémoire'); process.exit(0); }
+  if (!aTraiter.length) { noterGeneral('rien à mettre en mémoire'); return; }
 
   aTraiter.sort((a, b) => a.fin - b.fin);
   const part = Math.floor(MAX_CARACTERES / aTraiter.length);
@@ -254,47 +354,54 @@ try {
     return `===== ${s.suite ? 'SUITE DE LA ' : ''}SESSION ${s.id} (terminée le ${quand}) =====\n\n${couper(s.tout, part)}`;
   }).join('\n\n');
 
-  const session = aTraiter[aTraiter.length - 1].id;
-  const nomJournal = `${session}-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}.log`;
-  const journal = path.join(dossierJournal, nomJournal);
-  const noter = m => { fs.appendFileSync(journal, `[${new Date().toISOString()}] ${m}\n`); noterGeneral(m); };
-
-  const dossierMemoire = path.join(dossier, 'memory');
-  const date = new Date().toLocaleDateString('fr-FR');
-  const fichierInvite = path.join(dossierJournal, `${session}.invite.txt`);
-  fs.writeFileSync(fichierInvite, invite(tout, dossierMemoire, date), 'utf8');
-  const messagesUtilisateur = aTraiter.reduce((n, s) => n + s.messagesUtilisateur, 0);
-
   const lanceur = lanceurClaude();
-  if (!lanceur) { noter('Claude Code introuvable (ni CLAUDE_CODE_EXECPATH, ni cli.js dans le PATH) : rien lancé'); process.exit(0); }
-  const args = [...lanceur.avant, '-p',
-    '--permission-mode', 'acceptEdits',
-    '--allowedTools', 'Read,Grep,Glob,Edit,Write,Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git add:*),Bash(git commit:*),Bash(git pull:*),Bash(git push:*)',
-    '--add-dir', dossierMemoire,
-    '--no-session-persistence'];
+  if (!lanceur) { noterGeneral('Claude Code introuvable (ni CLAUDE_CODE_EXECPATH, ni cli.js dans le PATH) : rien lancé'); return; }
+
+  // Dossier de travail : les copies, et leur état de départ pour la fusion.
+  const nomTravail = `${aTraiter[aTraiter.length - 1].id}-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}`;
+  const travail = path.join(dossierJournal, nomTravail);
+  const dossierMemoire = path.join(dossier, 'memory');
+  fs.mkdirSync(path.join(travail, 'base'), { recursive: true });
+  for (const cible of [path.join(travail, 'reprise-2026-09.md'), path.join(travail, 'base', 'reprise-2026-09.md')]) {
+    fs.copyFileSync(path.join(projet, REPRISE), cible);
+  }
+  copierDossier(dossierMemoire, path.join(travail, 'memoire'));
+  copierDossier(dossierMemoire, path.join(travail, 'base-memoire'));
+
+  const tache = {
+    projet, travail, dossierMemoire, lanceur,
+    journal: path.join(dossierJournal, `${nomTravail}.log`),
+    invite: path.join(travail, 'invite.txt'),
+    sessions: aTraiter.map(s => s.id.slice(0, 8)),
+  };
+  fs.writeFileSync(tache.invite, invite(tout, new Date().toLocaleDateString('fr-FR')), 'utf8');
+  const cheminTache = path.join(travail, 'tache.json');
+  fs.writeFileSync(cheminTache, JSON.stringify(tache, null, 1), 'utf8');
 
   if (essai) {
-    console.log(JSON.stringify({ projet, sessions: aTraiter.map(s => `${s.id} (${s.messagesUtilisateur} messages${s.suite ? ', suite' : ''})`), caracteres: tout.length, invite: fichierInvite, commande: [lanceur.programme, ...args] }, null, 2));
-    process.exit(0);
+    console.log(JSON.stringify({ projet, sessions: aTraiter.map(s => `${s.id} (${s.messagesUtilisateur} messages${s.suite ? ', suite' : ''})`), caracteres: tout.length, travail }, null, 2));
+    return;
   }
 
   // Marquées AVANT le lancement : une autre session qui démarre ne les relance pas.
-  for (const s of aTraiter) registre[s.id] = { lignes: s.lignes, taille: s.taille, le: new Date().toISOString(), lance: true, journal: nomJournal };
+  for (const s of aTraiter) registre[s.id] = { lignes: s.lignes, taille: s.taille, le: new Date().toISOString(), lance: true, journal: `${nomTravail}.log` };
   ecrireRegistre(cheminRegistre, registre);
 
   const env = { ...environnementPropre(), MEMOIRE_AU_CLEAR: '1' };
   const bash = bashWindows();
   if (bash) env.CLAUDE_CODE_GIT_BASH_PATH = bash;
-  const sortie = fs.openSync(journal, 'a');
-  const enfant = spawn(lanceur.programme, args, {
-    cwd: projet,
-    detached: true,
-    windowsHide: true,
-    stdio: [fs.openSync(fichierInvite, 'r'), sortie, sortie],
-    env,
+  const messages = aTraiter.reduce((n, s) => n + s.messagesUtilisateur, 0);
+  const enfant = spawn(process.execPath, [fileURLToPath(import.meta.url), '--executer', cheminTache], {
+    cwd: projet, detached: true, windowsHide: true, stdio: 'ignore', env,
   });
   enfant.unref();
-  noter(`lancée (pid ${enfant.pid}) : ${aTraiter.map(s => s.id.slice(0, 8)).join(', ')} — ${messagesUtilisateur} messages, ${tout.length} caractères`);
+  fs.appendFileSync(tache.journal, `[${new Date().toISOString()}] lancée (pid ${enfant.pid}) : ${tache.sessions.join(', ')} — ${messages} messages, ${tout.length} caractères\n`);
+  noterGeneral(`lancée (pid ${enfant.pid}) : ${tache.sessions.join(', ')} — ${messages} messages`);
+}
+
+try {
+  if (process.argv[2] === '--executer') executer(process.argv[3]);
+  else if (!process.env.MEMOIRE_AU_CLEAR) crochet();
 } catch (e) {
   noterGeneral(`erreur : ${e && e.stack || e}`);
 }
