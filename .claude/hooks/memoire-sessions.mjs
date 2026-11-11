@@ -23,7 +23,7 @@
  * - La session lancée porte MEMOIRE_AU_CLEAR=1 et ne garde pas de conversation
  *   (--no-session-persistence) : elle ne relance rien.
  * - Journal : %TEMP%\claude-memoire-au-clear\journal.log (chaque démarrage)
- *   et <session>.log (sortie de la session de fond).
+ *   et <session>-<horodatage>.log (sortie de chaque session de fond).
  * - Essai sans rien lancer ni marquer : MEMOIRE_AU_CLEAR_ESSAI=1.
  * - À la main : `echo {"cwd":"<projet>"} | node .claude/hooks/memoire-sessions.mjs`
  *   (dossier des conversations déduit du projet).
@@ -42,8 +42,10 @@ const DEPUIS = Date.parse('2026-11-11T16:00:00Z');
  * d'un `claude` de terminal), pas avec ceux de l'application : expirés, elle
  * répond « Failed to authenticate » sans rien écrire (vu le 11/11). Refaire
  * `claude auth login` dans un terminal ; la session non traitée est retentée.
+ * Même chose quand la limite d'usage est atteinte (« You've hit your 5-hour
+ * limit », vu le 11/11) : la session de fond s'arrête sans rien écrire.
  */
-const ECHEC_CONNEXION = /Failed to authenticate|Not logged in|Invalid API key|Please run \/login|claude auth login/i;
+const ECHEC_CONNEXION = /Failed to authenticate|Not logged in|Invalid API key|Please run \/login|claude auth login|hit your .{0,20}limit|usage limit|rate limit/i;
 
 const dossierJournal = path.join(os.tmpdir(), 'claude-memoire-au-clear');
 fs.mkdirSync(dossierJournal, { recursive: true });
@@ -220,6 +222,7 @@ try {
     if (!r.lance || !r.journal) continue;
     let sortie = '';
     try { sortie = fs.readFileSync(path.join(dossierJournal, r.journal), 'utf8'); } catch { continue; }
+    sortie = sortie.slice(Math.max(0, sortie.lastIndexOf('] lancée (pid'))); // le dernier lancement seulement
     if (ECHEC_CONNEXION.test(sortie)) { delete registre[id]; noterGeneral(`à refaire (connexion refusée) : ${id}`); }
   }
 
@@ -252,7 +255,8 @@ try {
   }).join('\n\n');
 
   const session = aTraiter[aTraiter.length - 1].id;
-  const journal = path.join(dossierJournal, `${session}.log`);
+  const nomJournal = `${session}-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}.log`;
+  const journal = path.join(dossierJournal, nomJournal);
   const noter = m => { fs.appendFileSync(journal, `[${new Date().toISOString()}] ${m}\n`); noterGeneral(m); };
 
   const dossierMemoire = path.join(dossier, 'memory');
@@ -275,7 +279,7 @@ try {
   }
 
   // Marquées AVANT le lancement : une autre session qui démarre ne les relance pas.
-  for (const s of aTraiter) registre[s.id] = { lignes: s.lignes, taille: s.taille, le: new Date().toISOString(), lance: true, journal: `${session}.log` };
+  for (const s of aTraiter) registre[s.id] = { lignes: s.lignes, taille: s.taille, le: new Date().toISOString(), lance: true, journal: nomJournal };
   ecrireRegistre(cheminRegistre, registre);
 
   const env = { ...environnementPropre(), MEMOIRE_AU_CLEAR: '1' };
