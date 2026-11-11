@@ -7,8 +7,9 @@ import {
 } from '@/lib/store';
 import {
   Plus, Trash2, Star, Truck, Clock, Package,
-  ChevronDown, ChevronUp, TrendingDown, Lock, FolderOpen,
+  ChevronDown, ChevronUp, TrendingDown, Lock, FolderOpen, Search, Loader2,
 } from 'lucide-react';
+import { chercherPartenairesOdoo, fournisseurDepuisPartenaire, type PartenaireOdoo } from '@/lib/fournisseurOdoo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,6 +28,9 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
   const [form, setForm] = useState({ fournisseurId: '', referenceFournisseur: '', delaiLivraison: 0, conditionnementMin: 1 });
   const [creatingNewFourn, setCreatingNewFourn] = useState(false);
   const [newFournForm, setNewFournForm] = useState({ societe: '', nom: '', email: '', telephone: '' });
+  /* Recherche du fournisseur dans le fichier partenaires d'Odoo (lecture seule). */
+  const [odooResultats, setOdooResultats] = useState<PartenaireOdoo[] | null>(null);
+  const [odooEnCours, setOdooEnCours] = useState(false);
   const [expandedPrix, setExpandedPrix]   = useState<Set<string>>(new Set());
   const [expandedPort, setExpandedPort]   = useState<Set<string>>(new Set());
 
@@ -100,6 +104,39 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
     setCreatingNewFourn(false);
     setNewFournForm({ societe: '', nom: '', email: '', telephone: '' });
     toast.success(`Fournisseur "${newF.societe}" créé`);
+  }
+
+  async function chercherDansOdoo() {
+    const terme = newFournForm.societe.trim();
+    if (terme.length < 3) { toast.error('Tapez au moins trois caractères du nom (ou ville, courriel, n° TVA).'); return; }
+    setOdooEnCours(true);
+    try {
+      const trouves = await chercherPartenairesOdoo(terme);
+      setOdooResultats(trouves);
+      if (!trouves.length) toast.info(`Aucune fiche Odoo pour « ${terme} ».`);
+    } catch (e) {
+      setOdooResultats(null);
+      toast.error(`Recherche Odoo impossible : ${(e as Error).message}`);
+    } finally {
+      setOdooEnCours(false);
+    }
+  }
+
+  /** La fiche Odoo recopiée dans MonCRM (ou le fournisseur déjà présent), puis sélectionnée. */
+  function importerDepuisOdoo(p: PartenaireOdoo) {
+    const { fournisseur, existant } = fournisseurDepuisPartenaire(p, fournisseurs, generateId);
+    if (pfs.some(pf => pf.fournisseurId === fournisseur.id)) {
+      toast.info(`${fournisseur.societe} est déjà fournisseur de cet article.`);
+      return;
+    }
+    if (!existant) updateFournisseurs(prev => [...prev, fournisseur]);
+    setForm(f => ({ ...f, fournisseurId: fournisseur.id }));
+    setCreatingNewFourn(false);
+    setOdooResultats(null);
+    setNewFournForm({ societe: '', nom: '', email: '', telephone: '' });
+    toast.success(existant
+      ? `${fournisseur.societe} était déjà dans MonCRM : sélectionné.`
+      : `${fournisseur.societe} repris d'Odoo et ajouté aux fournisseurs.`);
   }
 
   function removePf(id: string) {
@@ -442,7 +479,7 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
                   variant={creatingNewFourn ? 'secondary' : 'outline'}
                   size="sm"
                   className="h-8 px-2 shrink-0"
-                  onClick={() => { setCreatingNewFourn(o => !o); setNewFournForm({ societe: '', nom: '', email: '', telephone: '' }); }}
+                  onClick={() => { setCreatingNewFourn(o => !o); setNewFournForm({ societe: '', nom: '', email: '', telephone: '' }); setOdooResultats(null); }}
                   title="Créer un nouveau fournisseur"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -454,14 +491,47 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
             {creatingNewFourn && (
               <div className="col-span-2 border border-border rounded-lg p-2.5 bg-muted/30 space-y-2">
                 <p className="text-xs font-semibold text-foreground">Nouveau fournisseur</p>
-                <Input
-                  placeholder="Société *"
-                  value={newFournForm.societe}
-                  onChange={e => setNewFournForm(p => ({ ...p, societe: e.target.value }))}
-                  onKeyDown={e => e.key === 'Enter' && createAndSelectFournisseur()}
-                  className="h-7 text-xs"
-                  autoFocus
-                />
+                <div className="flex gap-1.5">
+                  <Input
+                    placeholder="Société *"
+                    value={newFournForm.societe}
+                    onChange={e => setNewFournForm(p => ({ ...p, societe: e.target.value }))}
+                    onKeyDown={e => e.key === 'Enter' && createAndSelectFournisseur()}
+                    className="h-7 text-xs flex-1"
+                    autoFocus
+                  />
+                  <Button type="button" variant="outline" size="sm" className="h-7 text-xs shrink-0"
+                    disabled={odooEnCours} onClick={() => void chercherDansOdoo()}
+                    title="Chercher ce nom (ou ville, courriel, n° TVA) dans les partenaires Odoo et l'importer">
+                    {odooEnCours ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Search className="w-3 h-3 mr-1" />}
+                    Chercher dans Odoo
+                  </Button>
+                </div>
+                {odooResultats && (
+                  <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-0.5">
+                    {odooResultats.length ? (
+                      <>
+                        <p className="text-[10px] text-muted-foreground px-1">Fiches Odoo — cliquer pour importer et sélectionner :</p>
+                        <div className="max-h-48 overflow-y-auto space-y-0.5">
+                          {odooResultats.map(p => (
+                            <button type="button" key={p.id} onClick={() => importerDepuisOdoo(p)}
+                              className="flex w-full flex-col items-start rounded px-1.5 py-1 text-left text-xs hover:bg-primary/10">
+                              <span className="font-medium">
+                                {p.nom}
+                                {!p.estSociete && p.societeMere && <span className="font-normal text-muted-foreground"> — {p.societeMere}</span>}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground">
+                                {[p.codePostal, p.ville, p.email, p.telephone || p.mobile].filter(Boolean).join(' · ') || 'aucune coordonnée'}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-muted-foreground px-1">Aucune fiche Odoo : créez le fournisseur ci-dessous.</p>
+                    )}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-1.5">
                   <Input placeholder="Nom contact" value={newFournForm.nom} onChange={e => setNewFournForm(p => ({ ...p, nom: e.target.value }))} className="h-7 text-xs" />
                   <Input placeholder="Email" value={newFournForm.email} onChange={e => setNewFournForm(p => ({ ...p, email: e.target.value }))} className="h-7 text-xs" />
@@ -469,7 +539,7 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
                 <Input placeholder="Téléphone" value={newFournForm.telephone} onChange={e => setNewFournForm(p => ({ ...p, telephone: e.target.value }))} className="h-7 text-xs" />
                 <p className="text-[10px] text-muted-foreground">Adresse, franco de port et autres infos modifiables dans la fiche fournisseur.</p>
                 <div className="flex gap-1.5 justify-end">
-                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setCreatingNewFourn(false)}>Annuler</Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setCreatingNewFourn(false); setOdooResultats(null); }}>Annuler</Button>
                   <Button size="sm" className="h-7 text-xs" onClick={createAndSelectFournisseur}>
                     <Plus className="w-3 h-3 mr-1" /> Créer et sélectionner
                   </Button>

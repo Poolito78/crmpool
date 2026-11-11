@@ -135,6 +135,7 @@ import {
 } from '@/lib/store';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
 import { supabase } from '@/integrations/supabase/client';
+import { chercherPartenairesOdoo, fournisseurDepuisPartenaire, societePartenaire, type PartenaireOdoo } from '@/lib/fournisseurOdoo';
 import { chargerListeNoire } from '@/lib/produitsSupprimes';
 import { type ExtractedContact } from '@/components/EmailToContactDialog';
 
@@ -274,22 +275,6 @@ interface Props {
 
 const today = () => new Date().toISOString().split('T')[0];
 const nextYear = () => new Date(Date.now() + 30 * 864e5).toISOString().split('T')[0];
-
-/** Une fiche du fichier client d'Odoo, telle que la renvoie `odoo-prix`. */
-interface PartenaireOdoo {
-  id: number;
-  nom: string;
-  email: string;
-  ville: string;
-  codePostal: string;
-  adresse: string;
-  telephone: string;
-  mobile: string;
-  tva: string;
-  estSociete: boolean;
-  societeMere: string;
-  contrat: string;
-}
 
 /** Types d'analyse dont la pièce vient d'un CLIENT : jamais classée chez un fournisseur. */
 const TYPES_SANS_CLASSEMENT_FOURNISSEUR: ReadonlySet<TypeDocument | undefined> = new Set<TypeDocument>([
@@ -595,11 +580,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     }
     setOdooEnCours(true);
     try {
-      const { data, error } = await supabase.functions.invoke('odoo-prix', {
-        body: { rechercheClient: terme },
-      });
-      if (error) throw error;
-      const trouves: PartenaireOdoo[] = data?.partenaires ?? [];
+      const trouves = await chercherPartenairesOdoo(terme);
       setOdooResultats(trouves);
       if (!trouves.length) toast.info(`Aucune fiche Odoo pour « ${terme} ».`);
     } catch (e) {
@@ -686,28 +667,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
    * les comparatifs d'achat sans que personne ne s'en aperçoive.
    */
   const importerFournisseurOdoo = useCallback((p: PartenaireOdoo) => {
-    const societe = p.estSociete ? p.nom : (p.societeMere || p.nom);
+    const societe = societePartenaire(p);
     /* Déjà présent ? On le réutilise plutôt que d'en créer un doublon. */
-    const existant = fournisseurs.find(f =>
-      (p.email && f.email && f.email.toLowerCase() === p.email.toLowerCase())
-      || (f.societe || f.nom || '').toLowerCase() === societe.toLowerCase());
-
-    const fournisseur: Fournisseur = existant ?? {
-      id: generateId(),
-      nom: p.nom,
-      societe,
-      email: p.email,
-      telephone: p.telephone || p.mobile,
-      telephoneMobile: p.mobile,
-      adresse: p.adresse,
-      ville: p.ville,
-      codePostal: p.codePostal,
-      notes: `Fiche reprise du fichier Odoo (partenaire #${p.id}).`,
-      francoPort: 0,
-      coutTransport: 0,
-      delaiReglement: '',
-      dateCreation: new Date().toISOString().split('T')[0],
-    };
+    const { fournisseur, existant } = fournisseurDepuisPartenaire(p, fournisseurs, generateId);
     if (!existant) updateFournisseurs(prev => [...prev, fournisseur]);
 
     setDfFournisseurId(fournisseur.id);
