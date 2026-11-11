@@ -173,7 +173,7 @@ explication.
 `kitFournisseur` (devis reçu : ligne chiffrée + lignes sans prix = un kit, quantités ramenées à UN kit, code de tête générique, coût porté par la 1re ligne de composant) ·
 `nuancierFlowcrete` (teintes par tier et par gamme : Tier 1 disponible, Tier 2 10 à 15 j ouvrés) ·
 `recapSysteme` (fiche récap copiée dans les fichiers du devis : devis modèle, sinon table `systemes`) ·
-`demandeTeintes` (dictée/email du devis : tableau de surfaces par couleur lu sans IA → zones en m², un pigment par teinte à la dose du devis modèle, règle par teinte lue dans les devis réalisés ; ml sans largeur et pictos = « à préciser », jamais supposés) ·`concurrents` · `ralColors`
+`demandeTeintes` (dictée/email du devis : tableau de surfaces par couleur lu sans IA → zones en m², un pigment par teinte à la dose du devis modèle, règle par teinte lue dans les devis réalisés ; ml sans largeur et pictos = « à préciser », jamais supposés) · `analyseCroisee` (pivot devis / commandes / factures : une ligne d'article ou un port = un fait ; nb de documents = compte distinct ; avoir au signe −1, proformas et modèles « système » exclus) · `concurrents` · `ralColors`
 
 ## Supabase
 

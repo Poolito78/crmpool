@@ -5,6 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
+import AnalyseCroisee, { BoutonAnalyse, useVueAnalyse } from '@/components/AnalyseCroisee';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterDateInput, { matchDateFilter, parseDateFilter } from '@/components/FilterDateInput';
 import FilterAmountInput, { matchAmountFilter, parseAmountFilter } from '@/components/FilterAmountInput';
@@ -72,6 +73,7 @@ export default function FacturesClient() {
   const emetteurDeFacture = (f: FactureClient) => { const soc = societeDuDocument(f, societes); return soc ? emetteurDe(soc) : EMETTEUR; };
   const { isAdmin, userId } = useCurrentUser();
   const { commercials, nameOf } = useCommercials();
+  const [vueAnalyse, setVueAnalyse] = useVueAnalyse('factures');
   const fcCols = useTableColumns<FCColKey>('factures_client_table', FC_COLS.map(c => c.key));
 
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -407,6 +409,7 @@ export default function FacturesClient() {
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-4">
+      {!vueAnalyse && (<>
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="stat-card text-center">
@@ -442,6 +445,7 @@ export default function FacturesClient() {
           ))}
         </div>
       </div>
+      </>)}
 
       <PageHeaderSlot>
         <div className="relative w-32 sm:w-48 md:w-72">
@@ -449,6 +453,7 @@ export default function FacturesClient() {
           <Input placeholder="Rechercher client, numéro..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
         </div>
         <div className="ml-auto flex gap-2 items-center shrink-0">
+          <BoutonAnalyse actif={vueAnalyse} onClick={() => setVueAnalyse(v => !v)} />
           <Button onClick={() => openNew(true)} size="sm" variant="outline" className="border-amber-400 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950">
             <FileText className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Proforma</span>
           </Button>
@@ -458,6 +463,7 @@ export default function FacturesClient() {
         </div>
       </PageHeaderSlot>
 
+      {vueAnalyse ? <AnalyseCroisee sources={['factures']} cle="factures" /> : (<>
       {/* Filtre statut */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="flex flex-wrap gap-1.5">
@@ -575,6 +581,7 @@ export default function FacturesClient() {
           </tbody>
         </table>
       </div>
+      </>)}
 
       {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={o => { setDialogOpen(o); if (!o) setEditingId(null); }}>

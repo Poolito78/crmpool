@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
+import AnalyseCroisee, { BoutonAnalyse, useVueAnalyse } from '@/components/AnalyseCroisee';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterDateInput, { matchDateFilter, parseDateFilter } from '@/components/FilterDateInput';
 import FilterAmountInput, { matchAmountFilter, parseAmountFilter } from '@/components/FilterAmountInput';
@@ -55,6 +56,7 @@ export default function CommandesClient() {
   const [logoCommande, setLogoCommande] = useState<CommandeClient | null>(null);
   const { isAdmin, userId } = useCurrentUser();
   const { commercials, nameOf } = useCommercials();
+  const [vueAnalyse, setVueAnalyse] = useVueAnalyse('commandes');
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [filterProduit, setFilterProduit] = useState<string>('');
@@ -436,10 +438,12 @@ export default function CommandesClient() {
           </DropdownMenu>
         </div>
         <div className="ml-auto flex gap-2 items-center shrink-0">
+          <BoutonAnalyse actif={vueAnalyse} onClick={() => setVueAnalyse(v => !v)} />
           <Button onClick={openNew} size="sm"><Plus className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Nouvelle commande</span></Button>
         </div>
       </PageHeaderSlot>
 
+      {vueAnalyse ? <AnalyseCroisee sources={['commandes']} cle="commandes" /> : (<>
       {/* Filter by status */}
       <div className="flex flex-wrap gap-1.5">
         <button onClick={() => setFilterStatut('tous')} className={`px-3 py-1 rounded text-xs font-medium transition-colors ${filterStatut === 'tous' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}>
@@ -580,6 +584,7 @@ export default function CommandesClient() {
           </tbody>
         </table>
       </div>
+      </>)}
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type React
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Building2, MoveHorizontal, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat } from 'lucide-react';
+import { Building2, MoveHorizontal, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, BarChart3, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, getOdooPartnerId, setOdooPartnerId, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, type OdooPayload } from '@/lib/odooSync';
 import { dimensionTeinte, teinteDeReference } from '@/lib/referenceTeinte';
 import { delaiDeTeinte } from '@/lib/nuancierFlowcrete';
@@ -85,6 +85,7 @@ import { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS, type DevisTableColKey }
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
+import AnalyseCroisee from '@/components/AnalyseCroisee';
 import RowActionsMenu from '@/components/RowActionsMenu';
 import TableGearMenu from '@/components/TableGearMenu';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
@@ -363,8 +364,8 @@ export default function Devis() {
   const kitPickerRef = useRef<HTMLDivElement>(null);
 
   // ── Vue tableau devis ───────────────────────────────────────────────────────
-  const [devisView, setDevisView] = useState<'liste' | 'tableau'>(() => {
-    try { return (localStorage.getItem('devis_view') as 'liste' | 'tableau') || 'liste'; } catch { return 'liste'; }
+  const [devisView, setDevisView] = useState<'liste' | 'tableau' | 'analyse'>(() => {
+    try { return (localStorage.getItem('devis_view') as 'liste' | 'tableau' | 'analyse') || 'liste'; } catch { return 'liste'; }
   });
   useEffect(() => { try { localStorage.setItem('devis_view', devisView); } catch {} }, [devisView]);
   const [openFilterColsD, setOpenFilterColsD] = useState<Set<DevisTableColKey>>(new Set());
@@ -3475,7 +3476,7 @@ export default function Devis() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="px-2.5 gap-1 shrink-0" title="Changer de vue">
-                  {devisView === 'liste' ? <LayoutList className="w-4 h-4" /> : <Table2 className="w-4 h-4" />}
+                  {devisView === 'liste' ? <LayoutList className="w-4 h-4" /> : devisView === 'analyse' ? <BarChart3 className="w-4 h-4" /> : <Table2 className="w-4 h-4" />}
                   <ChevronDown className="w-3 h-3 opacity-60" />
                 </Button>
               </DropdownMenuTrigger>
@@ -3486,6 +3487,9 @@ export default function Devis() {
                 <DropdownMenuItem onClick={() => setDevisView('tableau')}>
                   <Table2 className="w-4 h-4 mr-2 text-muted-foreground" /> Vue tableau {devisView === 'tableau' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setDevisView('analyse')}>
+                  <BarChart3 className="w-4 h-4 mr-2 text-muted-foreground" /> Analyse croisée {devisView === 'analyse' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <Button variant="outline" size="icon" className="shrink-0" title="Nouveau devis vocal / analyse de mail" onClick={() => { openNew(); setVoiceAssistantOpen(true); }}>
@@ -3494,6 +3498,8 @@ export default function Devis() {
             <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
           </div>
       </PageHeaderSlot>
+
+      {devisView === 'analyse' && <AnalyseCroisee sources={['devis']} cle="devis" />}
 
       {/* ══ Vue Tableau ══════════════════════════════════════════════════════ */}
       {devisView === 'tableau' && (

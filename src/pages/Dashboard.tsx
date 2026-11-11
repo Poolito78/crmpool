@@ -2,6 +2,7 @@ import { useState, useMemo, Fragment } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { calculerTotalDevis, formatMontant, formatDate, calculerDateEcheance, useCrmActions, formatDateISO, getPrixPourQuantite, TYPE_CRM_ACTION, STATUT_CRM_ACTION } from '@/lib/store';
 import { exportToExcel } from '@/lib/exportExcel';
+import AnalyseCroisee from '@/components/AnalyseCroisee';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, Upload, ArrowDownCircle, ArrowUpCircle, ShoppingCart, Bell, Phone, Mail, MapPin, CheckSquare, Calendar, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -15,8 +16,8 @@ import CaOdooPanel from '@/components/CaOdooPanel';
 import { useCaOdoo } from '@/lib/caOdoo';
 import { devisARelancer, prochaineRelance } from '@/lib/relanceDevis';
 
-type DashTab = 'overview' | 'previsionnel' | 'caodoo';
-const DASH_TABS: DashTab[] = ['overview', 'previsionnel', 'caodoo'];
+type DashTab = 'overview' | 'previsionnel' | 'caodoo' | 'analyse';
+const DASH_TABS: DashTab[] = ['overview', 'previsionnel', 'caodoo', 'analyse'];
 
 const TYPE_ICON: Record<string, any> = {
   visite: MapPin, appel: Phone, email: Mail, tache: CheckSquare, rdv: Calendar,
@@ -163,9 +164,14 @@ export default function Dashboard() {
         <button onClick={() => setDashTabPersist('overview')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Vue d'ensemble</button>
         {canAchat && <button onClick={() => setDashTabPersist('previsionnel')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'previsionnel' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Prévisionnel devis</button>}
         {caOdooDispo && <button onClick={() => setDashTabPersist('caodoo')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'caodoo' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CA Odoo</button>}
+        <button onClick={() => setDashTabPersist('analyse')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'analyse' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Analyse</button>
       </div>
 
-      {dashTab === 'caodoo' && caOdooDispo ? (
+      {dashTab === 'analyse' ? (
+        <div className="flex flex-col h-[calc(100dvh-11rem)] min-h-[24rem]">
+          <AnalyseCroisee sources={['factures', 'commandes', 'devis']} cle="dashboard" />
+        </div>
+      ) : dashTab === 'caodoo' && caOdooDispo ? (
         <CaOdooPanel />
       ) : dashTab === 'previsionnel' && canAchat ? (
         <PrevisionnelDevis devis={devis} clients={clients} produits={produits} />
