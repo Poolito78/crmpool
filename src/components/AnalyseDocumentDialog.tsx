@@ -22,6 +22,8 @@ import {
 import PlanDirectionnelEncart from '@/components/PlanDirectionnelEncart';
 import ClasserDocumentFournisseur from '@/components/ClasserDocumentFournisseur';
 import FicheTechniqueArticle from '@/components/FicheTechniqueArticle';
+import ComparaisonCommandePanel from '@/components/ComparaisonCommandePanel';
+import { comparerCommande, kitsDuCatalogue, type KitCompare } from '@/lib/comparaisonCommande';
 import PortDocumentPanel, { type PortSaisi } from '@/components/PortDocumentPanel';
 import TransportFournisseurDialog from '@/components/TransportFournisseurDialog';
 import {
@@ -129,7 +131,7 @@ import { useCRM } from '@/lib/StoreContext';
 import {
   type Client, type Fournisseur, type CommandeFournisseur, type LigneReception, type CommandeClient, type Devis, type LigneDevis,
   type Produit,
-  designationProduit, generateId, calculerDateEcheance, departementDeCodePostal, formatDateISO, formatMontant,
+  designationProduit, generateId, calculerDateEcheance, departementDeCodePostal, formatDateISO, formatMontant, portFournisseur,
 } from '@/lib/store';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
 import { supabase } from '@/integrations/supabase/client';
@@ -2255,6 +2257,18 @@ const [contratOdoo, setContratOdoo] = useState<
     onOpenChange(false);
   }
 
+  /* Le coût d'un kit lu sur la commande va sur sa fiche, et seulement là : ni le
+     lien fournisseur ni les prix de vente ne bougent. Daté, pour que la synchro
+     Odoo ne le défasse pas. */
+  function reporterCoutKit(k: KitCompare, prix: number) {
+    const horodate = new Date().toISOString();
+    updateProduits(prev => appliquerPrix({
+      cibles: [{ produitId: k.kit.id, prix, versArticle: true, versLien: false }],
+      fournisseurId: '', liens: [], produits: prev, horodate, nouvelId: generateId,
+    }).produits);
+    toast.success(`${k.kit.reference} : coût d'achat ${formatMontant(k.kit.prixAchat)} → ${formatMontant(prix)}. Prix de vente inchangés.`);
+  }
+
   /* ── créer commande client ── */
   /**
    * Applique les prix d'achat lus sur un devis fournisseur.
@@ -2951,6 +2965,14 @@ const [contratOdoo, setContratOdoo] = useState<
     const sujet = (surface.libelle.split(/\s+/)[0] || '').replace(/s$/i, '');
     return precisionDemande(texteDemande(l, i), sujet) ?? '';
   }, [noteSysteme, result, texteDemande]);
+
+  /* Les kits du catalogue, pour la comparaison d'une commande reçue : 22 000 articles
+     à ne parcourir qu'une fois, et seulement si le document en est une. */
+  const typeCommandeRecue = isFournisseurDoc(result?.typeDocument);
+  const kitsCatalogue = useMemo(
+    () => (typeCommandeRecue ? kitsDuCatalogue(produits) : []),
+    [typeCommandeRecue, produits],
+  );
 
   const candidatsPour = useCallback(
     (i: number) => rapprochements.get(i)?.candidats ?? [],
@@ -6589,6 +6611,27 @@ const [contratOdoo, setContratOdoo] = useState<
                 })() : (
                   <p className="text-xs text-muted-foreground">Aucun frais de transport lu sur ce document.</p>
                 ))}
+
+                {/* ── Commande reçue : prix du document comparés au CRM, kits rapprochés, total ── */}
+                {isFournisseurDoc(result.typeDocument) && result.lignes.some(l => (l.prixUnitaireHT ?? 0) > 0) && (() => {
+                  const port = portDuDocument();
+                  const f = fournisseurs.find(x => x.id === port.valeur.fournisseurId);
+                  const fiche = f && fraisPortCF > 0
+                    ? portFournisseur(f, Math.floor(parseFloat(port.valeur.poids.replace(',', '.')) || 0), port.montantMarchandise, port.valeur.dept || undefined)
+                    : null;
+                  return (
+                    <ComparaisonCommandePanel onReporterKit={reporterCoutKit} comparaison={comparerCommande({
+                      lignes: result.lignes,
+                      produitDe: produitDeLigneCF,
+                      kits: kitsCatalogue,
+                      fournisseurId: port.valeur.fournisseurId || undefined,
+                      liens: produitFournisseurs,
+                      totalHT: result.totalHT,
+                      portDoc: fraisPortCF,
+                      portFiche: fiche?.montant,
+                    })} />
+                  );
+                })()}
 
                 {/* ── Ce que l'analyse a lu, brut ──────────────────────────
                     Replié par défaut. C'est l'état AVANT correction : les

@@ -692,6 +692,19 @@ chose ; une ligne revenue à l'article proposé défait un essai appris).
 Quantités, ajouts, retraits : encart « Proposition de l'agent » sous les
 brides, relevé à copier. Devis antérieurs au 11/11 : rien de figé, rien appris.
 
+## Commande fournisseur reçue comparée aux prix du CRM (7 nov., commité le 11)
+
+`comparaisonCommande.ts` + `ComparaisonCommandePanel.tsx` (droit Achat) :
+dans l'analyse d'une commande / d'un devis fournisseur, prix du document
+(ramené au conditionnement) face au prix d'achat de la fiche au palier, ligne
+par ligne puis au total, port compris. **Les kits se reconnaissent** par leurs
+composants déclarés (quantités proportionnelles) ou par le libellé qui annonce
+leurs parties (FLOWFASTF1 « A 2,2 KG + B 17,8 kG » ↔ MORTAR LIQUID 2,2 KG +
+POWDER 17,8 KG). Une ligne sans article ou sans prix sort de la comparaison,
+et le total CRM n'est donné que si tout est comparé. Seule écriture, au clic :
+le coût lu d'un kit sur sa fiche (`reportDuKit`), refusé pour un kit à
+composants ou un prix tiré d'un palier.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du
