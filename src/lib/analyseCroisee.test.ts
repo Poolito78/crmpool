@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  construirePivot, faitsDevis, faitsFactures, lignesVisibles, trierParMesure, valeurMesure, cheminsDepliables,
+  construirePivot, cheminColonne, colonnesFeuilles, faitsDevis, faitsFactures, lignesVisibles, trierParMesure, valeurMesure, cheminsDepliables,
   type ContexteFaits,
 } from './analyseCroisee';
 import type { Devis, FactureClient, LigneDevis, Produit, Client } from './store';
@@ -71,8 +71,8 @@ describe('pivot', () => {
     expect(p.racine.enfants.map(n => n.libelle)).toEqual(['AUBRAC SIGNAL', 'TOP SIGNALISATION']);
     const top = p.racine.enfants[1];
     expect(valeurMesure(top.total, 'totalHT')).toBe(330);
-    expect(valeurMesure(top.parColonne.get('2026-01'), 'totalHT')).toBe(230);
-    expect(valeurMesure(top.parColonne.get('2026-02'), 'quantite')).toBe(10);
+    expect(valeurMesure(top.parColonne.get(cheminColonne('2026-01')), 'totalHT')).toBe(230);
+    expect(valeurMesure(top.parColonne.get(cheminColonne('2026-02')), 'quantite')).toBe(10);
     expect(valeurMesure(p.racine.total, 'totalHT')).toBe(430);
   });
 
@@ -107,6 +107,22 @@ describe('pivot', () => {
     const p = construirePivot(f, ['moisAnnee'], 'annee');
     expect(p.racine.enfants.map(n => n.libelle)).toEqual(['mars']);
     expect(p.colonnes.map(c => c.libelle)).toEqual(['2025', '2026']);
-    expect(valeurMesure(p.racine.enfants[0].parColonne.get('2026'), 'totalHT')).toBe(150);
+    expect(valeurMesure(p.racine.enfants[0].parColonne.get(cheminColonne('2026')), 'totalHT')).toBe(150);
+  });
+
+  it('colonnes sur deux niveaux : sous-totaux vrais et dépliage', () => {
+    const f = faitsDevis([
+      devis('A', 'c1', '2025-03-10', [ligne('p1', 1, 100)]),
+      devis('B', 'c1', '2026-03-12', [ligne('p1', 1, 150)]),
+      devis('C', 'c1', '2026-04-02', [ligne('p1', 2, 10)]),
+    ], ctx);
+    const p = construirePivot(f, [], ['annee', 'mois']);
+    expect(p.colonnes.map(c => c.libelle)).toEqual(['2025', '2026']);
+    expect(valeurMesure(p.racine.parColonne.get(cheminColonne('2026')), 'totalHT')).toBe(170);
+    expect(valeurMesure(p.racine.parColonne.get(cheminColonne('2026', '2026-04')), 'totalHT')).toBe(20);
+    expect(valeurMesure(p.racine.parColonne.get(cheminColonne('2026')), 'documents')).toBe(2);
+    expect(colonnesFeuilles(p.colRacine, new Set()).map(c => c.libelle)).toEqual(['2025', '2026']);
+    expect(colonnesFeuilles(p.colRacine, new Set([cheminColonne('2026')])).map(c => c.libelle)).toEqual(['2025', 'mars 2026', 'avril 2026']);
+    expect(colonnesFeuilles(construirePivot(f, [], []).colRacine, new Set())).toEqual([]);
   });
 });

@@ -164,18 +164,34 @@ export interface NoeudPivot {
   enfants: NoeudPivot[];
 }
 
-export interface Pivot {
-  racine: NoeudPivot;
-  colonnes: Valeur[];
+/** Un en-tête de colonne : même arbre que les lignes, sans agrégat propre. */
+export interface NoeudColonne {
+  cle: string;
+  libelle: string;
+  /** Clé des cases `parColonne` des lignes (racine = '' = total). */
+  chemin: string;
+  niveau: number;
+  enfants: NoeudColonne[];
 }
 
-const SEP = '\u0001';
+export interface Pivot {
+  racine: NoeudPivot;
+  /** Arbre des colonnes ; sa racine est la colonne « Total ». */
+  colRacine: NoeudColonne;
+  /** Premier niveau de colonnes (raccourci). */
+  colonnes: NoeudColonne[];
+}
+
+const SEP = '';
+
+/** Clé de case d'une colonne, depuis les clés de ses niveaux (`cheminColonne('2026', '2026-03')`). */
+export const cheminColonne = (...cles: string[]) => cles.map(c => SEP + c).join('');
 
 function nouveauNoeud(v: Valeur, chemin: string, niveau: number): NoeudPivot {
   return { cle: v.cle, libelle: v.libelle, chemin, niveau, total: agregatVide(), parColonne: new Map(), enfants: [] };
 }
 
-function trierValeurs<T extends Valeur>(vs: T[], dim: DimensionId | null): T[] {
+function trierValeurs<T extends Valeur>(vs: T[], dim: DimensionId | null | undefined): T[] {
   const chrono = dim ? dimension(dim).chronologique : false;
   return [...vs].sort((a, b) => {
     // Les valeurs « (sans …) » (clé « ~ ») toujours en dernier.
@@ -186,20 +202,35 @@ function trierValeurs<T extends Valeur>(vs: T[], dim: DimensionId | null): T[] {
 
 /**
  * Regroupe les faits. Chaque fait alimente la racine et chacun de ses
- * ancêtres — total de la ligne et case de sa colonne —, si bien que les
- * sous-totaux sont des agrégats vrais (un document compté une fois), jamais
- * des sommes de lignes.
+ * ancêtres — total de la ligne et case de CHAQUE niveau de sa colonne —, si
+ * bien que les sous-totaux, en ligne comme en colonne, sont des agrégats
+ * vrais (un document compté une fois), jamais des sommes de cases.
  */
-export function construirePivot(faits: FaitVente[], dimsLignes: DimensionId[], dimColonne: DimensionId | null): Pivot {
+export function construirePivot(faits: FaitVente[], dimsLignes: DimensionId[], dimsColonnes: DimensionId[] | DimensionId | null): Pivot {
+  const dimsCol = dimsColonnes === null ? [] : Array.isArray(dimsColonnes) ? dimsColonnes : [dimsColonnes];
   const racine = nouveauNoeud({ cle: '', libelle: 'Total' }, '', 0);
-  const colonnes = new Map<string, Valeur>();
+  const colRacine: NoeudColonne = { cle: '', libelle: 'Total', chemin: '', niveau: 0, enfants: [] };
   const index = new Map<string, NoeudPivot>();
+  const indexCol = new Map<string, NoeudColonne>();
   const defs = dimsLignes.map(dimension);
-  const defCol = dimColonne ? dimension(dimColonne) : null;
+  const defsCol = dimsCol.map(dimension);
 
   for (const f of faits) {
-    const col = defCol ? defCol.valeur(f) : null;
-    if (col && !colonnes.has(col.cle)) colonnes.set(col.cle, col);
+    // Chemins de la colonne du fait, à chaque niveau.
+    const cheminsCol: string[] = [];
+    let col = colRacine;
+    for (let i = 0; i < defsCol.length; i++) {
+      const v = defsCol[i].valeur(f);
+      const chemin = col.chemin + SEP + v.cle;
+      let enfant = indexCol.get(chemin);
+      if (!enfant) {
+        enfant = { cle: v.cle, libelle: v.libelle, chemin, niveau: i + 1, enfants: [] };
+        indexCol.set(chemin, enfant);
+        col.enfants.push(enfant);
+      }
+      col = enfant;
+      cheminsCol.push(chemin);
+    }
     let noeud = racine;
     const chaine = [racine];
     for (let i = 0; i < defs.length; i++) {
@@ -216,9 +247,9 @@ export function construirePivot(faits: FaitVente[], dimsLignes: DimensionId[], d
     }
     for (const n of chaine) {
       ajouter(n.total, f);
-      if (col) {
-        let a = n.parColonne.get(col.cle);
-        if (!a) { a = agregatVide(); n.parColonne.set(col.cle, a); }
+      for (const c of cheminsCol) {
+        let a = n.parColonne.get(c);
+        if (!a) { a = agregatVide(); n.parColonne.set(c, a); }
         ajouter(a, f);
       }
     }
@@ -230,7 +261,28 @@ export function construirePivot(faits: FaitVente[], dimsLignes: DimensionId[], d
     n.enfants.forEach(ordonner);
   };
   ordonner(racine);
-  return { racine, colonnes: trierValeurs([...colonnes.values()], dimColonne) };
+  const ordonnerCol = (n: NoeudColonne) => {
+    if (!n.enfants.length) return;
+    n.enfants = trierValeurs(n.enfants, dimsCol[n.niveau]);
+    n.enfants.forEach(ordonnerCol);
+  };
+  ordonnerCol(colRacine);
+  return { racine, colRacine, colonnes: colRacine.enfants };
+}
+
+/**
+ * Les colonnes affichées (feuilles visibles) : la racine est ouverte dès
+ * qu'il y a un niveau de colonnes, un nœud fermé tient lieu de ses enfants.
+ * Vide = pas de colonnes, seule la colonne Total.
+ */
+export function colonnesFeuilles(colRacine: NoeudColonne, ouverts: Set<string>): NoeudColonne[] {
+  const out: NoeudColonne[] = [];
+  const parcourir = (n: NoeudColonne) => {
+    if (n.enfants.length && (n === colRacine || ouverts.has(n.chemin))) n.enfants.forEach(parcourir);
+    else out.push(n);
+  };
+  if (colRacine.enfants.length) parcourir(colRacine);
+  return out;
 }
 
 /** Tri des lignes par une mesure (dans une colonne, ou au total), à chaque niveau. */

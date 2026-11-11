@@ -1,16 +1,20 @@
 /**
- * Analyse croisée — l'écran du tableau croisé dynamique (vue pivot d'Odoo).
+ * Analyse croisée — l'écran du tableau croisé dynamique, à la manière de la
+ * vue pivot d'Odoo.
  *
- * Monté dans Devis, Commandes Client, Factures Client (une source chacun), dans
- * l'onglet Ventes de la fiche client (`clientId`) et
- * dans le Tableau de bord (les trois au choix). Le calcul vit dans
- * `analyseCroisee.ts` ; ici, seulement le réglage et l'affichage :
- * mesures cochées, niveaux de lignes (Catégorie › Article…), dimension de
- * colonne (Mois…), filtres période / statut / texte, dépliage « + / − »,
- * tri par un clic sur l'en-tête d'une mesure, inversion des axes, export Excel.
+ * Monté dans Devis, Commandes Client, Factures Client, l'onglet Ventes de la
+ * fiche client (`clientId`) et le Tableau de bord. Le calcul vit dans
+ * `analyseCroisee.ts` ; ici, le réglage et l'affichage, comme chez Odoo :
+ *  - **⊞ / ⊟ sur les en-têtes de LIGNE et de COLONNE** : ⊞ sur un en-tête du
+ *    dernier niveau ouvre la liste des regroupements et ajoute celui choisi ;
+ *    ⊟ replie ; ⊟ sur « Total » retire tous les regroupements de l'axe ;
+ *  - barre de **facettes** (statut, période, regroupements, favori) avec ×,
+ *    et menus **Filtres**, **Regrouper par**, **Favoris** ;
+ *  - **Mesures** cochées, tri au clic sur une mesure, ⇄, export Excel.
  *
+ * Favoris : table `analyse_favoris`, par utilisateur et par écran (`cle`).
+ * Le réglage courant est mémorisé par écran (`localStorage`).
  * Le périmètre est celui des pages : un non-admin ne voit que ses documents.
- * Le réglage est mémorisé par écran (`localStorage`, clé `analyse_croisee_<cle>`).
  */
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useCRM } from '@/lib/StoreContext';
@@ -18,38 +22,59 @@ import { useCurrentUser } from '@/hooks/useAuth';
 import { useCommercials } from '@/hooks/useCommercials';
 import { produitParId } from '@/lib/indexProduits';
 import { exportToExcel } from '@/lib/exportExcel';
+import { supabase } from '@/integrations/supabase/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { lireVentesOdoo, importerVentesOdoo, dansPerimetreOdoo, CLE_VENTES_ODOO } from '@/lib/ventesOdoo';
 import {
   DIMENSIONS, MESURES, LIBELLE_SOURCE, dimension,
-  construirePivot, trierParMesure, lignesVisibles, cheminsDepliables, valeurMesure, formaterMesure,
+  construirePivot, trierParMesure, lignesVisibles, cheminsDepliables, colonnesFeuilles, valeurMesure, formaterMesure,
   faitsDevis, faitsCommandes, faitsFactures, faitsVentesOdoo, estSourceOdoo,
-  type DimensionId, type MesureId, type SourceAnalyse, type FaitVente, type NoeudPivot,
+  type DimensionId, type MesureId, type SourceAnalyse, type FaitVente, type NoeudPivot, type NoeudColonne,
 } from '@/lib/analyseCroisee';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator,
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator, DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
-import { ArrowDown, ArrowLeftRight, ArrowUp, BarChart3, ChevronDown, CloudDownload, List, Loader2, Download, MinusSquare, PlusSquare, Plus, Search, X, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  ArrowDown, ArrowLeftRight, ArrowUp, BarChart3, ChevronDown, CloudDownload, List, Loader2, Download, MinusSquare, PlusSquare,
+  Search, X, ChevronsDownUp, ChevronsUpDown, Filter, Layers, Star, Trash2,
+} from 'lucide-react';
+
+// ── Réglage ────────────────────────────────────────────────────────────────
+
+type PeriodeId = 'annee' | 'anneePrecedente' | 'trimestre' | 'mois' | '12mois' | 'perso';
+
+const PERIODES: { id: PeriodeId; label: string }[] = [
+  { id: 'annee', label: 'Année en cours' },
+  { id: 'anneePrecedente', label: 'Année précédente' },
+  { id: 'trimestre', label: 'Trimestre en cours' },
+  { id: 'mois', label: 'Mois en cours' },
+  { id: '12mois', label: '12 derniers mois' },
+  { id: 'perso', label: 'Période personnalisée…' },
+];
 
 interface Reglage {
   source: SourceAnalyse;
   lignes: DimensionId[];
-  colonne: DimensionId | null;
+  colonnes: DimensionId[];
   mesures: MesureId[];
   statutsExclus: Partial<Record<SourceAnalyse, string[]>>;
+  /** Période relative (recalculée chaque jour) ; `perso` = `du` / `au`. */
+  periode: PeriodeId | null;
   du: string;
   au: string;
 }
 
 const REGLAGE_DEFAUT: Omit<Reglage, 'source'> = {
   lignes: ['categorie', 'article'],
-  colonne: 'mois',
+  colonnes: ['mois'],
   mesures: ['totalHT', 'quantite'],
   // Une facture annulée n'est pas une vente.
   statutsExclus: { factures: ['Annulée'] },
+  periode: null,
   du: '',
   au: '',
 };
@@ -63,24 +88,55 @@ const REGLAGE_FICHE_CLIENT: Partial<Omit<Reglage, 'source'>> = {
   statutsExclus: { factures: ['Annulée'], commandes: ['Facturé', 'Payée'], commandesOdoo: ['Facturée'] },
 };
 
+/** Remet d'aplomb un réglage relu (localStorage, favori) : rien qui n'existe plus. */
+function nettoyer(brut: Partial<Reglage> & { colonne?: DimensionId | null }, defaut: Reglage, sources: SourceAnalyse[], ficheClient: boolean): Reglage {
+  const r = { ...defaut, ...brut } as Reglage;
+  // Version précédente : une seule colonne (`colonne`).
+  if (!Array.isArray(brut.colonnes) && brut.colonne !== undefined) r.colonnes = brut.colonne ? [brut.colonne] : [];
+  const ids = new Set(DIMENSIONS.map(d => d.id).filter(d => !(ficheClient && d === 'client')));
+  r.lignes = (r.lignes || []).filter(d => ids.has(d));
+  r.colonnes = (r.colonnes || []).filter(d => ids.has(d) && !r.lignes.includes(d));
+  r.mesures = (r.mesures || []).filter(m => MESURES.some(x => x.id === m));
+  if (!r.mesures.length) r.mesures = ['totalHT'];
+  if (!sources.includes(r.source)) r.source = sources[0];
+  if (r.periode && !PERIODES.some(p => p.id === r.periode)) r.periode = null;
+  delete (r as { colonne?: unknown }).colonne;
+  return r;
+}
+
+function reglageParDefaut(sources: SourceAnalyse[], ficheClient: boolean): Reglage {
+  return { ...REGLAGE_DEFAUT, ...(ficheClient ? REGLAGE_FICHE_CLIENT : {}), source: sources[0] };
+}
+
 function lireReglage(cle: string, sources: SourceAnalyse[], ficheClient: boolean): Reglage {
-  const defaut: Reglage = { ...REGLAGE_DEFAUT, ...(ficheClient ? REGLAGE_FICHE_CLIENT : {}), source: sources[0] };
+  const defaut = reglageParDefaut(sources, ficheClient);
   try {
     const brut = localStorage.getItem(`analyse_croisee_${cle}`);
-    if (!brut) return defaut;
-    const r = { ...defaut, ...JSON.parse(brut) } as Reglage;
-    // Valeurs relues d'une version précédente : on ne garde que ce qui existe encore.
-    const ids = new Set(DIMENSIONS.map(d => d.id).filter(d => !(ficheClient && d === 'client')));
-    r.lignes = (r.lignes || []).filter(d => ids.has(d));
-    if (r.colonne && !ids.has(r.colonne)) r.colonne = null;
-    r.mesures = (r.mesures || []).filter(m => MESURES.some(x => x.id === m));
-    if (!r.mesures.length) r.mesures = ['totalHT'];
-    if (!sources.includes(r.source)) r.source = sources[0];
-    return r;
+    return brut ? nettoyer(JSON.parse(brut), defaut, sources, ficheClient) : defaut;
   } catch { return defaut; }
 }
 
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/** Bornes [du, au] d'une période, relues au jour d'aujourd'hui. */
+function bornesPeriode(r: Pick<Reglage, 'periode' | 'du' | 'au'>): [string, string] {
+  const t = new Date();
+  const y = t.getFullYear();
+  switch (r.periode) {
+    case 'annee': return [`${y}-01-01`, `${y}-12-31`];
+    case 'anneePrecedente': return [`${y - 1}-01-01`, `${y - 1}-12-31`];
+    case 'trimestre': { const q = Math.floor(t.getMonth() / 3); return [iso(new Date(y, q * 3, 1)), iso(new Date(y, q * 3 + 3, 0))]; }
+    case 'mois': return [iso(new Date(y, t.getMonth(), 1)), iso(new Date(y, t.getMonth() + 1, 0))];
+    case '12mois': return [iso(new Date(y - 1, t.getMonth(), t.getDate() + 1)), iso(t)];
+    case 'perso': return [r.du, r.au];
+    default: return ['', ''];
+  }
+}
+
 type Tri = { mesure: MesureId; colonne: string | null; sens: 'asc' | 'desc' } | null;
+
+/** Un favori garde aussi la recherche et ce qui était déplié, comme chez Odoo. */
+interface Favori { id: string; nom: string; reglage: Reglage & { recherche?: string; ouverts?: string[]; ouvertsCol?: string[] } }
 
 /**
  * Liste ↔ analyse d'une page. ⚠️ NON mémorisé : la page s'ouvre TOUJOURS sur
@@ -103,6 +159,43 @@ export function BoutonAnalyse({ actif, onClick }: { actif: boolean; onClick: () 
 }
 
 /**
+ * En-tête ⊞ / ⊟ à la manière d'Odoo. Ouvert : ⊟ replie. Fermé : ⊞ déplie
+ * directement si le niveau suivant existe, sinon ouvre la liste des
+ * regroupements (`choix`) et ajoute celui qu'on prend.
+ */
+function EnteteDepliable({ libelle, ouvert, choix, onReplier, onDeplier, onChoisir, className = '' }: {
+  libelle: string;
+  ouvert: boolean;
+  choix: { id: DimensionId; label: string }[] | null;
+  onReplier: () => void;
+  onDeplier: () => void;
+  onChoisir: (d: DimensionId) => void;
+  className?: string;
+}) {
+  const contenu = (
+    <>
+      {ouvert ? <MinusSquare className="w-3.5 h-3.5 shrink-0 text-muted-foreground" /> : <PlusSquare className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />}
+      <span className="truncate" title={libelle}>{libelle}</span>
+    </>
+  );
+  const cls = `inline-flex items-center gap-1 max-w-full hover:text-primary ${className}`;
+  if (ouvert) return <button type="button" className={cls} onClick={onReplier} title="Replier">{contenu}</button>;
+  if (!choix) return <button type="button" className={cls} onClick={onDeplier} title="Déplier">{contenu}</button>;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button type="button" className={cls} title="Regrouper par…">{contenu}</button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-52">
+        {choix.length === 0
+          ? <DropdownMenuItem disabled>Aucun autre regroupement</DropdownMenuItem>
+          : choix.map(d => <DropdownMenuItem key={d.id} onClick={() => onChoisir(d.id)}>{d.label}</DropdownMenuItem>)}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/**
  * `clientId` : analyse limitée aux documents d'un client (onglet Ventes de la
  * fiche client) ; la dimension Client disparaît des choix.
  */
@@ -110,16 +203,19 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
   const { devis, commandesClient, facturesClient, clients, produits, updateClients } = useCRM();
   const { isAdmin, userId } = useCurrentUser();
   const { commercials } = useCommercials();
+  const ficheClient = !!clientId;
 
-  const [reglage, setReglage] = useState<Reglage>(() => lireReglage(cle, sources, !!clientId));
+  const [reglage, setReglage] = useState<Reglage>(() => lireReglage(cle, sources, ficheClient));
   useEffect(() => { try { localStorage.setItem(`analyse_croisee_${cle}`, JSON.stringify(reglage)); } catch { /* ignore */ } }, [cle, reglage]);
-  const maj = (p: Partial<Reglage>) => setReglage(r => ({ ...r, ...p }));
+  const [favoriActif, setFavoriActif] = useState<string | null>(null);
+  const maj = (p: Partial<Reglage>) => { setReglage(r => ({ ...r, ...p })); setFavoriActif(null); };
 
   const [recherche, setRecherche] = useState('');
   const [ouverts, setOuverts] = useState<Set<string>>(new Set());
+  const [ouvertsCol, setOuvertsCol] = useState<Set<string>>(new Set());
   const [tri, setTri] = useState<Tri>(null);
 
-  const { source, lignes, colonne, mesures } = reglage;
+  const { source, lignes, colonnes, mesures } = reglage;
 
   // ── Copie Odoo (`ventes_odoo`), lue seulement si une source Odoo est offerte ──
   const queryClient = useQueryClient();
@@ -142,6 +238,45 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
       setImportEnCours(false);
     }
   };
+
+  // ── Favoris (par utilisateur et par écran) ─────────────────────────────────
+  const cleFavoris = ['analyse_favoris', cle] as const;
+  const favoris = useQuery({
+    queryKey: cleFavoris,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('analyse_favoris' as never).select('id, nom, reglage').eq('ecran', cle).order('nom');
+      if (error) throw new Error(error.message);
+      return (data ?? []) as unknown as Favori[];
+    },
+    staleTime: 60_000,
+  });
+  const [nomFavori, setNomFavori] = useState('');
+  const enregistrerFavori = async () => {
+    const nom = nomFavori.trim();
+    if (!nom) return;
+    const { error } = await supabase.from('analyse_favoris' as never).insert({ ecran: cle, nom, reglage: { ...reglage, recherche, ouverts: [...ouverts], ouvertsCol: [...ouvertsCol] } } as never);
+    if (error) { toast.error(`Favori non enregistré : ${error.message}`); return; }
+    setNomFavori('');
+    setFavoriActif(nom);
+    await queryClient.invalidateQueries({ queryKey: cleFavoris });
+    toast.success(`Favori « ${nom} » enregistré`);
+  };
+  const appliquerFavori = (f: Favori) => {
+    const { recherche: rech, ouverts: ouv, ouvertsCol: ouvCol, ...r } = f.reglage;
+    setReglage(nettoyer(r, reglageParDefaut(sources, ficheClient), sources, ficheClient));
+    setRecherche(rech || '');
+    setOuverts(new Set(ouv || []));
+    setOuvertsCol(new Set(ouvCol || []));
+    setTri(null);
+    setFavoriActif(f.nom);
+  };
+  const supprimerFavori = async (f: Favori) => {
+    const { error } = await supabase.from('analyse_favoris' as never).delete().eq('id', f.id);
+    if (error) { toast.error(`Suppression impossible : ${error.message}`); return; }
+    if (favoriActif === f.nom) setFavoriActif(null);
+    await queryClient.invalidateQueries({ queryKey: cleFavoris });
+  };
+
   const statutsExclus = useMemo(() => new Set(reglage.statutsExclus[source] || []), [reglage.statutsExclus, source]);
 
   // ── Faits de la source, dans le périmètre du commercial ──────────────────
@@ -155,8 +290,6 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
     const dansPerimetre = <T extends { userId?: string; clientId: string }>(d: T) =>
       (!clientId || d.clientId === clientId) && (isAdmin || !d.userId || d.userId === userId);
     if (estSourceOdoo(source)) {
-      /* Odoo ne connaît pas l'utilisateur MonCRM : un non-admin voit les
-         lignes dont le commercial Odoo porte son nom d'affichage. */
       const moi = commercials.find(c => c.userId === userId)?.name || '';
       return faitsVentesOdoo((ventesOdoo.data ?? []).filter(l =>
         (!clientId || l.client_id === clientId) && dansPerimetreOdoo(l, isAdmin, moi)), source, ctx);
@@ -167,45 +300,82 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
   }, [source, devis, commandesClient, facturesClient, clients, produits, commercials, isAdmin, userId, clientId, ventesOdoo.data]);
 
   const statutsDispo = useMemo(() => [...new Set(faitsSource.map(f => f.statut))].sort((a, b) => a.localeCompare(b, 'fr')), [faitsSource]);
+  const [du, au] = bornesPeriode(reglage);
 
   const faits = useMemo(() => {
     const q = recherche.trim().toLocaleLowerCase('fr').split(/\s+/).filter(Boolean);
     return faitsSource.filter(f => {
       if (statutsExclus.has(f.statut)) return false;
       const jour = f.date.slice(0, 10);
-      if (reglage.du && jour < reglage.du) return false;
-      if (reglage.au && jour > reglage.au) return false;
+      if (du && jour < du) return false;
+      if (au && jour > au) return false;
       if (q.length) {
         const t = `${f.client} ${f.article} ${f.reference} ${f.numero} ${f.categorie} ${f.affaire}`.toLocaleLowerCase('fr');
         if (!q.every(m => t.includes(m))) return false;
       }
       return true;
     });
-  }, [faitsSource, statutsExclus, reglage.du, reglage.au, recherche]);
+  }, [faitsSource, statutsExclus, du, au, recherche]);
 
-  const pivot = useMemo(() => construirePivot(faits, lignes, colonne), [faits, lignes, colonne]);
+  const pivot = useMemo(() => construirePivot(faits, lignes, colonnes), [faits, lignes, colonnes]);
   const racine = useMemo(
     () => (tri && mesures.includes(tri.mesure) ? trierParMesure(pivot.racine, tri.mesure, tri.colonne, tri.sens) : pivot.racine),
     [pivot, tri, mesures],
   );
   const visibles = useMemo(() => lignesVisibles(racine, ouverts), [racine, ouverts]);
   const mesuresAffichees = MESURES.filter(m => mesures.includes(m.id));
-  const colonnes = pivot.colonnes;
+  const M = mesuresAffichees.length;
+  const feuilles = useMemo(() => colonnesFeuilles(pivot.colRacine, ouvertsCol), [pivot.colRacine, ouvertsCol]);
 
-  // ── Actions ──────────────────────────────────────────────────────────────
+  /* En-têtes de colonnes, niveau par niveau, et libellé complet de chaque
+     colonne (« 2026 / mars 2026 ») pour l'export. */
+  const { niveauxCol, profondeurCol, feuillesSous, libelleComplet } = useMemo(() => {
+    const ouvert = (n: NoeudColonne) => n.enfants.length > 0 && (n === pivot.colRacine || ouvertsCol.has(n.chemin));
+    const sous = new Map<string, number>();
+    const libelles = new Map<string, string>();
+    const parNiveau: NoeudColonne[][] = [];
+    const parcourir = (n: NoeudColonne, prefixe: string): number => {
+      const lib = n === pivot.colRacine ? '' : (prefixe ? `${prefixe} / ${n.libelle}` : n.libelle);
+      libelles.set(n.chemin, lib);
+      if (n !== pivot.colRacine) (parNiveau[n.niveau] ||= []).push(n);
+      const nb = ouvert(n) ? n.enfants.reduce((s, e) => s + parcourir(e, lib), 0) : 1;
+      sous.set(n.chemin, nb);
+      return nb;
+    };
+    parcourir(pivot.colRacine, '');
+    return { niveauxCol: parNiveau, profondeurCol: Math.max(0, ...feuilles.map(f => f.niveau)), feuillesSous: sous, libelleComplet: libelles };
+  }, [pivot.colRacine, ouvertsCol, feuilles]);
+
+  // ── Regroupements ────────────────────────────────────────────────────────
+  const dimsChoisissables = DIMENSIONS.filter(d => !(clientId && d.id === 'client'));
+  const dimsLibres = dimsChoisissables.filter(d => !lignes.includes(d.id) && !colonnes.includes(d.id));
+  const enTete = (d: { id: DimensionId; label: string }) => ({ id: d.id, label: d.label });
+
   const basculer = (chemin: string) => setOuverts(s => { const n = new Set(s); if (n.has(chemin)) n.delete(chemin); else n.add(chemin); return n; });
-  const toutDeplier = () => setOuverts(new Set(cheminsDepliables(racine)));
-  const toutReplier = () => setOuverts(new Set());
+  const basculerCol = (chemin: string) => setOuvertsCol(s => { const n = new Set(s); if (n.has(chemin)) n.delete(chemin); else n.add(chemin); return n; });
+  const toutDeplier = () => {
+    setOuverts(new Set(cheminsDepliables(racine)));
+    const tous: string[] = [];
+    const parcourir = (n: NoeudColonne) => { if (n.enfants.length && n !== pivot.colRacine) tous.push(n.chemin); n.enfants.forEach(parcourir); };
+    parcourir(pivot.colRacine);
+    setOuvertsCol(new Set(tous));
+  };
+  const toutReplier = () => { setOuverts(new Set()); setOuvertsCol(new Set()); };
   const inverser = () => {
-    const [premier, ...reste] = lignes;
-    if (colonne) maj({ colonne: premier ?? null, lignes: [colonne, ...reste] });
-    else if (premier) maj({ colonne: premier, lignes: reste });
+    maj({ lignes: colonnes, colonnes: lignes });
+    setOuverts(ouvertsCol);
+    setOuvertsCol(ouverts);
     setTri(null);
   };
   const basculerStatut = (s: string) => {
     const n = new Set(statutsExclus);
     if (n.has(s)) n.delete(s); else n.add(s);
     maj({ statutsExclus: { ...reglage.statutsExclus, [source]: [...n] } });
+  };
+  const basculerRegroupement = (axe: 'lignes' | 'colonnes', d: DimensionId) => {
+    const liste = reglage[axe];
+    maj({ [axe]: liste.includes(d) ? liste.filter(x => x !== d) : [...liste, d] } as Partial<Reglage>);
+    setTri(null);
   };
   const cliquerMesure = (mesure: MesureId, col: string | null) => {
     setTri(t => {
@@ -219,17 +389,30 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
       const ligne: Record<string, string | number | null> = {
         [lignes.map(d => dimension(d).label).join(' › ') || 'Ligne']: `${'    '.repeat(n.niveau)}${n.libelle}`,
       };
-      for (const c of colonnes) for (const m of mesuresAffichees) ligne[`${c.libelle} — ${m.label}`] = valeurMesure(n.parColonne.get(c.cle), m.id);
+      for (const c of feuilles) for (const m of mesuresAffichees) ligne[`${libelleComplet.get(c.chemin)} — ${m.label}`] = valeurMesure(n.parColonne.get(c.chemin), m.id);
       for (const m of mesuresAffichees) ligne[`Total — ${m.label}`] = valeurMesure(n.total, m.id);
       return ligne;
     });
-    exportToExcel(lignesExcel, `analyse-${source}-${new Date().toISOString().slice(0, 10)}`, 'Analyse');
+    exportToExcel(lignesExcel, `analyse-${source}-${iso(new Date())}`, 'Analyse');
   };
 
-  const dimsChoisissables = DIMENSIONS.filter(d => !(clientId && d.id === 'client'));
-  const dimsLibres = dimsChoisissables.filter(d => !lignes.includes(d.id) && d.id !== colonne);
-  const profondeur = lignes.length;
+  // ── Facettes (comme la barre de recherche d'Odoo) ─────────────────────────
+  const facettes: { cle: string; icone: JSX.Element; texte: string; retirer: () => void }[] = [];
+  if (favoriActif) facettes.push({ cle: 'fav', icone: <Star className="w-3 h-3" />, texte: favoriActif, retirer: () => setFavoriActif(null) });
+  if (statutsExclus.size && statutsDispo.some(s => statutsExclus.has(s))) {
+    const inclus = statutsDispo.filter(s => !statutsExclus.has(s));
+    facettes.push({ cle: 'statut', icone: <Filter className="w-3 h-3" />, texte: `Statut : ${inclus.join(' ou ') || 'aucun'}`, retirer: () => maj({ statutsExclus: { ...reglage.statutsExclus, [source]: [] } }) });
+  }
+  if (reglage.periode) {
+    const lib = reglage.periode === 'perso'
+      ? `${du ? du.split('-').reverse().join('/') : '…'} → ${au ? au.split('-').reverse().join('/') : '…'}`
+      : PERIODES.find(p => p.id === reglage.periode)!.label;
+    facettes.push({ cle: 'periode', icone: <Filter className="w-3 h-3" />, texte: `Période : ${lib}`, retirer: () => maj({ periode: null, du: '', au: '' }) });
+  }
+  if (lignes.length) facettes.push({ cle: 'lignes', icone: <Layers className="w-3 h-3" />, texte: `Lignes : ${lignes.map(d => dimension(d).label).join(' › ')}`, retirer: () => { maj({ lignes: [] }); setOuverts(new Set()); } });
+  if (colonnes.length) facettes.push({ cle: 'colonnes', icone: <Layers className="w-3 h-3 rotate-90" />, texte: `Colonnes : ${colonnes.map(d => dimension(d).label).join(' › ')}`, retirer: () => { maj({ colonnes: [] }); setOuvertsCol(new Set()); } });
 
+  // ── Rendu des cellules ────────────────────────────────────────────────────
   const indicateurTri = (mesure: MesureId, col: string | null) =>
     tri && tri.mesure === mesure && tri.colonne === col
       ? (tri.sens === 'desc' ? <ArrowDown className="inline w-3 h-3 ml-0.5" /> : <ArrowUp className="inline w-3 h-3 ml-0.5" />)
@@ -237,16 +420,16 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
 
   const enteteMesure = (m: { id: MesureId; label: string }, col: string | null, k: string) => (
     <th key={k} onClick={() => cliquerMesure(m.id, col)} title="Trier"
-      className="px-2 py-1.5 text-right font-medium text-muted-foreground whitespace-nowrap cursor-pointer select-none hover:text-foreground border-b border-l border-border bg-muted/60">
+      className="px-2 py-1.5 text-right font-medium text-muted-foreground whitespace-nowrap cursor-pointer select-none hover:text-foreground border-b border-l border-border bg-muted">
       {m.label}{indicateurTri(m.id, col)}
     </th>
   );
 
   const cellules = (n: NoeudPivot, gras: boolean) => (
     <>
-      {colonnes.map(c => mesuresAffichees.map(m => (
-        <td key={`${c.cle}-${m.id}`} className={`px-2 py-1 text-right tabular-nums whitespace-nowrap border-l border-border/60 ${gras ? 'font-semibold' : ''}`}>
-          {formaterMesure(valeurMesure(n.parColonne.get(c.cle), m.id), m.id)}
+      {feuilles.map(c => mesuresAffichees.map(m => (
+        <td key={`${c.chemin}-${m.id}`} className={`px-2 py-1 text-right tabular-nums whitespace-nowrap border-l border-border/60 ${gras ? 'font-semibold' : ''}`}>
+          {formaterMesure(valeurMesure(n.parColonne.get(c.chemin), m.id), m.id)}
         </td>
       )))}
       {mesuresAffichees.map(m => (
@@ -257,24 +440,151 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
     </>
   );
 
+  const enteteColonne = (c: NoeudColonne) => {
+    const estRacine = c === pivot.colRacine;
+    const ouvert = estRacine ? colonnes.length > 0 : ouvertsCol.has(c.chemin) && c.enfants.length > 0;
+    const dernierNiveau = c.niveau >= colonnes.length;
+    return (
+      <EnteteDepliable
+        libelle={c.libelle}
+        ouvert={ouvert}
+        choix={dernierNiveau ? dimsLibres.map(enTete) : null}
+        onReplier={() => {
+          if (estRacine) { maj({ colonnes: [] }); setOuvertsCol(new Set()); setTri(null); }
+          else basculerCol(c.chemin);
+        }}
+        onDeplier={() => basculerCol(c.chemin)}
+        onChoisir={d => {
+          maj({ colonnes: [...colonnes, d] });
+          if (!estRacine) setOuvertsCol(s => new Set(s).add(c.chemin));
+          setTri(null);
+        }}
+        className="font-semibold"
+      />
+    );
+  };
+
+  const nbLignesEntete = (feuilles.length ? profondeurCol + 1 : 1) + 1;
+  const cellCoin = (
+    <th rowSpan={nbLignesEntete} className="sticky left-0 z-30 bg-muted px-2 py-1.5 text-left font-medium border-b border-border min-w-[14rem] align-bottom">
+      {lignes.map(d => dimension(d).label).join(' › ')}
+    </th>
+  );
+  const thCol = 'px-2 py-1.5 text-left whitespace-nowrap border-b border-l border-border bg-muted';
+
   return (
-    <div className="flex flex-col flex-1 min-h-0 gap-3">
-      {/* ── Réglages ── */}
+    <div className="flex flex-col flex-1 min-h-0 gap-2">
+      {/* ── Sources ── */}
+      {sources.length > 1 && (
+        <div className="flex gap-1 p-1 bg-muted rounded-lg self-start flex-wrap">
+          {sources.map(s => (
+            <button key={s} onClick={() => { maj({ source: s }); setTri(null); }}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${source === s ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+              {LIBELLE_SOURCE[s]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── Barre de recherche à facettes + Filtres / Regrouper par / Favoris ── */}
       <div className="flex flex-wrap items-center gap-2">
-        {sources.length > 1 && (
-          <div className="flex gap-1 p-1 bg-muted rounded-lg">
-            {sources.map(s => (
-              <button key={s} onClick={() => { maj({ source: s }); setTri(null); }}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${source === s ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-                {LIBELLE_SOURCE[s]}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex flex-1 min-w-[16rem] flex-wrap items-center gap-1 rounded-md border border-border bg-background px-2 py-1">
+          <Search className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          {facettes.map(f => (
+            <span key={f.cle} className="flex items-center gap-1 rounded bg-primary/10 text-primary text-xs px-1.5 py-0.5">
+              {f.icone}<span className="max-w-[18rem] truncate" title={f.texte}>{f.texte}</span>
+              <button onClick={f.retirer} title="Retirer"><X className="w-3 h-3" /></button>
+            </span>
+          ))}
+          <input value={recherche} onChange={e => setRecherche(e.target.value)} placeholder="Rechercher client, article, réf…"
+            className="flex-1 min-w-[8rem] bg-transparent text-xs outline-none py-0.5" />
+          {recherche && <button onClick={() => setRecherche('')} title="Effacer"><X className="w-3 h-3 text-muted-foreground" /></button>}
+        </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="sm" className="gap-1">Mesures <ChevronDown className="w-3 h-3" /></Button>
+            <Button variant="ghost" size="sm" className="gap-1 h-8"><Filter className="w-4 h-4" /> Filtres</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-60 max-h-[70vh] overflow-y-auto">
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Statut</DropdownMenuLabel>
+            {statutsDispo.length === 0 && <DropdownMenuItem disabled>Aucun statut</DropdownMenuItem>}
+            {statutsDispo.map(s => (
+              <DropdownMenuCheckboxItem key={s} checked={!statutsExclus.has(s)} onSelect={e => e.preventDefault()} onCheckedChange={() => basculerStatut(s)}>
+                {s}
+              </DropdownMenuCheckboxItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Période (date du document)</DropdownMenuLabel>
+            {PERIODES.map(p => (
+              <DropdownMenuCheckboxItem key={p.id} checked={reglage.periode === p.id}
+                onCheckedChange={v => maj(v ? { periode: p.id, ...(p.id === 'perso' ? { du: reglage.du || `${new Date().getFullYear()}-01-01`, au: reglage.au || iso(new Date()) } : {}) } : { periode: null })}>
+                {p.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="gap-1 h-8"><Layers className="w-4 h-4" /> Regrouper par</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-60 max-h-[70vh] overflow-y-auto">
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Lignes</DropdownMenuLabel>
+            {dimsChoisissables.map(d => (
+              <DropdownMenuCheckboxItem key={`l-${d.id}`} checked={lignes.includes(d.id)} disabled={colonnes.includes(d.id)}
+                onSelect={e => e.preventDefault()} onCheckedChange={() => basculerRegroupement('lignes', d.id)}>
+                {d.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs text-muted-foreground">Colonnes</DropdownMenuLabel>
+            {dimsChoisissables.map(d => (
+              <DropdownMenuCheckboxItem key={`c-${d.id}`} checked={colonnes.includes(d.id)} disabled={lignes.includes(d.id)}
+                onSelect={e => e.preventDefault()} onCheckedChange={() => basculerRegroupement('colonnes', d.id)}>
+                {d.label}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm" className="gap-1 h-8"><Star className="w-4 h-4" /> Favoris</Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72 p-2">
+            <p className="px-1 pb-1 text-xs text-muted-foreground">Recherches enregistrées</p>
+            {favoris.isLoading && <p className="px-1 py-1 text-xs text-muted-foreground">Chargement…</p>}
+            {favoris.error && <p className="px-1 py-1 text-xs text-destructive">{(favoris.error as Error).message}</p>}
+            {!favoris.isLoading && !favoris.data?.length && <p className="px-1 py-1 text-xs text-muted-foreground">Aucun favori pour cet écran.</p>}
+            <div className="max-h-60 overflow-y-auto">
+              {(favoris.data ?? []).map(f => (
+                <div key={f.id} className="group flex items-center gap-1 rounded px-1 py-1 hover:bg-muted">
+                  <button className="flex-1 text-left text-sm truncate" onClick={() => appliquerFavori(f)} title="Appliquer">
+                    <Star className={`inline w-3 h-3 mr-1 ${favoriActif === f.nom ? 'fill-amber-400 text-amber-500' : 'text-muted-foreground'}`} />{f.nom}
+                  </button>
+                  <button onClick={() => supprimerFavori(f)} className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive" title="Supprimer">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 border-t border-border pt-2">
+              <p className="px-1 pb-1 text-xs font-medium">Enregistrer la recherche actuelle</p>
+              <div className="flex gap-1">
+                <Input value={nomFavori} onChange={e => setNomFavori(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') enregistrerFavori(); }}
+                  placeholder="Nom du favori" className="h-8 text-xs" />
+                <Button size="sm" className="h-8" onClick={enregistrerFavori} disabled={!nomFavori.trim()}>Enregistrer</Button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+
+      {/* ── Mesures et outils ── */}
+      <div className="flex flex-wrap items-center gap-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" className="gap-1 h-8">Mesures <ChevronDown className="w-3 h-3" /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-52">
             {MESURES.map(m => (
@@ -288,51 +598,17 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-
-        <div className="flex flex-wrap items-center gap-1 text-xs">
-          <span className="text-muted-foreground">Lignes :</span>
-          {lignes.map((d, i) => (
-            <span key={d} className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-              {i > 0 && <span className="opacity-50">›</span>}{dimension(d).label}
-              <button onClick={() => { maj({ lignes: lignes.filter(x => x !== d) }); setTri(null); }} title="Retirer"><X className="w-3 h-3" /></button>
-            </span>
-          ))}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-0.5 px-2 py-0.5 rounded-full border border-dashed border-border text-muted-foreground hover:text-foreground">
-                <Plus className="w-3 h-3" /> Regrouper par
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-44">
-              {dimsLibres.map(d => <DropdownMenuItem key={d.id} onClick={() => maj({ lignes: [...lignes, d.id] })}>{d.label}</DropdownMenuItem>)}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <div className="flex items-center gap-1 text-xs">
-          <span className="text-muted-foreground">Colonnes :</span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-1 bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                {colonne ? dimension(colonne).label : 'Aucune'} <ChevronDown className="w-3 h-3" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-44">
-              <DropdownMenuItem onClick={() => { maj({ colonne: null }); setTri(null); }}>Aucune</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {dimsChoisissables.filter(d => !lignes.includes(d.id)).map(d => (
-                <DropdownMenuItem key={d.id} onClick={() => { maj({ colonne: d.id }); setTri(null); }}>{d.label}</DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-
-        <div className="flex items-center gap-1 ml-auto">
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="Inverser lignes et colonnes" onClick={inverser}><ArrowLeftRight className="w-4 h-4" /></Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="Tout déplier" onClick={toutDeplier} disabled={profondeur < 2}><ChevronsUpDown className="w-4 h-4" /></Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="Tout replier" onClick={toutReplier} disabled={profondeur < 2}><ChevronsDownUp className="w-4 h-4" /></Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" title="Exporter vers Excel" onClick={exporter}><Download className="w-4 h-4" /></Button>
-        </div>
+        <Button variant="ghost" size="icon" className="h-8 w-8" title="Inverser lignes et colonnes" onClick={inverser}><ArrowLeftRight className="w-4 h-4" /></Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8" title="Tout déplier" onClick={toutDeplier}><ChevronsUpDown className="w-4 h-4" /></Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8" title="Tout replier" onClick={toutReplier}><ChevronsDownUp className="w-4 h-4" /></Button>
+        <Button variant="ghost" size="icon" className="h-8 w-8" title="Exporter vers Excel" onClick={exporter}><Download className="w-4 h-4" /></Button>
+        {reglage.periode === 'perso' && (
+          <div className="flex items-center gap-1 text-xs text-muted-foreground ml-2">
+            Du <Input type="date" value={reglage.du} onChange={e => maj({ du: e.target.value })} className="h-8 w-36 text-xs" />
+            au <Input type="date" value={reglage.au} onChange={e => maj({ au: e.target.value })} className="h-8 w-36 text-xs" />
+          </div>
+        )}
+        <span className="ml-auto text-[11px] text-muted-foreground hidden md:inline">⊞ / ⊟ sur les en-têtes de lignes et de colonnes pour regrouper ou replier</span>
       </div>
 
       {/* ── Copie Odoo : origine des chiffres et import ── */}
@@ -360,31 +636,6 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
         </div>
       )}
 
-      {/* ── Filtres ── */}
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <div className="relative w-56">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-          <Input value={recherche} onChange={e => setRecherche(e.target.value)} placeholder="Client, article, réf…" className="h-8 pl-8 text-xs" />
-        </div>
-        <label className="flex items-center gap-1 text-muted-foreground">Du
-          <Input type="date" value={reglage.du} onChange={e => maj({ du: e.target.value })} className="h-8 w-36 text-xs" />
-        </label>
-        <label className="flex items-center gap-1 text-muted-foreground">au
-          <Input type="date" value={reglage.au} onChange={e => maj({ au: e.target.value })} className="h-8 w-36 text-xs" />
-        </label>
-        {(reglage.du || reglage.au) && (
-          <button className="text-muted-foreground hover:text-foreground" onClick={() => maj({ du: '', au: '' })} title="Effacer la période"><X className="w-3.5 h-3.5" /></button>
-        )}
-        <div className="flex flex-wrap gap-1">
-          {statutsDispo.map(s => (
-            <button key={s} onClick={() => basculerStatut(s)} title={statutsExclus.has(s) ? 'Exclu — cliquer pour inclure' : 'Inclus — cliquer pour exclure'}
-              className={`px-2 py-0.5 rounded border transition-colors ${statutsExclus.has(s) ? 'border-border text-muted-foreground line-through opacity-60' : 'border-primary/40 bg-primary/10 text-primary'}`}>
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* ── Tableau croisé ── */}
       <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-border bg-card">
         {faits.length === 0 ? (
@@ -392,51 +643,59 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
         ) : (
           <table className="text-xs border-separate border-spacing-0 min-w-full">
             <thead className="sticky top-0 z-20">
-              {colonne ? (
-                <>
-                  <tr>
-                    <th rowSpan={2} className="sticky left-0 z-30 bg-muted px-2 py-1.5 text-left font-medium border-b border-border min-w-[14rem]">
-                      {lignes.map(d => dimension(d).label).join(' › ')}
-                    </th>
-                    {colonnes.map(c => (
-                      <th key={c.cle} colSpan={mesuresAffichees.length} className="px-2 py-1.5 text-center font-semibold whitespace-nowrap border-b border-l border-border bg-muted">
-                        {c.libelle}
+              {/* Racine des colonnes : « Total » ⊞ / ⊟ */}
+              <tr>
+                {cellCoin}
+                <th colSpan={(feuilles.length || 1) * M} className={thCol}>{enteteColonne(pivot.colRacine)}</th>
+                {feuilles.length > 0 && (
+                  <th rowSpan={profondeurCol + 1} colSpan={M} className={`${thCol} align-bottom`}>Total</th>
+                )}
+              </tr>
+              {/* Niveaux de colonnes visibles */}
+              {feuilles.length > 0 && Array.from({ length: profondeurCol }, (_, i) => i + 1).map(k => (
+                <tr key={`niv-${k}`}>
+                  {(niveauxCol[k] || []).filter(c => feuillesSous.has(c.chemin) && estVisible(c)).map(c => {
+                    const feuille = feuilles.includes(c);
+                    return (
+                      <th key={c.chemin} colSpan={(feuillesSous.get(c.chemin) || 1) * M} rowSpan={feuille ? profondeurCol - k + 1 : 1}
+                        className={`${thCol} ${feuille ? 'align-top' : ''}`}>
+                        {enteteColonne(c)}
                       </th>
-                    ))}
-                    <th colSpan={mesuresAffichees.length} className="px-2 py-1.5 text-center font-semibold border-b border-l border-border bg-muted">Total</th>
-                  </tr>
-                  <tr>
-                    {colonnes.map(c => mesuresAffichees.map(m => enteteMesure(m, c.cle, `${c.cle}-${m.id}`)))}
-                    {mesuresAffichees.map(m => enteteMesure(m, null, `t-${m.id}`))}
-                  </tr>
-                </>
-              ) : (
-                <tr>
-                  <th className="sticky left-0 z-30 bg-muted px-2 py-1.5 text-left font-medium border-b border-border min-w-[14rem]">
-                    {lignes.map(d => dimension(d).label).join(' › ')}
-                  </th>
-                  {mesuresAffichees.map(m => enteteMesure(m, null, `t-${m.id}`))}
+                    );
+                  })}
                 </tr>
-              )}
+              ))}
+              {/* Mesures */}
+              <tr>
+                {feuilles.map(c => mesuresAffichees.map(m => enteteMesure(m, c.chemin, `${c.chemin}-${m.id}`)))}
+                {mesuresAffichees.map(m => enteteMesure(m, null, `t-${m.id}`))}
+              </tr>
             </thead>
             <tbody>
               {visibles.map(n => {
                 const estRacine = n.niveau === 0;
-                const depliable = !estRacine && n.niveau < profondeur && n.enfants.length > 0;
-                const ouvert = ouverts.has(n.chemin);
+                const ouvert = estRacine ? lignes.length > 0 : ouverts.has(n.chemin) && n.enfants.length > 0;
+                const dernierNiveau = n.niveau >= lignes.length;
                 return (
                   <Fragment key={n.chemin || 'racine'}>
                     <tr className={`${estRacine ? 'bg-muted/40 font-semibold' : 'hover:bg-muted/30'}`}>
                       <th scope="row" className={`sticky left-0 z-10 px-2 py-1 text-left font-normal border-b border-border/60 max-w-[28rem] ${estRacine ? 'bg-muted font-semibold' : 'bg-card'}`}>
-                        <div className="flex items-center gap-1" style={{ paddingLeft: `${Math.max(0, n.niveau - 1) * 1.1}rem` }}>
-                          {depliable ? (
-                            <button onClick={() => basculer(n.chemin)} className="text-muted-foreground hover:text-foreground shrink-0" title={ouvert ? 'Replier' : 'Déplier'}>
-                              {ouvert ? <MinusSquare className="w-3.5 h-3.5" /> : <PlusSquare className="w-3.5 h-3.5" />}
-                            </button>
-                          ) : !estRacine && profondeur > 1 ? <span className="w-3.5 shrink-0" /> : null}
-                          <span className={`truncate ${depliable ? 'cursor-pointer' : ''}`} title={n.libelle} onClick={depliable ? () => basculer(n.chemin) : undefined}>
-                            {n.libelle}
-                          </span>
+                        <div className="flex items-center" style={{ paddingLeft: `${n.niveau * 1.1}rem` }}>
+                          <EnteteDepliable
+                            libelle={n.libelle}
+                            ouvert={ouvert}
+                            choix={dernierNiveau ? dimsLibres.map(enTete) : null}
+                            onReplier={() => {
+                              if (estRacine) { maj({ lignes: [] }); setOuverts(new Set()); setTri(null); }
+                              else basculer(n.chemin);
+                            }}
+                            onDeplier={() => basculer(n.chemin)}
+                            onChoisir={d => {
+                              maj({ lignes: [...lignes, d] });
+                              if (!estRacine) setOuverts(s => new Set(s).add(n.chemin));
+                              setTri(null);
+                            }}
+                          />
                         </div>
                       </th>
                       {cellules(n, estRacine)}
@@ -450,4 +709,14 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
       </div>
     </div>
   );
+
+  /** Un en-tête de colonne est affiché si tous ses ancêtres sont ouverts. */
+  function estVisible(c: NoeudColonne): boolean {
+    const cles = c.chemin.split('\u0001').filter(Boolean);
+    for (let i = 1; i < cles.length; i++) {
+      const anc = '\u0001' + cles.slice(0, i).join('\u0001');
+      if (!ouvertsCol.has(anc)) return false;
+    }
+    return true;
+  }
 }
