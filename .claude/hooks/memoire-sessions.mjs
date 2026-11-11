@@ -48,7 +48,9 @@ const DEPUIS = Date.parse('2026-11-11T16:00:00Z');
  * Même chose quand la limite d'usage est atteinte (« You've hit your 5-hour
  * limit », vu le 11/11) : la session de fond s'arrête sans rien écrire.
  */
-const ECHEC_CONNEXION = /Failed to authenticate|Not logged in|Invalid API key|Please run \/login|claude auth login|hit your .{0,20}limit|usage limit|rate limit/i;
+// En DÉBUT de ligne seulement : ce sont les messages de Claude Code, pas une
+// réponse du modèle qui citerait « claude auth login » (pris pour un échec le 11/11).
+const ECHEC_CONNEXION = /^(Failed to authenticate|Not logged in|Invalid API key|Please run \/login|You've hit your|API Error: (401|429))/m;
 
 const dossierJournal = path.join(os.tmpdir(), 'claude-memoire-au-clear');
 fs.mkdirSync(dossierJournal, { recursive: true });
@@ -359,7 +361,11 @@ function crochet() {
 
   // Dossier de travail : les copies, et leur état de départ pour la fusion.
   const nomTravail = `${aTraiter[aTraiter.length - 1].id}-${new Date().toISOString().replace(/\D/g, '').slice(0, 14)}`;
-  const travail = path.join(dossierJournal, nomTravail);
+  // ⚠️ Chemin LONG : %TEMP% vaut souvent « C:\Users\FCCDA~1.MOU\… » (nom 8.3), que
+  // Claude Code ne reconnaît pas comme son dossier courant — toute écriture y était
+  // refusée (vu le 11/11). realpathSync.native rend « C:\Users\f.mouhot\… ».
+  fs.mkdirSync(path.join(dossierJournal, nomTravail), { recursive: true });
+  const travail = fs.realpathSync.native(path.join(dossierJournal, nomTravail));
   const dossierMemoire = path.join(dossier, 'memory');
   fs.mkdirSync(path.join(travail, 'base'), { recursive: true });
   for (const cible of [path.join(travail, 'reprise-2026-09.md'), path.join(travail, 'base', 'reprise-2026-09.md')]) {
