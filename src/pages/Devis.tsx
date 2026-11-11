@@ -25,6 +25,9 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import CorrectionsAgentEncart from '@/components/CorrectionsAgentEncart';
+import { souvenirsAEcrire, type ChiffrageAnalyse } from '@/lib/correctionsDevis';
+import { retenirArticle, souvenirDe } from '@/lib/memoireArticles';
 import { exportToExcel } from '@/lib/exportExcel';
 import { logHistorique } from '@/lib/historique';
 import { produitParId } from '@/lib/indexProduits';
@@ -2717,6 +2720,26 @@ export default function Devis() {
     void appliquerNiveauTarif(client?.niveauTarif || '', client?.estRevendeur, { remiseAZero: true });
   }, [clientId, dialogOpen, editingId, clients, produits]);
 
+  /**
+   * Un devis créé par l'analyse de document : l'article que le commercial a
+   * mis à la place de celui proposé est appris pour la demande du client
+   * (`correctionsDevis.ts`). À chaque enregistrement, automatique compris —
+   * rien n'est réécrit tant que la mémoire dit déjà la même chose.
+   */
+  function apprendreCorrections(chiffrage: ChiffrageAnalyse, lignesFinales: LigneDevis[]) {
+    const aEcrire = souvenirsAEcrire(chiffrage, lignesFinales, produits, d => souvenirDe(d)?.reference);
+    if (!aEcrire.length) return;
+    void Promise.all(aEcrire.map(a =>
+      retenirArticle(a.demande, { produitId: a.produitId, reference: a.reference, designation: a.designation }, 'choix')))
+      .then(erreurs => {
+        const echec = erreurs.find(Boolean);
+        if (echec) { toast.error(`Correction non retenue par l'agent : ${echec}`); return; }
+        toast.success(`L'agent retient ${aEcrire.length > 1 ? `${aEcrire.length} corrections` : 'votre correction'}`, {
+          description: aEcrire.map(a => `« ${a.demande} » → ${a.reference}`).join(' · '),
+        });
+      });
+  }
+
   function save(silent = false): string | null {
     if (!clientId && statut !== 'système') { if (!silent) toast.error('Sélectionnez un client'); return null; }
     if (lignes.length === 0) { if (!silent) toast.error('Ajoutez au moins une ligne'); return null; }
@@ -2750,6 +2773,7 @@ export default function Devis() {
     let savedId = editingId;
     if (editingId) {
       const existing = devis.find(d => d.id === editingId);
+      if (existing?.chiffrageAnalyse) apprendreCorrections(existing.chiffrageAnalyse, lignesASauver);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
         ...d,
         numero: estModele ? ('SYS - ' + (systeme || referenceAffaire || 'MODÈLE')) : d.numero,
@@ -5615,6 +5639,21 @@ ${dosage.source}` : ''}`}>
                     </div>
                   )}
                 </div>
+              );
+            })()}
+
+            {/* Ce que le commercial a corrigé dans la proposition de l'analyse. */}
+            {(() => {
+              const courant = editingId ? devis.find(d => d.id === editingId) : undefined;
+              if (!courant?.chiffrageAnalyse) return null;
+              return (
+                <CorrectionsAgentEncart
+                  chiffrage={courant.chiffrageAnalyse}
+                  lignes={lignes}
+                  produits={produits}
+                  numero={courant.numero}
+                  client={clients.find(c => c.id === clientId)?.nom}
+                />
               );
             })()}
 

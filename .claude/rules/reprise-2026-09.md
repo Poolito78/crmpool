@@ -678,6 +678,20 @@ Import **2025** fait le 11/11 (97 factures + 1 avoir, 146 863,42 € HT ; 98
 commandes ; 6 fiches créées). Comparaison annuelle : lignes « Mois de
 l'année (N / N-1) » (`moisAnnee`) × colonnes « Année ».
 
+## L'agent apprend des corrections faites dans le devis (11 nov.)
+
+`correctionsDevis.ts` + `CorrectionsAgentEncart.tsx` (migration
+`20261111200000`, **appliquée** le 11/11) : à la création par l'analyse,
+le mail déposé (.msg/.eml, ses PDF ; texte collé → « demande client.txt »)
+rejoint « Notes & Fichiers » du devis, et la proposition est figée dans
+`devis.chiffrage_analyse` (lignes + texte analysé). Chaque enregistrement,
+automatique compris, compare les lignes **par identifiant** : un article
+changé sur une ligne qui porte `demandeClient` est écrit dans
+`memoire_articles` (`souvenirsAEcrire` : rien si la mémoire dit déjà la même
+chose ; une ligne revenue à l'article proposé défait un essai appris).
+Quantités, ajouts, retraits : encart « Proposition de l'agent » sous les
+brides, relevé à copier. Devis antérieurs au 11/11 : rien de figé, rien appris.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du

@@ -49,6 +49,7 @@ import { appliquerAccompagnements, type LigneChiffrage } from '@/lib/chiffrage';
 import { produitParId, produitParReference } from '@/lib/indexProduits';
 import { rattacherContact, type ContactSource } from '@/lib/contactAffaire';
 import { prendreFichierChiffrage, joindreAuDevis } from '@/lib/depotChiffrage';
+import { figerChiffrage } from '@/lib/correctionsDevis';
 import { cleAppelOdoo, type CorpsAppelOdoo } from '@/lib/appelOdoo';
 import { extraireImages, lireSignature, type ContactSignature } from '@/lib/lireSignature';
 import {
@@ -5815,8 +5816,33 @@ const [contratOdoo, setContratOdoo] = useState<
         return [...parId.values()];
       });
     }
+    /* LA DEMANDE SUIT LE DEVIS, ET LA PROPOSITION DE L'AGENT AUSSI.
+     *
+     * Le mail du client (le .msg / .eml tel que déposé, ses PDF) rejoint
+     * « Notes & Fichiers » du devis ; le texte analysé et les lignes proposées
+     * sont figés dans le devis. Chaque correction faite ensuite dans l'éditeur
+     * s'y compare et l'agent en apprend (`correctionsDevis.ts`). */
+    const piecesDemande = fichiersOrigine.length > 0 ? fichiersOrigine : fichier ? [fichier] : [];
+    const texteDemandeDevis = (analyseTexteRef.current || texte).trim();
+    nouveauDevis.chiffrageAnalyse = figerChiffrage(nouveauDevis, [...produits, ...aEcrire.values()], {
+      demande: texteDemandeDevis,
+      pieces: piecesDemande.map(f => f.name),
+    });
     updateDevis(prev => [nouveauDevis, ...prev]);
     if (mailOrigineRef.current) retenirMailOrigine(nouveauDevis.id, mailOrigineRef.current);
+    /* Sans pièce (texte collé, dictée), la demande part en .txt : c'est elle
+       qu'on relira pour comprendre une correction. */
+    const aJoindre = piecesDemande.length > 0 ? piecesDemande
+      : texteDemandeDevis && !/Chiffrage ISOSIGN/i.test(texte)
+        ? [new File([texteDemandeDevis], 'demande client.txt', { type: 'text/plain;charset=utf-8' })]
+        : [];
+    if (aJoindre.length) {
+      Promise.allSettled(aJoindre.map(f => joindreAuDevis(nouveauDevis.id, f)))
+        .then(res => {
+          const echecs = res.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+          if (echecs.length) toast.error(`Demande du client non jointe au devis : ${echecs[0].reason?.message ?? echecs[0].reason}`);
+        });
+    }
     /* Demande venue du Chiffrage ISOSIGN : son PDF (plan annoté + résumé) rejoint
        d'office « Notes & Fichiers » du devis. Pris seulement pour CE texte. */
     const pdfChiffrage = /Chiffrage ISOSIGN/i.test(texte) ? prendreFichierChiffrage() : null;

@@ -168,6 +168,7 @@ explication.
 `memoireArticles` (demande → article corrigé, rappelé avant le rapprochement) ·
 `memoireDocuments` (émetteur reconnu par SIREN / domaine → sens fournisseur ou client et fournisseur retenu ; une signature contradictoire est écartée) ·
 `comparaisonDevis` (devis réalisé ↔ chiffrage CRM : écarts ligne à ligne ou par référence, apprentissage) ·
+`correctionsDevis` (proposition de l'analyse figée dans le devis, `chiffrage_analyse`, mail joint aux fichiers ; à chaque enregistrement l'article corrigé est appris pour la demande, le reste se montre et se copie) ·
 `devisOdooPdf` (offre Odoo AF… en PDF lue sans IA → type `offre_prix`, comparée au CRM, jamais créée) ·
 `odooAchat` (devis fournisseur : article Odoo retrouvé par code, en LECTURE seule — rien n'est jamais écrit dans Odoo ; un article absent se crée dans MonCRM, code et intitulé saisis) ·
 `kitFournisseur` (devis reçu : ligne chiffrée + lignes sans prix = un kit, quantités ramenées à UN kit, code de tête générique, coût porté par la 1re ligne de composant) ·

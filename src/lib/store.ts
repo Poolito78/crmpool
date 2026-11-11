@@ -5,6 +5,7 @@ import { estTypeFiche, type TypeFiche } from './liensProduit';
 import type { VarianteCompo } from './variantesCompo';
 import { lireDosage, type DosageEpaisseur } from './dosageEpaisseur';
 import type { QteTeinte } from './optionsQuantite';
+import type { ChiffrageAnalyse } from './correctionsDevis';
 import { cederLaMain } from './prioriteLecture';
 import {
   lireCacheCatalogue, ecrireCacheCatalogue, lireDeltaCatalogue, appliquerDelta, curseurDe,
@@ -1009,6 +1010,12 @@ export interface Devis {
   /** Ce que mesurent la surface globale et celles des lignes. Absent = m². */
   uniteSurface?: UniteSurface;
   raisonRefus?: string;
+  /**
+   * La proposition de l'analyse de document qui a créé ce devis, avec le texte
+   * de la demande : chaque correction faite ensuite s'y compare et l'agent en
+   * apprend (`correctionsDevis.ts`). Absente = devis saisi à la main.
+   */
+  chiffrageAnalyse?: ChiffrageAnalyse;
   // Champs archivage
   archiveDate?: string;
   archiveRaison?: RaisonArchive;
@@ -1457,6 +1464,7 @@ function dbToDevis(r: any): Devis {
     fraisPortHT: r.frais_port_ht != null ? Number(r.frais_port_ht) : undefined,
     fraisPortTVA: r.frais_port_tva != null ? Number(r.frais_port_tva) : undefined,
     fraisPortLibelle: r.frais_port_libelle || undefined,
+    chiffrageAnalyse: r.chiffrage_analyse && Array.isArray(r.chiffrage_analyse.lignes) ? r.chiffrage_analyse : undefined,
     portAchatManuel: r.port_achat_manuel != null ? Number(r.port_achat_manuel) : undefined,
     choixTransport: r.choix_transport && typeof r.choix_transport === 'object' && Object.keys(r.choix_transport).length
       ? r.choix_transport : undefined,
@@ -1506,6 +1514,7 @@ function devisToDb(d: Devis, userId: string) {
     frais_port_ht: d.fraisPortHT ?? 0,
     frais_port_tva: d.fraisPortTVA ?? 20,
     ...(d.fraisPortLibelle !== undefined ? { frais_port_libelle: d.fraisPortLibelle || null } : {}),
+    ...(d.chiffrageAnalyse !== undefined ? { chiffrage_analyse: d.chiffrageAnalyse } : {}),
     ...(d.portAchatManuel !== undefined ? { port_achat_manuel: d.portAchatManuel } : {}),
     ...(d.choixTransport !== undefined ? { choix_transport: Object.keys(d.choixTransport).length ? d.choixTransport : null } : {}),
     ...(d.fraisPortAuto !== undefined ? { frais_port_auto: d.fraisPortAuto } : {}),
