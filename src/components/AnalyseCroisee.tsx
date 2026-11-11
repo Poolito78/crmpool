@@ -159,16 +159,17 @@ export function BoutonAnalyse({ actif, onClick }: { actif: boolean; onClick: () 
 }
 
 /**
- * En-tête ⊞ / ⊟ à la manière d'Odoo. Ouvert : ⊟ replie. Fermé : ⊞ déplie
- * directement si le niveau suivant existe, sinon ouvre la liste des
- * regroupements (`choix`) et ajoute celui qu'on prend.
+ * En-tête ⊞ / ⊟ à la manière d'Odoo. Ouvert : ⊟ replie. Fermé : ⊞ ouvre
+ * TOUJOURS la liste des regroupements (`choix`) — même après un repli, on
+ * rechoisit, comme chez Odoo (demande du 11/11/2026) ; le regroupement de
+ * ce niveau (`actuel`) y est coché.
  */
-function EnteteDepliable({ libelle, ouvert, choix, onReplier, onDeplier, onChoisir, className = '' }: {
+function EnteteDepliable({ libelle, ouvert, choix, actuel, onReplier, onChoisir, className = '' }: {
   libelle: string;
   ouvert: boolean;
-  choix: { id: DimensionId; label: string }[] | null;
+  choix: { id: DimensionId; label: string }[];
+  actuel?: DimensionId;
   onReplier: () => void;
-  onDeplier: () => void;
   onChoisir: (d: DimensionId) => void;
   className?: string;
 }) {
@@ -180,7 +181,6 @@ function EnteteDepliable({ libelle, ouvert, choix, onReplier, onDeplier, onChois
   );
   const cls = `inline-flex items-center gap-1 max-w-full hover:text-primary ${className}`;
   if (ouvert) return <button type="button" className={cls} onClick={onReplier} title="Replier">{contenu}</button>;
-  if (!choix) return <button type="button" className={cls} onClick={onDeplier} title="Déplier">{contenu}</button>;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -189,7 +189,11 @@ function EnteteDepliable({ libelle, ouvert, choix, onReplier, onDeplier, onChois
       <DropdownMenuContent align="start" className="w-52">
         {choix.length === 0
           ? <DropdownMenuItem disabled>Aucun autre regroupement</DropdownMenuItem>
-          : choix.map(d => <DropdownMenuItem key={d.id} onClick={() => onChoisir(d.id)}>{d.label}</DropdownMenuItem>)}
+          : choix.map(d => (
+            <DropdownMenuItem key={d.id} onClick={() => onChoisir(d.id)} className={d.id === actuel ? 'font-semibold' : ''}>
+              {d.label}{d.id === actuel && <span className="ml-auto text-primary">✓</span>}
+            </DropdownMenuItem>
+          ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -348,11 +352,41 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
 
   // ── Regroupements ────────────────────────────────────────────────────────
   const dimsChoisissables = DIMENSIONS.filter(d => !(clientId && d.id === 'client'));
-  const dimsLibres = dimsChoisissables.filter(d => !lignes.includes(d.id) && !colonnes.includes(d.id));
   const enTete = (d: { id: DimensionId; label: string }) => ({ id: d.id, label: d.label });
 
-  const basculer = (chemin: string) => setOuverts(s => { const n = new Set(s); if (n.has(chemin)) n.delete(chemin); else n.add(chemin); return n; });
-  const basculerCol = (chemin: string) => setOuvertsCol(s => { const n = new Set(s); if (n.has(chemin)) n.delete(chemin); else n.add(chemin); return n; });
+  /* ⊞ / ⊟ des en-têtes. Un regroupement vaut pour tout son niveau ; replier
+     le dernier en-tête ouvert d'un niveau retire ce regroupement de l'axe
+     (il disparaît des facettes), et le ⊞ suivant redemande le choix. */
+  const SEP = '\u0001';
+  const niveauDe = (chemin: string) => chemin.split(SEP).length - 1;
+  const etatAxe = (axe: 'lignes' | 'colonnes') =>
+    (axe === 'lignes' ? [ouverts, setOuverts] : [ouvertsCol, setOuvertsCol]) as [Set<string>, (s: Set<string>) => void];
+  const choixPour = (axe: 'lignes' | 'colonnes', niveau: number) => {
+    const autre = axe === 'lignes' ? colonnes : lignes;
+    const plusHaut = reglage[axe].slice(0, niveau);
+    return dimsChoisissables.filter(d => !autre.includes(d.id) && !plusHaut.includes(d.id)).map(enTete);
+  };
+  const replierAxe = (axe: 'lignes' | 'colonnes', chemin: string) => {
+    const [ouv, setOuv] = etatAxe(axe);
+    if (!chemin) { maj({ [axe]: [] } as Partial<Reglage>); setOuv(new Set()); setTri(null); return; }
+    const restants = new Set([...ouv].filter(c => c !== chemin && !c.startsWith(chemin + SEP)));
+    setOuv(restants);
+    const profondeurUtile = Math.max(0, ...[...restants].map(niveauDe)) + 1;
+    if (reglage[axe].length > profondeurUtile) maj({ [axe]: reglage[axe].slice(0, profondeurUtile) } as Partial<Reglage>);
+    setTri(null);
+  };
+  const choisirAxe = (axe: 'lignes' | 'colonnes', niveau: number, chemin: string, d: DimensionId) => {
+    const [ouv, setOuv] = etatAxe(axe);
+    const liste = reglage[axe];
+    if (liste[niveau] !== d) {
+      maj({ [axe]: [...liste.slice(0, niveau), d] } as Partial<Reglage>);
+      const garde = [...ouv].filter(c => niveauDe(c) <= niveau);
+      setOuv(new Set(chemin ? [...garde, chemin] : garde));
+    } else if (chemin) {
+      setOuv(new Set(ouv).add(chemin));
+    }
+    setTri(null);
+  };
   const toutDeplier = () => {
     setOuverts(new Set(cheminsDepliables(racine)));
     const tous: string[] = [];
@@ -443,22 +477,14 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
   const enteteColonne = (c: NoeudColonne) => {
     const estRacine = c === pivot.colRacine;
     const ouvert = estRacine ? colonnes.length > 0 : ouvertsCol.has(c.chemin) && c.enfants.length > 0;
-    const dernierNiveau = c.niveau >= colonnes.length;
     return (
       <EnteteDepliable
         libelle={c.libelle}
         ouvert={ouvert}
-        choix={dernierNiveau ? dimsLibres.map(enTete) : null}
-        onReplier={() => {
-          if (estRacine) { maj({ colonnes: [] }); setOuvertsCol(new Set()); setTri(null); }
-          else basculerCol(c.chemin);
-        }}
-        onDeplier={() => basculerCol(c.chemin)}
-        onChoisir={d => {
-          maj({ colonnes: [...colonnes, d] });
-          if (!estRacine) setOuvertsCol(s => new Set(s).add(c.chemin));
-          setTri(null);
-        }}
+        choix={choixPour('colonnes', c.niveau)}
+        actuel={colonnes[c.niveau]}
+        onReplier={() => replierAxe('colonnes', c.chemin)}
+        onChoisir={d => choisirAxe('colonnes', c.niveau, c.chemin, d)}
         className="font-semibold"
       />
     );
@@ -675,7 +701,6 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
               {visibles.map(n => {
                 const estRacine = n.niveau === 0;
                 const ouvert = estRacine ? lignes.length > 0 : ouverts.has(n.chemin) && n.enfants.length > 0;
-                const dernierNiveau = n.niveau >= lignes.length;
                 return (
                   <Fragment key={n.chemin || 'racine'}>
                     <tr className={`${estRacine ? 'bg-muted/40 font-semibold' : 'hover:bg-muted/30'}`}>
@@ -684,17 +709,10 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
                           <EnteteDepliable
                             libelle={n.libelle}
                             ouvert={ouvert}
-                            choix={dernierNiveau ? dimsLibres.map(enTete) : null}
-                            onReplier={() => {
-                              if (estRacine) { maj({ lignes: [] }); setOuverts(new Set()); setTri(null); }
-                              else basculer(n.chemin);
-                            }}
-                            onDeplier={() => basculer(n.chemin)}
-                            onChoisir={d => {
-                              maj({ lignes: [...lignes, d] });
-                              if (!estRacine) setOuverts(s => new Set(s).add(n.chemin));
-                              setTri(null);
-                            }}
+                            choix={choixPour('lignes', n.niveau)}
+                            actuel={lignes[n.niveau]}
+                            onReplier={() => replierAxe('lignes', n.chemin)}
+                            onChoisir={d => choisirAxe('lignes', n.niveau, n.chemin, d)}
                           />
                         </div>
                       </th>

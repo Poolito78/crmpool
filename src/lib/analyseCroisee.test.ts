@@ -105,9 +105,11 @@ describe('pivot', () => {
       devis('B', 'c1', '2026-03-12', [ligne('p1', 1, 150)]),
     ], ctx);
     const p = construirePivot(f, ['moisAnnee'], 'annee');
-    expect(p.racine.enfants.map(n => n.libelle)).toEqual(['mars']);
+    // Toutes les périodes s'affichent, même vides (12 mois entre mars 2025 et mars 2026).
+    expect(p.racine.enfants.map(n => n.libelle)).toHaveLength(12);
+    expect(valeurMesure(p.racine.enfants.find(n => n.libelle === 'mars')!.parColonne.get(cheminColonne('2026')), 'totalHT')).toBe(150);
+    expect(valeurMesure(p.racine.enfants.find(n => n.libelle === 'mai')!.total, 'totalHT')).toBeNull();
     expect(p.colonnes.map(c => c.libelle)).toEqual(['2025', '2026']);
-    expect(valeurMesure(p.racine.enfants[0].parColonne.get(cheminColonne('2026')), 'totalHT')).toBe(150);
   });
 
   it('colonnes sur deux niveaux : sous-totaux vrais et dépliage', () => {
@@ -122,7 +124,20 @@ describe('pivot', () => {
     expect(valeurMesure(p.racine.parColonne.get(cheminColonne('2026', '2026-04')), 'totalHT')).toBe(20);
     expect(valeurMesure(p.racine.parColonne.get(cheminColonne('2026')), 'documents')).toBe(2);
     expect(colonnesFeuilles(p.colRacine, new Set()).map(c => c.libelle)).toEqual(['2025', '2026']);
-    expect(colonnesFeuilles(p.colRacine, new Set([cheminColonne('2026')])).map(c => c.libelle)).toEqual(['2025', 'mars 2026', 'avril 2026']);
+    // Sous 2026, tous les mois de l'année jusqu'au dernier fait (avril), même vides.
+    expect(colonnesFeuilles(p.colRacine, new Set([cheminColonne('2026')])).map(c => c.libelle)).toEqual(['2025', 'janvier 2026', 'février 2026', 'mars 2026', 'avril 2026']);
     expect(colonnesFeuilles(construirePivot(f, [], []).colRacine, new Set())).toEqual([]);
+  });
+
+  it('trimestre déplié en mois : les trois mois, même sans vente', () => {
+    const f = faitsDevis([
+      devis('A', 'c1', '2025-01-10', [ligne('p1', 1, 100)]),
+      devis('B', 'c1', '2025-11-12', [ligne('p1', 1, 150)]),
+    ], ctx);
+    const p = construirePivot(f, [], ['annee', 'trimestre', 'mois']);
+    const a2025 = p.colonnes[0];
+    expect(a2025.enfants.map(t => t.libelle)).toEqual(['T1 2025', 'T2 2025', 'T3 2025', 'T4 2025']);
+    expect(a2025.enfants[0].enfants.map(m => m.libelle)).toEqual(['janvier 2025', 'février 2025', 'mars 2025']);
+    expect(valeurMesure(p.racine.parColonne.get(cheminColonne('2025', '2025-T2')), 'totalHT')).toBeNull();
   });
 });

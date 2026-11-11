@@ -182,7 +182,7 @@ export interface Pivot {
   colonnes: NoeudColonne[];
 }
 
-const SEP = '';
+const SEP = '\u0001';
 
 /** Clé de case d'une colonne, depuis les clés de ses niveaux (`cheminColonne('2026', '2026-03')`). */
 export const cheminColonne = (...cles: string[]) => cles.map(c => SEP + c).join('');
@@ -198,6 +198,71 @@ function trierValeurs<T extends Valeur>(vs: T[], dim: DimensionId | null | undef
     if (a.cle === '~' || b.cle === '~') return a.cle === b.cle ? 0 : a.cle === '~' ? 1 : -1;
     return chrono ? a.cle.localeCompare(b.cle) : a.libelle.localeCompare(b.libelle, 'fr', { sensitivity: 'base', numeric: true });
   });
+}
+
+// ── Périodes complètes ─────────────────────────────────────────────────────
+//
+// Sous un regroupement de DATE, toutes les périodes s'affichent, même sans
+// vente : T1…T4 sous une année, janvier…mars sous T1 (demande du
+// 11/11/2026 — « je dois tous les voir, pas que le premier »). Les bornes
+// sont celles de l'en-tête parent (année, trimestre, mois), à défaut celles
+// des faits lus. Une période vide reste vide : rien n'est inventé.
+
+type Mois = number; // année × 12 + (mois − 1)
+const versMois = (an: number, mois: number): Mois => an * 12 + mois - 1;
+
+function valeurDeMois(m: Mois, grain: 'annee' | 'trimestre' | 'mois' | 'moisAnnee'): Valeur {
+  const an = Math.floor(m / 12);
+  const mois = (m % 12) + 1;
+  const mm = String(mois).padStart(2, '0');
+  return valeurDate(`${an}-${mm}-01`, grain);
+}
+
+/** Bornes [début, fin] (en mois) qu'impose un en-tête de date ; null = aucune. */
+function bornesDe(dim: DimensionId, cle: string): [Mois, Mois] | null {
+  let m: RegExpMatchArray | null;
+  if (dim === 'annee' && (m = cle.match(/^(\d{4})$/))) return [versMois(+m[1], 1), versMois(+m[1], 12)];
+  if (dim === 'trimestre' && (m = cle.match(/^(\d{4})-T(\d)$/))) return [versMois(+m[1], +m[2] * 3 - 2), versMois(+m[1], +m[2] * 3)];
+  if (dim === 'mois' && (m = cle.match(/^(\d{4})-(\d{2})$/))) return [versMois(+m[1], +m[2]), versMois(+m[1], +m[2])];
+  return null;
+}
+
+/** Les périodes attendues d'un regroupement de date entre deux mois inclus. */
+function periodesEntre(dim: DimensionId, debut: Mois, fin: Mois): Valeur[] | null {
+  if (!['annee', 'trimestre', 'mois', 'moisAnnee'].includes(dim) || fin < debut) return null;
+  const vues = new Map<string, Valeur>();
+  // Un an au plus pour « mois de l'année » ; les autres grains suivent les bornes.
+  const fin2 = dim === 'moisAnnee' ? Math.min(fin, debut + 11) : fin;
+  for (let m = debut; m <= fin2; m++) {
+    const v = valeurDeMois(m, dim as 'annee' | 'trimestre' | 'mois' | 'moisAnnee');
+    vues.set(v.cle, v);
+  }
+  return [...vues.values()];
+}
+
+/**
+ * Ajoute, sous chaque nœud regroupé par une date, les périodes absentes
+ * (nœuds vides). `fabriquer` crée le nœud vide de l'arbre concerné.
+ */
+function completerPeriodes<N extends { cle: string; chemin: string; niveau: number; enfants: N[] }>(
+  racine: N, dims: DimensionId[], global: [Mois, Mois] | null, fabriquer: (v: Valeur, chemin: string, niveau: number) => N,
+) {
+  if (!global) return;
+  const parcourir = (n: N, bornes: [Mois, Mois]) => {
+    const dim = dims[n.niveau];
+    if (!dim || !n.enfants.length) return;
+    const attendues = periodesEntre(dim, bornes[0], bornes[1]);
+    if (attendues) {
+      const presentes = new Set(n.enfants.map(e => e.cle));
+      for (const v of attendues) if (!presentes.has(v.cle)) n.enfants.push(fabriquer(v, n.chemin + SEP + v.cle, n.niveau + 1));
+    }
+    for (const e of n.enfants) {
+      const b = bornesDe(dim, e.cle);
+      const inter: [Mois, Mois] = b ? [Math.max(bornes[0], b[0]), Math.min(bornes[1], b[1])] : bornes;
+      parcourir(e, inter);
+    }
+  };
+  parcourir(racine, global);
 }
 
 /**
@@ -254,6 +319,19 @@ export function construirePivot(faits: FaitVente[], dimsLignes: DimensionId[], d
       }
     }
   }
+
+  // Périodes vides affichées : bornes globales = mois du premier et du dernier fait daté.
+  let min = Infinity, max = -Infinity;
+  for (const f of faits) {
+    const m = /^(\d{4})-(\d{2})/.exec(f.date || '');
+    if (!m) continue;
+    const v = versMois(+m[1], +m[2]);
+    if (v < min) min = v;
+    if (v > max) max = v;
+  }
+  const global: [Mois, Mois] | null = Number.isFinite(min) ? [min, max] : null;
+  completerPeriodes(racine, dimsLignes, global, nouveauNoeud);
+  completerPeriodes(colRacine, dimsCol, global, (v, chemin, niveau) => ({ cle: v.cle, libelle: v.libelle, chemin, niveau, enfants: [] }));
 
   const ordonner = (n: NoeudPivot) => {
     if (!n.enfants.length) return;
