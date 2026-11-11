@@ -53,6 +53,12 @@ describe('preparerImport', () => {
     expect(valeurMesure(p.racine.enfants.find(n => n.libelle === 'NOUVEAU CLIENT')!.total, 'totalHT')).toBe(200);
   });
 
+  it('un partenaire écarté ne recrée pas de fiche', () => {
+    const { nouveauxClients, lignes } = preparerImport(r, [client('c1', 'Top Signalisation')], [{ partenaire_odoo_id: 2, client_id: 'ecarte' }], '2026-11-11');
+    expect(nouveauxClients).toHaveLength(0);
+    expect(lignes.filter(l => l.partenaire_odoo_id === 2).every(l => l.client_id === 'ecarte')).toBe(true);
+  });
+
   it('un import suivant retrouve la fiche créée (mention des notes), sans doublon', () => {
     const premier = preparerImport(r, [client('c1', 'Top Signalisation')], [], '2026-11-11');
     const second = preparerImport(r, [client('c1', 'Top Signalisation'), ...premier.nouveauxClients], [], '2026-11-12');

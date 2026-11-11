@@ -669,7 +669,11 @@ en négatif. Client absent → fiche CRÉÉE (choix du 11/11).
 ⚠️ **Jamais dans `factures_client` / `commandes_client`** : le trigger
 `figer_facture_client` remet une facture insérée en brouillon sans numéro, à
 « émettre » — une seconde facture légale.
-**À déployer** : `.\deploy-function.ps1 odoo-ventes`.
+**Déployé** (odoo-ventes version 1, 11/11). Import 2026 fait le 11/11 :
+151 factures/avoirs (273 436,45 € HT, identique au CA Flooring de
+`ca-refresh` mois par mois), 153 commandes ; 33 fiches créées, dont 4 doublons
+fusionnés (lignes repointées, fiches supprimées) et 2 écartées (ISOSIGN SAS
+(MS), COROS « NE PAS UTILISER ») → `client_id = 'ecarte'`, jamais recréées.
 
 ## Pièges d'implémentation rencontrés
 

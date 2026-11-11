@@ -21,11 +21,21 @@
  * exacte (accents, ponctuation et casse ignorés). Introuvable : la fiche est
  * CRÉÉE depuis Odoo (choix du 11/11/2026), une fois par partenaire. Jamais de
  * rapprochement « à peu près » : deux sociétés voisines ne se confondent pas.
+ *
+ * **Partenaire écarté** (`CLIENT_ECARTE`) : une vente interne (ISOSIGN SAS
+ * (MS)), une fiche Odoo « NE PAS UTILISER » n'ont pas de fiche MonCRM. Leurs
+ * lignes portent `client_id = 'ecarte'` : l'import suivant reprend ce choix au
+ * lieu de recréer la fiche, et l'analyse les montre sous le nom Odoo.
+ * Fusion d'un doublon = pointer les lignes vers la bonne fiche : le lien
+ * d'un import précédent passe avant tout le reste.
  */
 import { supabase } from '@/integrations/supabase/client';
 import { generateId, type Client } from '@/lib/store';
 
 export type PerimetreVentes = 'flooring';
+
+/** `client_id` d'un partenaire volontairement sans fiche MonCRM. */
+export const CLIENT_ECARTE = 'ecarte';
 
 export interface LigneVenteOdoo {
   source: 'facture' | 'commande';
@@ -163,6 +173,7 @@ export function preparerImport(
   for (const pid of new Set(r.lignes.map(l => l.partenaireId).filter((x): x is number => x !== null))) {
     const p = partenaires.get(pid);
     if (!p) continue;
+    if (dejaLies.get(pid) === CLIENT_ECARTE) { clientDe.set(pid, CLIENT_ECARTE); continue; }
     const existant = rapprocherClient(p, tous, dejaLies);
     if (existant) { clientDe.set(pid, existant.id); rattaches++; continue; }
     const nouveau = clientDepuisPartenaire(p, aujourdhui);
