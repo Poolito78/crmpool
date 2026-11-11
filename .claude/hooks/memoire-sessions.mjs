@@ -37,6 +37,13 @@ const MAX_CARACTERES = 150_000;
 const MIN_MESSAGES_UTILISATEUR = 2;
 /** Mise en place du crochet : les conversations plus anciennes ne sont pas reprises. */
 const DEPUIS = Date.parse('2026-11-11T16:00:00Z');
+/**
+ * ⚠️ La session de fond se connecte avec les identifiants de ~/.claude (ceux
+ * d'un `claude` de terminal), pas avec ceux de l'application : expirés, elle
+ * répond « Failed to authenticate » sans rien écrire (vu le 11/11). Refaire
+ * `claude auth login` dans un terminal ; la session non traitée est retentée.
+ */
+const ECHEC_CONNEXION = /Failed to authenticate|Not logged in|Invalid API key|Please run \/login|claude auth login/i;
 
 const dossierJournal = path.join(os.tmpdir(), 'claude-memoire-au-clear');
 fs.mkdirSync(dossierJournal, { recursive: true });
@@ -208,6 +215,14 @@ try {
   const cheminRegistre = path.join(dossier, 'memoire-sessions.json');
   const registre = lireRegistre(cheminRegistre);
 
+  // Une session de fond qui n'a pas pu se connecter n'a rien écrit : on retente.
+  for (const [id, r] of Object.entries(registre)) {
+    if (!r.lance || !r.journal) continue;
+    let sortie = '';
+    try { sortie = fs.readFileSync(path.join(dossierJournal, r.journal), 'utf8'); } catch { continue; }
+    if (ECHEC_CONNEXION.test(sortie)) { delete registre[id]; noterGeneral(`à refaire (connexion refusée) : ${id}`); }
+  }
+
   // Les conversations terminées, pas encore (entièrement) mises en mémoire.
   const aTraiter = [];
   for (const nom of fs.readdirSync(dossier)) {
@@ -260,7 +275,7 @@ try {
   }
 
   // Marquées AVANT le lancement : une autre session qui démarre ne les relance pas.
-  for (const s of aTraiter) registre[s.id] = { lignes: s.lignes, taille: s.taille, le: new Date().toISOString(), lance: true };
+  for (const s of aTraiter) registre[s.id] = { lignes: s.lignes, taille: s.taille, le: new Date().toISOString(), lance: true, journal: `${session}.log` };
   ecrireRegistre(cheminRegistre, registre);
 
   const env = { ...environnementPropre(), MEMOIRE_AU_CLEAR: '1' };
