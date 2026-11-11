@@ -23,6 +23,7 @@ import ColResizeHandle from '@/components/ColResizeHandle';
 import { useCurrentUser } from '@/hooks/useAuth';
 import { useCommercials } from '@/hooks/useCommercials';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
+import AnalyseCroisee from '@/components/AnalyseCroisee';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput from '@/components/FilterChoiceInput';
 import RowActionsMenu from '@/components/RowActionsMenu';
@@ -183,7 +184,7 @@ export default function Clients() {
   const [siretLoading, setSiretLoading] = useState(false);
   const [sortCol, setSortCol] = useState<'societe' | 'ville' | 'adresses' | 'devis' | 'encours' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [clientDialogTab, setClientDialogTab] = useState<'infos' | 'crm' | 'comptabilite' | 'tarifs'>('infos');
+  const [clientDialogTab, setClientDialogTab] = useState<'infos' | 'crm' | 'comptabilite' | 'tarifs' | 'ventes'>('infos');
   const [tarifsOdooEnCours, setTarifsOdooEnCours] = useState(false);
   const { actions: crmActions, addAction: addCrmAction } = useCrmActions();
   const [crmActionDialogOpen, setCrmActionDialogOpen] = useState(false);
@@ -967,7 +968,15 @@ export default function Clients() {
             <button type="button" onClick={() => setClientDialogTab('comptabilite')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'comptabilite' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comptabilité</button>
             <button type="button" onClick={() => setClientDialogTab('tarifs')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'tarifs' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Tarifs</button>
             {editingClient && <button type="button" onClick={() => setClientDialogTab('crm')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>}
+            {editingClient && <button type="button" onClick={() => setClientDialogTab('ventes')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'ventes' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Ventes</button>}
           </div>
+
+          {/* ── Onglet Ventes : analyse croisée des factures, commandes en cours et devis du client ── */}
+          {editingClient && clientDialogTab === 'ventes' && (
+            <div className="flex flex-col h-[70vh] min-h-[24rem]">
+              <AnalyseCroisee key={editingClient.id} sources={['factures', 'commandes', 'devis']} cle="fiche_client" clientId={editingClient.id} />
+            </div>
+          )}
 
           {/* ── Onglet CRM ──────────────────────────────────────────────────── */}
           {editingClient && clientDialogTab === 'crm' && (() => {

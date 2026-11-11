@@ -1,7 +1,8 @@
 /**
  * Analyse croisée — l'écran du tableau croisé dynamique (vue pivot d'Odoo).
  *
- * Monté dans Devis, Commandes Client, Factures Client (une source chacun) et
+ * Monté dans Devis, Commandes Client, Factures Client (une source chacun), dans
+ * l'onglet Ventes de la fiche client (`clientId`) et
  * dans le Tableau de bord (les trois au choix). Le calcul vit dans
  * `analyseCroisee.ts` ; ici, seulement le réglage et l'affichage :
  * mesures cochées, niveaux de lignes (Catégorie › Article…), dimension de
@@ -50,14 +51,23 @@ const REGLAGE_DEFAUT: Omit<Reglage, 'source'> = {
   au: '',
 };
 
-function lireReglage(cle: string, sources: SourceAnalyse[]): Reglage {
-  const defaut: Reglage = { ...REGLAGE_DEFAUT, source: sources[0] };
+/**
+ * Dans une fiche client, la dimension Client ne dit rien : elle est retirée.
+ * Et les commandes FACTURÉES ou PAYÉES sont exclues d'office : elles sont
+ * déjà dans les factures — la fiche montre les commandes EN COURS.
+ */
+const REGLAGE_FICHE_CLIENT: Partial<Omit<Reglage, 'source'>> = {
+  statutsExclus: { factures: ['Annulée'], commandes: ['Facturé', 'Payée'] },
+};
+
+function lireReglage(cle: string, sources: SourceAnalyse[], ficheClient: boolean): Reglage {
+  const defaut: Reglage = { ...REGLAGE_DEFAUT, ...(ficheClient ? REGLAGE_FICHE_CLIENT : {}), source: sources[0] };
   try {
     const brut = localStorage.getItem(`analyse_croisee_${cle}`);
     if (!brut) return defaut;
     const r = { ...defaut, ...JSON.parse(brut) } as Reglage;
     // Valeurs relues d'une version précédente : on ne garde que ce qui existe encore.
-    const ids = new Set(DIMENSIONS.map(d => d.id));
+    const ids = new Set(DIMENSIONS.map(d => d.id).filter(d => !(ficheClient && d === 'client')));
     r.lignes = (r.lignes || []).filter(d => ids.has(d));
     if (r.colonne && !ids.has(r.colonne)) r.colonne = null;
     r.mesures = (r.mesures || []).filter(m => MESURES.some(x => x.id === m));
@@ -87,12 +97,16 @@ export function BoutonAnalyse({ actif, onClick }: { actif: boolean; onClick: () 
   );
 }
 
-export default function AnalyseCroisee({ sources, cle }: { sources: SourceAnalyse[]; cle: string }) {
+/**
+ * `clientId` : analyse limitée aux documents d'un client (onglet Ventes de la
+ * fiche client) ; la dimension Client disparaît des choix.
+ */
+export default function AnalyseCroisee({ sources, cle, clientId }: { sources: SourceAnalyse[]; cle: string; clientId?: string }) {
   const { devis, commandesClient, facturesClient, clients, produits } = useCRM();
   const { isAdmin, userId } = useCurrentUser();
   const { commercials } = useCommercials();
 
-  const [reglage, setReglage] = useState<Reglage>(() => lireReglage(cle, sources));
+  const [reglage, setReglage] = useState<Reglage>(() => lireReglage(cle, sources, !!clientId));
   useEffect(() => { try { localStorage.setItem(`analyse_croisee_${cle}`, JSON.stringify(reglage)); } catch { /* ignore */ } }, [cle, reglage]);
   const maj = (p: Partial<Reglage>) => setReglage(r => ({ ...r, ...p }));
 
@@ -111,11 +125,12 @@ export default function AnalyseCroisee({ sources, cle }: { sources: SourceAnalys
       produitParId: (id?: string) => produitParId(produits, id),
       nomCommercial: (u?: string) => (u ? commercials.find(c => c.userId === u)?.name ?? '—' : '—'),
     };
-    const dansPerimetre = <T extends { userId?: string }>(d: T) => isAdmin || !d.userId || d.userId === userId;
+    const dansPerimetre = <T extends { userId?: string; clientId: string }>(d: T) =>
+      (!clientId || d.clientId === clientId) && (isAdmin || !d.userId || d.userId === userId);
     if (source === 'devis') return faitsDevis(devis.filter(dansPerimetre), ctx);
     if (source === 'commandes') return faitsCommandes(commandesClient.filter(dansPerimetre), ctx);
     return faitsFactures(facturesClient.filter(dansPerimetre), ctx);
-  }, [source, devis, commandesClient, facturesClient, clients, produits, commercials, isAdmin, userId]);
+  }, [source, devis, commandesClient, facturesClient, clients, produits, commercials, isAdmin, userId, clientId]);
 
   const statutsDispo = useMemo(() => [...new Set(faitsSource.map(f => f.statut))].sort((a, b) => a.localeCompare(b, 'fr')), [faitsSource]);
 
@@ -177,7 +192,8 @@ export default function AnalyseCroisee({ sources, cle }: { sources: SourceAnalys
     exportToExcel(lignesExcel, `analyse-${source}-${new Date().toISOString().slice(0, 10)}`, 'Analyse');
   };
 
-  const dimsLibres = DIMENSIONS.filter(d => !lignes.includes(d.id) && d.id !== colonne);
+  const dimsChoisissables = DIMENSIONS.filter(d => !(clientId && d.id === 'client'));
+  const dimsLibres = dimsChoisissables.filter(d => !lignes.includes(d.id) && d.id !== colonne);
   const profondeur = lignes.length;
 
   const indicateurTri = (mesure: MesureId, col: string | null) =>
@@ -270,7 +286,7 @@ export default function AnalyseCroisee({ sources, cle }: { sources: SourceAnalys
             <DropdownMenuContent align="start" className="w-44">
               <DropdownMenuItem onClick={() => { maj({ colonne: null }); setTri(null); }}>Aucune</DropdownMenuItem>
               <DropdownMenuSeparator />
-              {DIMENSIONS.filter(d => !lignes.includes(d.id)).map(d => (
+              {dimsChoisissables.filter(d => !lignes.includes(d.id)).map(d => (
                 <DropdownMenuItem key={d.id} onClick={() => { maj({ colonne: d.id }); setTri(null); }}>{d.label}</DropdownMenuItem>
               ))}
             </DropdownMenuContent>
