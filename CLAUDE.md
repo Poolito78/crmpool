@@ -161,6 +161,7 @@ explication.
 `agentMail` + `dossierMails` + `mailsTransferes` (Agent mail : non lus ET lus sans réponse exportés par la macro Outlook `ExporterMailsNonLus` — à l'arrivée si `ThisOutlookSession.vba` est installé —, glissés, ou TRANSFÉRÉS du mobile à l'adresse MonCRM → fonction `agent-mail-depot` ; tri IA, « Proposer un devis » = mail confié à l'analyse de document ; `microsoftGraph` = option Azure ; la macro range répondus et sortis de la boîte, quota Gemini à ménager) ·
 `devisOdooMails` (demande de devis ↔ devis Odoo : même société, créé après le mail, avec preuve = « Déjà réalisé », sans preuve = proposé, jamais retenu) ·
 `mailsTypes` (objet + texte des mails d'envoi devis / commande fournisseur / facture / AR, par utilisateur, Paramètres → Mails ; `[[ ]]` = passage retiré si un champ est vide) ·
+`ficheDepuisLigne` (ligne libre du devis → fiche article neuve pré-remplie, code à saisir ; au retour la ligne s'y relie et garde son prix) ·
 `chantierDemande` · `contactAffaire` · `liensProduit` · `categorieDocuments` ·
 `produitImages` · `journalPrix` · `prixAchatFournisseur` · `devisFournisseur` ·
 `odooSync` · `pdfFolder` · `analyseDocument` / `analyseTransport` ·

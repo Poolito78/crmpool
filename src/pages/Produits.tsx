@@ -25,6 +25,7 @@ import {
   LIBELLE_GENRE, GENRES, type GenreDocument,
 } from '@/lib/categorieDocuments';
 import { niveauGamme } from '@/lib/remiseGammes';
+import { champsFiche, lireDemandeFiche, memoriserLiaison, oublierDemandeFiche, type DemandeFiche } from '@/lib/ficheDepuisLigne';
 import { designationProduit, generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type ConsoUsage, type VarianteDimension, type VarianteOption, type AchatDate, type FicheTechnique } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { inscrireDansLaListeNoire, retirerDeLaListeNoire } from '@/lib/produitsSupprimes';
@@ -365,6 +366,9 @@ export default function Produits() {
   /* Arrivé depuis la commande fournisseur d'un devis (`retour=commande`) : deux
      retours distincts — la commande (par défaut) ou le devis. */
   const [returnCommande, setReturnCommande] = useState(false);
+  /* Fiche neuve ouverte depuis une ligne libre d'un devis (`ficheDepuisLigne.ts`) :
+     l'article créé y sera relié au retour. */
+  const [demandeLigne, setDemandeLigne] = useState<DemandeFiche | null>(null);
   const [composants, setComposants] = useState<ComposantProduit[]>([]);
   const [composantSearches, setComposantSearches] = useState<string[]>([]);
   const [composantOpenIdx, setComposantOpenIdx] = useState<number | null>(null);
@@ -588,6 +592,27 @@ export default function Produits() {
        attend le catalogue. Ici : seulement le retour au devis. */
     void highlightId;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* `?depuisLigne=1` : fiche NEUVE pré-remplie avec la ligne libre du devis.
+     Le devis de retour vient de la demande elle-même — la page peut déjà être
+     montée (onglets), l'effet ci-dessus n'aurait alors rien lu. */
+  useEffect(() => {
+    if (searchParams.get('depuisLigne') !== '1') return;
+    const d = lireDemandeFiche();
+    setSearchParams({}, { replace: true });
+    if (!d) return;
+    setFromDevis(true);
+    setReturnDevisId(d.devisId);
+    setReturnCommande(false);
+    openNew();
+    setForm({ ...emptyProduit, ...champsFiche(d, emptyProduit.remiseRevendeur) });
+    setDemandeLigne(d);
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* Fiche fermée sans être enregistrée : la demande tombe, un autre article
+     créé ensuite ne se reliera pas à la ligne. */
+  useEffect(() => {
+    if (!dialogOpen && demandeLigne) { setDemandeLigne(null); oublierDemandeFiche(); }
+  }, [dialogOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ensure old products get correct coefficient (now drives revendeur price)
   // Force remise revendeur to 30% for all products
@@ -1399,7 +1424,12 @@ export default function Produits() {
           if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes/achats nouveau produit:', error);
         });
       }
-      toast.success('Produit ajouté');
+      if (demandeLigne) {
+        memoriserLiaison({ devisId: demandeLigne.devisId, ligneId: demandeLigne.ligneId, produitId: newId });
+        oublierDemandeFiche();
+        setDemandeLigne(null);
+        toast.success(`Produit ajouté — la ligne du devis y sera reliée au retour`);
+      } else toast.success('Produit ajouté');
     }
     setDialogOpen(false);
     if (andReturn && fromDevis) retourVers(andReturn);
@@ -2203,6 +2233,12 @@ export default function Produits() {
               </DialogTitle>
             </div>
           </DialogHeader>
+          {!editing && demandeLigne && (
+            <p className="text-sm rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+              Fiche pré-remplie depuis la ligne du devis : complétez le <strong>code article</strong> et le reste.
+              « Enregistrer &amp; retour au devis » reliera la ligne à cet article, à son prix actuel.
+            </p>
+          )}
           {/* ── Barre d'onglets ─────────────────────────────────────────────── */}
           <div className="flex gap-1 bg-muted/50 rounded-xl p-1 mt-1 mb-2">
             {([
@@ -4782,7 +4818,7 @@ export default function Produits() {
 
             <div className="sticky bottom-0 bg-background flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
               <Button variant="outline" className="w-full sm:w-auto" onClick={() => setDialogOpen(false)}>Annuler</Button>
-              {fromDevis && editing && (
+              {fromDevis && (editing || demandeLigne) && (
                 <>
                   {returnCommande && (
                     <Button variant="secondary" className="w-full sm:w-auto" onClick={() => save('commande')}>

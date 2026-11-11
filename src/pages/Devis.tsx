@@ -6,7 +6,8 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type React
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Building2, MoveHorizontal, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, BarChart3, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat } from 'lucide-react';
+import { Building2, MoveHorizontal, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, BarChart3, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat, FilePlus } from 'lucide-react';
+import { demandeDepuisLigne, memoriserDemandeFiche, prendreLiaison, lierLigneAuProduit } from '@/lib/ficheDepuisLigne';
 import { genererScriptOdoo, promptOdooPartnerName, getOdooPartnerId, setOdooPartnerId, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, type OdooPayload } from '@/lib/odooSync';
 import { dimensionTeinte, teinteDeReference } from '@/lib/referenceTeinte';
 import { delaiDeTeinte } from '@/lib/nuancierFlowcrete';
@@ -1107,7 +1108,26 @@ export default function Devis() {
   const accepteRetarif = (): boolean => lignesFigeesRef.current.size === 0
     || window.confirm(`Ce devis a été établi le ${new Date(dateCreation).toLocaleDateString('fr-FR')} : ses prix sont ceux de ce jour-là.\n\nLe re-tarifer aux prix d'aujourd'hui ?`);
 
-  function populateForm(d: DevisType) {
+  function populateForm(dOuvert: DevisType) {
+    /* Retour de la fiche article créée depuis une ligne libre : la ligne s'y
+       relie avant tout le reste, comme si elle avait été enregistrée ainsi
+       (ni port ni catalyseur ne se recalculent pour autant). L'enregistrement
+       automatique l'écrit. */
+    let d = dOuvert;
+    const liaison = prendreLiaison(dOuvert.id);
+    if (liaison) {
+      const p = produitParId(produits, liaison.produitId);
+      const client = clients.find(c => c.id === dOuvert.clientId);
+      const niveau = dOuvert.niveauTarif || null;
+      if (p && dOuvert.lignes.some(l => l.id === liaison.ligneId)) {
+        d = { ...dOuvert, lignes: dOuvert.lignes.map(l => l.id !== liaison.ligneId ? l : lierLigneAuProduit(
+          l, p, prixDeBase(p, l.quantite, client?.estRevendeur, niveau, niveau ? grilles[niveau] : undefined, grilles.R4, client?.remisesParCategorie),
+        )) };
+        toast.success(`Ligne reliée à l'article ${p.reference}`);
+      } else {
+        toast.warning('L\'article créé n\'a pas pu être relié à la ligne : choisissez-le dans la ligne.');
+      }
+    }
     /* Un devis déjà enregistré (il est dans la liste) fige ses lignes ; une
        version restaurée aussi — c'est le même devis. */
     lignesFigeesRef.current = devis.some(x => x.id === d.id)
@@ -2633,6 +2653,17 @@ export default function Devis() {
         ...(l.variantesChoisies ?? {}),
       },
     }));
+  }
+
+  /* Ligne libre → fiche article NEUVE pré-remplie (page Produits). Le devis
+     s'enregistre d'abord : c'est par lui qu'on revient, et la ligne s'y relie
+     à l'article créé (`populateForm`, `prendreLiaison`). */
+  function creerFicheDepuisLigne(l: LigneDevis) {
+    const devisId = save(true) || editingId;
+    if (!devisId) { toast.error('Choisissez d\'abord le client : le devis doit être enregistré pour y revenir.'); return; }
+    const client = clients.find(c => c.id === clientId);
+    memoriserDemandeFiche(demandeDepuisLigne(devisId, l, !!client?.estRevendeur));
+    navigate(`/produits?depuisLigne=1&returnDevis=${devisId}`);
   }
 
   function selectProduit(ligneId: string, produitId: string) {
@@ -5104,6 +5135,12 @@ export default function Devis() {
                                     {l.produitId && (
                                       <Button variant="ghost" size="icon" className="h-8 w-7 shrink-0" title="Voir la fiche produit" onClick={() => { const savedId = save(true); const devisId = savedId || editingId; /* La FICHE s'ouvre directement (`highlight`), pas la liste filtrée sur la référence. */ navigate(`/produits?highlight=${l.produitId}&returnDevis=${devisId || ''}`); }}>
                                         <ExternalLink className="w-3 h-3" />
+                                      </Button>
+                                    )}
+                                    {/* Ligne libre : sa fiche article se crée pré-remplie (`ficheDepuisLigne.ts`), et la ligne s'y relie au retour. */}
+                                    {!l.produitId && noteEnTexte(l.description).trim() !== '' && (
+                                      <Button variant="ghost" size="icon" className="h-8 w-7 shrink-0" title="Créer la fiche article à partir de cette ligne (code article à compléter)" onClick={() => creerFicheDepuisLigne(l)}>
+                                        <FilePlus className="w-3.5 h-3.5" />
                                       </Button>
                                     )}
                                   </div>
