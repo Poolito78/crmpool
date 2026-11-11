@@ -4,5 +4,19 @@
       "mcp__Supabase__execute_sql",
       "mcp__c020ac24-37bf-4c65-96ec-8672bba2dab7__execute_sql"
     ]
+  },
+  "hooks": {
+    "SessionEnd": [
+      {
+        "matcher": "clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/memoire-au-clear.mjs\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
   }
 }
