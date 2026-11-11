@@ -20,7 +20,7 @@ import { produitParId } from '@/lib/indexProduits';
 import { exportToExcel } from '@/lib/exportExcel';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { lireVentesOdoo, importerVentesOdoo, normaliserNom } from '@/lib/ventesOdoo';
+import { lireVentesOdoo, importerVentesOdoo, dansPerimetreOdoo, CLE_VENTES_ODOO } from '@/lib/ventesOdoo';
 import {
   DIMENSIONS, MESURES, LIBELLE_SOURCE, dimension,
   construirePivot, trierParMesure, lignesVisibles, cheminsDepliables, valeurMesure, formaterMesure,
@@ -124,7 +124,7 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
   // ── Copie Odoo (`ventes_odoo`), lue seulement si une source Odoo est offerte ──
   const queryClient = useQueryClient();
   const avecOdoo = sources.some(estSourceOdoo);
-  const ventesOdoo = useQuery({ queryKey: ['ventes_odoo'], queryFn: lireVentesOdoo, enabled: avecOdoo, staleTime: 5 * 60_000 });
+  const ventesOdoo = useQuery({ queryKey: CLE_VENTES_ODOO, queryFn: lireVentesOdoo, enabled: avecOdoo, staleTime: 5 * 60_000 });
   const [anneeImport, setAnneeImport] = useState(() => new Date().getFullYear());
   const [importEnCours, setImportEnCours] = useState(false);
   const dernierImport = useMemo(() => (ventesOdoo.data ?? []).reduce((m, l) => (l.importe_le && l.importe_le > m ? l.importe_le : m), ''), [ventesOdoo.data]);
@@ -132,7 +132,7 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
     setImportEnCours(true);
     try {
       const b = await importerVentesOdoo(anneeImport, 'flooring', clients, nouveaux => updateClients(prev => [...prev, ...nouveaux]));
-      await queryClient.invalidateQueries({ queryKey: ['ventes_odoo'] });
+      await queryClient.invalidateQueries({ queryKey: CLE_VENTES_ODOO });
       toast.success(`Flooring ${anneeImport} importé d'Odoo : ${b.factures} factures/avoirs, ${b.commandes} commandes`, {
         description: `${b.clientsRattaches} client(s) rattaché(s), ${b.clientsCrees} fiche(s) client créée(s).`,
       });
@@ -157,9 +157,9 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
     if (estSourceOdoo(source)) {
       /* Odoo ne connaît pas l'utilisateur MonCRM : un non-admin voit les
          lignes dont le commercial Odoo porte son nom d'affichage. */
-      const moi = normaliserNom(commercials.find(c => c.userId === userId)?.name || '');
+      const moi = commercials.find(c => c.userId === userId)?.name || '';
       return faitsVentesOdoo((ventesOdoo.data ?? []).filter(l =>
-        (!clientId || l.client_id === clientId) && (isAdmin || (!!moi && normaliserNom(l.commercial || '') === moi))), source, ctx);
+        (!clientId || l.client_id === clientId) && dansPerimetreOdoo(l, isAdmin, moi)), source, ctx);
     }
     if (source === 'devis') return faitsDevis(devis.filter(dansPerimetre), ctx);
     if (source === 'commandes') return faitsCommandes(commandesClient.filter(dansPerimetre), ctx);

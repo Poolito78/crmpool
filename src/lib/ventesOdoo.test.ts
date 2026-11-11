@@ -65,3 +65,19 @@ describe('preparerImport', () => {
     expect(second.nouveauxClients).toHaveLength(0);
   });
 });
+
+describe('documentsOdoo', () => {
+  it('regroupe par document, total des lignes, plus récent d\'abord, source respectée', async () => {
+    const { documentsOdoo, dansPerimetreOdoo } = await import('./ventesOdoo');
+    const base = { perimetre: 'flooring', type_document: 'commande' as const, statut: 'À facturer', partenaire_odoo_id: 1, partenaire_nom: 'TOP', client_id: 'c1', commercial: 'François MOUHOT', reference: 'R', designation: 'D', categorie: 'ISOMARK / FLOORING / MMA', reference_affaire: null };
+    const docs = documentsOdoo([
+      { ...base, source: 'commande', odoo_ligne_id: 1, odoo_document_id: 5, numero: 'S0005', date: '2026-02-01', quantite: 1, total_ht: 100 },
+      { ...base, source: 'commande', odoo_ligne_id: 2, odoo_document_id: 5, numero: 'S0005', date: '2026-02-01', quantite: 2, total_ht: 50.5 },
+      { ...base, source: 'commande', odoo_ligne_id: 3, odoo_document_id: 9, numero: 'S0009', date: '2026-06-01', quantite: 1, total_ht: 10 },
+      { ...base, source: 'facture', odoo_ligne_id: 4, odoo_document_id: 7, numero: 'F7', date: '2026-07-01', quantite: 1, total_ht: 10 },
+    ], 'commande');
+    expect(docs.map(d => [d.numero, d.totalHT, d.lignes.length])).toEqual([['S0009', 10, 1], ['S0005', 150.5, 2]]);
+    expect(dansPerimetreOdoo({ commercial: 'François MOUHOT' }, false, 'francois mouhot')).toBe(true);
+    expect(dansPerimetreOdoo({ commercial: 'Dante TORELLA' }, false, 'François MOUHOT')).toBe(false);
+  });
+});

@@ -266,3 +266,56 @@ export async function importerVentesOdoo(
     journal: r.journal || [],
   };
 }
+
+// ── Documents (liste des commandes / factures Odoo) ────────────────────────
+
+/** Clé react-query de la copie Odoo, partagée par l'analyse et les listes. */
+export const CLE_VENTES_ODOO = ['ventes_odoo'] as const;
+
+/**
+ * Odoo ne connaît pas l'utilisateur MonCRM : un non-admin voit les lignes dont
+ * le commercial Odoo porte son nom d'affichage.
+ */
+export function dansPerimetreOdoo(l: Pick<VenteOdoo, 'commercial'>, isAdmin: boolean, monNom: string): boolean {
+  if (isAdmin) return true;
+  const moi = normaliserNom(monNom);
+  return !!moi && normaliserNom(l.commercial || '') === moi;
+}
+
+export interface DocumentOdoo {
+  cle: string;
+  source: 'facture' | 'commande';
+  odooDocumentId: number;
+  numero: string;
+  typeDocument: VenteOdoo['type_document'];
+  date: string | null;
+  clientId: string | null;
+  partenaire: string;
+  commercial: string;
+  statut: string;
+  referenceAffaire: string;
+  /** Total HT des lignes LUES (périmètre Flooring), pas celui du document Odoo. */
+  totalHT: number;
+  lignes: VenteOdoo[];
+}
+
+/** Regroupe les lignes en documents, le plus récent d'abord. */
+export function documentsOdoo(lignes: VenteOdoo[], source: 'facture' | 'commande'): DocumentOdoo[] {
+  const parDoc = new Map<number, DocumentOdoo>();
+  for (const l of lignes) {
+    if (l.source !== source) continue;
+    let d = parDoc.get(l.odoo_document_id);
+    if (!d) {
+      d = {
+        cle: `${source}:${l.odoo_document_id}`, source, odooDocumentId: l.odoo_document_id,
+        numero: l.numero, typeDocument: l.type_document, date: l.date,
+        clientId: l.client_id, partenaire: l.partenaire_nom || '', commercial: l.commercial || '',
+        statut: l.statut || '', referenceAffaire: l.reference_affaire || '', totalHT: 0, lignes: [],
+      };
+      parDoc.set(l.odoo_document_id, d);
+    }
+    d.totalHT = Math.round((d.totalHT + (Number(l.total_ht) || 0)) * 100) / 100;
+    d.lignes.push(l);
+  }
+  return [...parDoc.values()].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.numero.localeCompare(a.numero));
+}

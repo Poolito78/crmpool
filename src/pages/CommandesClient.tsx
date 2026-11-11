@@ -7,6 +7,9 @@ import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
 import AnalyseCroisee, { BoutonAnalyse, useVueAnalyse } from '@/components/AnalyseCroisee';
+import CommandesOdooListe from '@/components/CommandesOdooListe';
+import { useQuery } from '@tanstack/react-query';
+import { CLE_VENTES_ODOO, dansPerimetreOdoo, documentsOdoo, lireVentesOdoo } from '@/lib/ventesOdoo';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterDateInput, { matchDateFilter, parseDateFilter } from '@/components/FilterDateInput';
 import FilterAmountInput, { matchAmountFilter, parseAmountFilter } from '@/components/FilterAmountInput';
@@ -57,6 +60,12 @@ export default function CommandesClient() {
   const { isAdmin, userId } = useCurrentUser();
   const { commercials, nameOf } = useCommercials();
   const [vueAnalyse, setVueAnalyse] = useVueAnalyse('commandes');
+  // Commandes Odoo (copie en lecture seule) : pastille « Odoo » de la liste.
+  const ventesOdoo = useQuery({ queryKey: CLE_VENTES_ODOO, queryFn: lireVentesOdoo, staleTime: 5 * 60_000 });
+  const nbCommandesOdoo = useMemo(() => {
+    const moi = commercials.find(c => c.userId === userId)?.name || '';
+    return documentsOdoo((ventesOdoo.data ?? []).filter(l => dansPerimetreOdoo(l, isAdmin, moi)), 'commande').length;
+  }, [ventesOdoo.data, commercials, userId, isAdmin]);
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [filterProduit, setFilterProduit] = useState<string>('');
@@ -457,6 +466,10 @@ export default function CommandesClient() {
             </button>
           );
         })}
+        <button onClick={() => setFilterStatut('odoo')} title="Commandes Odoo Flooring, en lecture seule"
+          className={`px-3 py-1 rounded text-xs font-medium transition-colors ${filterStatut === 'odoo' ? 'bg-violet-600 text-white' : 'bg-violet-100 text-violet-700 hover:bg-violet-200 dark:bg-violet-900/40 dark:text-violet-300'}`}>
+          Odoo ({nbCommandesOdoo})
+        </button>
       </div>
 
       {/* Summary cards */}
@@ -488,7 +501,8 @@ export default function CommandesClient() {
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — la pastille « Odoo » montre à la place les commandes Odoo, en lecture seule */}
+      {filterStatut === 'odoo' ? <CommandesOdooListe recherche={search} /> : (
       <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead>
@@ -584,6 +598,7 @@ export default function CommandesClient() {
           </tbody>
         </table>
       </div>
+      )}
       </>)}
 
       {/* Create/Edit Dialog */}
