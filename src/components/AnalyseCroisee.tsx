@@ -18,10 +18,13 @@ import { useCurrentUser } from '@/hooks/useAuth';
 import { useCommercials } from '@/hooks/useCommercials';
 import { produitParId } from '@/lib/indexProduits';
 import { exportToExcel } from '@/lib/exportExcel';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { lireVentesOdoo, importerVentesOdoo, normaliserNom } from '@/lib/ventesOdoo';
 import {
   DIMENSIONS, MESURES, LIBELLE_SOURCE, dimension,
   construirePivot, trierParMesure, lignesVisibles, cheminsDepliables, valeurMesure, formaterMesure,
-  faitsDevis, faitsCommandes, faitsFactures,
+  faitsDevis, faitsCommandes, faitsFactures, faitsVentesOdoo, estSourceOdoo,
   type DimensionId, type MesureId, type SourceAnalyse, type FaitVente, type NoeudPivot,
 } from '@/lib/analyseCroisee';
 import { Button } from '@/components/ui/button';
@@ -29,7 +32,7 @@ import { Input } from '@/components/ui/input';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { ArrowDown, ArrowLeftRight, ArrowUp, BarChart3, ChevronDown, List, Download, MinusSquare, PlusSquare, Plus, Search, X, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
+import { ArrowDown, ArrowLeftRight, ArrowUp, BarChart3, ChevronDown, CloudDownload, List, Loader2, Download, MinusSquare, PlusSquare, Plus, Search, X, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 
 interface Reglage {
   source: SourceAnalyse;
@@ -57,7 +60,7 @@ const REGLAGE_DEFAUT: Omit<Reglage, 'source'> = {
  * déjà dans les factures — la fiche montre les commandes EN COURS.
  */
 const REGLAGE_FICHE_CLIENT: Partial<Omit<Reglage, 'source'>> = {
-  statutsExclus: { factures: ['Annulée'], commandes: ['Facturé', 'Payée'] },
+  statutsExclus: { factures: ['Annulée'], commandes: ['Facturé', 'Payée'], commandesOdoo: ['Facturée'] },
 };
 
 function lireReglage(cle: string, sources: SourceAnalyse[], ficheClient: boolean): Reglage {
@@ -102,7 +105,7 @@ export function BoutonAnalyse({ actif, onClick }: { actif: boolean; onClick: () 
  * fiche client) ; la dimension Client disparaît des choix.
  */
 export default function AnalyseCroisee({ sources, cle, clientId }: { sources: SourceAnalyse[]; cle: string; clientId?: string }) {
-  const { devis, commandesClient, facturesClient, clients, produits } = useCRM();
+  const { devis, commandesClient, facturesClient, clients, produits, updateClients } = useCRM();
   const { isAdmin, userId } = useCurrentUser();
   const { commercials } = useCommercials();
 
@@ -115,6 +118,28 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
   const [tri, setTri] = useState<Tri>(null);
 
   const { source, lignes, colonne, mesures } = reglage;
+
+  // ── Copie Odoo (`ventes_odoo`), lue seulement si une source Odoo est offerte ──
+  const queryClient = useQueryClient();
+  const avecOdoo = sources.some(estSourceOdoo);
+  const ventesOdoo = useQuery({ queryKey: ['ventes_odoo'], queryFn: lireVentesOdoo, enabled: avecOdoo, staleTime: 5 * 60_000 });
+  const [anneeImport, setAnneeImport] = useState(() => new Date().getFullYear());
+  const [importEnCours, setImportEnCours] = useState(false);
+  const dernierImport = useMemo(() => (ventesOdoo.data ?? []).reduce((m, l) => (l.importe_le && l.importe_le > m ? l.importe_le : m), ''), [ventesOdoo.data]);
+  const importer = async () => {
+    setImportEnCours(true);
+    try {
+      const b = await importerVentesOdoo(anneeImport, 'flooring', clients, nouveaux => updateClients(prev => [...prev, ...nouveaux]));
+      await queryClient.invalidateQueries({ queryKey: ['ventes_odoo'] });
+      toast.success(`Flooring ${anneeImport} importé d'Odoo : ${b.factures} factures/avoirs, ${b.commandes} commandes`, {
+        description: `${b.clientsRattaches} client(s) rattaché(s), ${b.clientsCrees} fiche(s) client créée(s).`,
+      });
+    } catch (e) {
+      toast.error(`Import Odoo impossible : ${(e as Error).message}`);
+    } finally {
+      setImportEnCours(false);
+    }
+  };
   const statutsExclus = useMemo(() => new Set(reglage.statutsExclus[source] || []), [reglage.statutsExclus, source]);
 
   // ── Faits de la source, dans le périmètre du commercial ──────────────────
@@ -127,10 +152,17 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
     };
     const dansPerimetre = <T extends { userId?: string; clientId: string }>(d: T) =>
       (!clientId || d.clientId === clientId) && (isAdmin || !d.userId || d.userId === userId);
+    if (estSourceOdoo(source)) {
+      /* Odoo ne connaît pas l'utilisateur MonCRM : un non-admin voit les
+         lignes dont le commercial Odoo porte son nom d'affichage. */
+      const moi = normaliserNom(commercials.find(c => c.userId === userId)?.name || '');
+      return faitsVentesOdoo((ventesOdoo.data ?? []).filter(l =>
+        (!clientId || l.client_id === clientId) && (isAdmin || (!!moi && normaliserNom(l.commercial || '') === moi))), source, ctx);
+    }
     if (source === 'devis') return faitsDevis(devis.filter(dansPerimetre), ctx);
     if (source === 'commandes') return faitsCommandes(commandesClient.filter(dansPerimetre), ctx);
     return faitsFactures(facturesClient.filter(dansPerimetre), ctx);
-  }, [source, devis, commandesClient, facturesClient, clients, produits, commercials, isAdmin, userId, clientId]);
+  }, [source, devis, commandesClient, facturesClient, clients, produits, commercials, isAdmin, userId, clientId, ventesOdoo.data]);
 
   const statutsDispo = useMemo(() => [...new Set(faitsSource.map(f => f.statut))].sort((a, b) => a.localeCompare(b, 'fr')), [faitsSource]);
 
@@ -300,6 +332,31 @@ export default function AnalyseCroisee({ sources, cle, clientId }: { sources: So
           <Button variant="ghost" size="icon" className="h-8 w-8" title="Exporter vers Excel" onClick={exporter}><Download className="w-4 h-4" /></Button>
         </div>
       </div>
+
+      {/* ── Copie Odoo : origine des chiffres et import ── */}
+      {estSourceOdoo(source) && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs">
+          <span className="text-muted-foreground">
+            Copie d'Odoo en lecture seule — lignes <b>Flooring</b> (ISOMARK / FLOORING…), tous commerciaux.{' '}
+            {ventesOdoo.isLoading ? 'Lecture…' : dernierImport ? `Dernier import : ${new Date(dernierImport).toLocaleString('fr-FR')}.` : "Rien d'importé pour l'instant."}
+          </span>
+          {ventesOdoo.error && <span className="text-destructive">Lecture impossible : {(ventesOdoo.error as Error).message}</span>}
+          <div className="ml-auto flex items-center gap-1">
+            {/* Pas de <select> natif : dans un dialogue Radix (fiche client), sa liste annule le choix. */}
+            <div className="flex gap-0.5 p-0.5 bg-muted rounded">
+              {[2, 1, 0].map(k => new Date().getFullYear() - k).map(a => (
+                <button key={a} onClick={() => setAnneeImport(a)}
+                  className={`px-2 py-0.5 rounded ${anneeImport === a ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>{a}</button>
+              ))}
+            </div>
+            <Button size="sm" variant="outline" className="h-7 gap-1" onClick={importer} disabled={importEnCours}
+              title="Relit Odoo et remplace les lignes Flooring de l'année ; crée les fiches clients manquantes">
+              {importEnCours ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CloudDownload className="w-3.5 h-3.5" />}
+              Importer d'Odoo
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* ── Filtres ── */}
       <div className="flex flex-wrap items-center gap-2 text-xs">

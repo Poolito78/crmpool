@@ -33,14 +33,20 @@ import {
   STATUTS_COMMANDE_CLIENT, STATUTS_FACTURE_CLIENT,
   type CommandeClient, type Devis, type FactureClient, type LigneDevis, type Produit, type Client,
 } from '@/lib/store';
+import type { VenteOdoo } from '@/lib/ventesOdoo';
 
-export type SourceAnalyse = 'devis' | 'commandes' | 'factures';
+export type SourceAnalyse = 'devis' | 'commandes' | 'factures' | 'facturesOdoo' | 'commandesOdoo';
 
 export const LIBELLE_SOURCE: Record<SourceAnalyse, string> = {
   devis: 'Devis',
   commandes: 'Commandes client',
   factures: 'Factures client',
+  facturesOdoo: 'Factures Odoo',
+  commandesOdoo: 'Commandes Odoo',
 };
+
+/** Sources lues dans `ventes_odoo` (copie Odoo), et non dans le store. */
+export const estSourceOdoo = (s: SourceAnalyse): s is 'facturesOdoo' | 'commandesOdoo' => s === 'facturesOdoo' || s === 'commandesOdoo';
 
 export interface FaitVente {
   documentId: string;
@@ -359,4 +365,34 @@ export function faitsFactures(factures: FactureClient[], ctx: ContexteFaits): Fa
       statut: STATUTS_FACTURE_CLIENT[f.statut]?.label || f.statut, lignes: f.lignes, fraisPortHT: f.fraisPortHT,
       affaire: f.referenceAffaire, signe: f.typeDocument === 'avoir' ? -1 : 1,
     }, ctx));
+}
+
+/**
+ * Lignes de la copie Odoo (`ventes_odoo`). Déjà signées (avoir négatif) et
+ * déjà réduites au périmètre lu (lignes Flooring seules). Le client est la
+ * fiche MonCRM rattachée, à défaut le nom Odoo.
+ */
+export function faitsVentesOdoo(lignes: VenteOdoo[], source: 'facturesOdoo' | 'commandesOdoo', ctx: Pick<ContexteFaits, 'clientParId'>): FaitVente[] {
+  const voulu = source === 'facturesOdoo' ? 'facture' : 'commande';
+  return lignes.filter(l => l.source === voulu).map(l => {
+    const c = l.client_id ? ctx.clientParId(l.client_id) : undefined;
+    const categorie = (l.categorie || '').trim();
+    const designation = (l.designation || '').trim();
+    return {
+      documentId: `odoo:${l.source}:${l.odoo_document_id}`,
+      numero: l.numero,
+      date: l.date || '',
+      client: c ? (c.societe || c.nom || '') : (l.partenaire_nom || ''),
+      commercial: l.commercial || '',
+      statut: l.type_document === 'avoir' ? `Avoir — ${l.statut || ''}`.replace(/ — $/, '') : (l.statut || ''),
+      articleCle: `odoo:${(l.reference || designation).toLocaleLowerCase('fr')}`,
+      article: designation || '(ligne sans libellé)',
+      reference: l.reference || '',
+      categorie,
+      famille: categorie.split('/')[0].trim(),
+      affaire: l.reference_affaire || '',
+      totalHT: Number(l.total_ht) || 0,
+      quantite: Number(l.quantite) || 0,
+    };
+  });
 }

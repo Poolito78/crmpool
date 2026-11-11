@@ -173,7 +173,7 @@ explication.
 `kitFournisseur` (devis reçu : ligne chiffrée + lignes sans prix = un kit, quantités ramenées à UN kit, code de tête générique, coût porté par la 1re ligne de composant) ·
 `nuancierFlowcrete` (teintes par tier et par gamme : Tier 1 disponible, Tier 2 10 à 15 j ouvrés) ·
 `recapSysteme` (fiche récap copiée dans les fichiers du devis : devis modèle, sinon table `systemes`) ·
-`demandeTeintes` (dictée/email du devis : tableau de surfaces par couleur lu sans IA → zones en m², un pigment par teinte à la dose du devis modèle, règle par teinte lue dans les devis réalisés ; ml sans largeur et pictos = « à préciser », jamais supposés) · `analyseCroisee` (pivot devis / commandes / factures : une ligne d'article ou un port = un fait ; nb de documents = compte distinct ; avoir au signe −1, proformas et modèles « système » exclus) · `concurrents` · `ralColors`
+`demandeTeintes` (dictée/email du devis : tableau de surfaces par couleur lu sans IA → zones en m², un pigment par teinte à la dose du devis modèle, règle par teinte lue dans les devis réalisés ; ml sans largeur et pictos = « à préciser », jamais supposés) · `analyseCroisee` (pivot devis / commandes / factures : une ligne d'article ou un port = un fait ; nb de documents = compte distinct ; avoir au signe −1, proformas et modèles « système » exclus) · `ventesOdoo` (copie Odoo en LECTURE SEULE des lignes Flooring de factures / commandes, table `ventes_odoo`, JAMAIS dans `factures_client` — une facture y redeviendrait un brouillon à émettre ; client rattaché par lien, note « partenaire #id », TVA, courriel, nom exact, sinon fiche créée) · `concurrents` · `ralColors`
 
 ## Supabase
 
@@ -193,7 +193,7 @@ s'exécutent dans un **terminal**, jamais dans l'éditeur SQL.
 **Edge Functions** (`supabase/functions/*`) : déployer avec
 `.\deploy-function.ps1 <nom>` (ou `-All`). Fonctions : `extract-client`,
 `extract-contact`, `analyze-email`, `ai-calculator`, `devis-assistant`,
-`send-devis-email`, `odoo-prix`, `gemini`, `agent-mail-depot`, `odoo-achat`, `odoo-devis-mails`.
+`send-devis-email`, `odoo-prix`, `gemini`, `agent-mail-depot`, `odoo-achat`, `odoo-devis-mails`, `odoo-ventes`.
 
 **Diagnostic « ça ne persiste pas »** : les `updateXxx` écrivent en
 fire-and-forget. Un upsert qui envoie une colonne inexistante reçoit un 400 et

@@ -463,7 +463,7 @@ export default function FacturesClient() {
         </div>
       </PageHeaderSlot>
 
-      {vueAnalyse ? <AnalyseCroisee sources={['factures']} cle="factures" /> : (<>
+      {vueAnalyse ? <AnalyseCroisee sources={['factures', 'facturesOdoo']} cle="factures" /> : (<>
       {/* Filtre statut */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="flex flex-wrap gap-1.5">

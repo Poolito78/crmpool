@@ -656,6 +656,21 @@ détail (« 1 + 17,6 + 2 + 58 ») est recalculé et un écart se signale.
   « empriente signa » reprend « Empreinte Signa » — une faute par mot de cinq
   lettres ou plus, une seule société, sinon rien.
 
+## Analyse croisée et ventes Odoo Flooring (11 nov.)
+
+`AnalyseCroisee.tsx` + `analyseCroisee.ts` : tableau croisé dynamique (vue
+pivot d'Odoo) dans Devis, Commandes, Factures, tableau de bord et onglet
+**Ventes** de la fiche client. Sources « Factures Odoo » / « Commandes Odoo »
+= table `ventes_odoo` (migration `20261111150000`, **appliquée** le 11/11),
+remplie par le bouton « Importer d'Odoo » (fonction `odoo-ventes`, lecture
+seule) : lignes **Flooring** seules (« ISOMARK / FLOORING… »), tous
+commerciaux, factures comptabilisées + commandes confirmées de l'année, avoir
+en négatif. Client absent → fiche CRÉÉE (choix du 11/11).
+⚠️ **Jamais dans `factures_client` / `commandes_client`** : le trigger
+`figer_facture_client` remet une facture insérée en brouillon sans numéro, à
+« émettre » — une seconde facture légale.
+**À déployer** : `.\deploy-function.ps1 odoo-ventes`.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du

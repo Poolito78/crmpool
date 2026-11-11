@@ -974,7 +974,7 @@ export default function Clients() {
           {/* ── Onglet Ventes : analyse croisée des factures, commandes en cours et devis du client ── */}
           {editingClient && clientDialogTab === 'ventes' && (
             <div className="flex flex-col h-[70vh] min-h-[24rem]">
-              <AnalyseCroisee key={editingClient.id} sources={['factures', 'commandes', 'devis']} cle="fiche_client" clientId={editingClient.id} />
+              <AnalyseCroisee key={editingClient.id} sources={['factures', 'commandes', 'devis', 'facturesOdoo', 'commandesOdoo']} cle="fiche_client" clientId={editingClient.id} />
             </div>
           )}
 

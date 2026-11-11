@@ -443,7 +443,7 @@ export default function CommandesClient() {
         </div>
       </PageHeaderSlot>
 
-      {vueAnalyse ? <AnalyseCroisee sources={['commandes']} cle="commandes" /> : (<>
+      {vueAnalyse ? <AnalyseCroisee sources={['commandes', 'commandesOdoo']} cle="commandes" /> : (<>
       {/* Filter by status */}
       <div className="flex flex-wrap gap-1.5">
         <button onClick={() => setFilterStatut('tous')} className={`px-3 py-1 rounded text-xs font-medium transition-colors ${filterStatut === 'tous' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}>

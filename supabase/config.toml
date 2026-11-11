@@ -19,6 +19,9 @@ verify_jwt = true
 [functions.odoo-achat]
 verify_jwt = true
 
+[functions.odoo-ventes]
+verify_jwt = true
+
 # Agent mail : devis Odoo des societes qui ont ecrit, en LECTURE seule.
 # Session exigee (fichier partenaires et devis).
 [functions.odoo-devis-mails]

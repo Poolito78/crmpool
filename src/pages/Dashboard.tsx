@@ -169,7 +169,7 @@ export default function Dashboard() {
 
       {dashTab === 'analyse' ? (
         <div className="flex flex-col h-[calc(100dvh-11rem)] min-h-[24rem]">
-          <AnalyseCroisee sources={['factures', 'commandes', 'devis']} cle="dashboard" />
+          <AnalyseCroisee sources={['factures', 'commandes', 'devis', 'facturesOdoo', 'commandesOdoo']} cle="dashboard" />
         </div>
       ) : dashTab === 'caodoo' && caOdooDispo ? (
         <CaOdooPanel />
