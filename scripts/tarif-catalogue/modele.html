@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<!-- GÉNÉRÉ par scripts/tarif-catalogue/generer.mjs à partir du catalogue ISOFLOOR.
+     Ne pas modifier à la main : modifier le catalogue ou scripts/tarif-catalogue/modele.html,
+     puis relancer le script. -->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Tarif professionnel ISOFLOOR</title>
+<link rel="icon" href="/catalogue-tarif/logo-isofloor.png">
+<style>
+/*__STYLE__*/
+
+/* ── Tarif en ligne : ajouts au style du catalogue ────────────────────── */
+.vue { display: none; }
+.vue.active { display: block; }
+.acces-wrap { min-height: calc(100vh - 64px); display: flex; align-items: flex-start; justify-content: center; padding: 56px 16px; background: var(--slate-1, #f8fafc); }
+.acces-box { width: 100%; max-width: 440px; background: #fff; border: 1.5px solid var(--slate-3, #e2e8f0); border-radius: 14px; padding: 30px 28px; box-shadow: 0 8px 30px rgba(15,39,68,.06); }
+.acces-box h2 { font-size: 20px; font-weight: 800; color: var(--navy, #0f2744); margin: 0 0 6px; }
+.acces-box p.intro { font-size: 13.5px; color: var(--slate-5, #64748b); margin: 0 0 22px; line-height: 1.5; }
+.acces-field { margin-bottom: 14px; }
+.acces-field label { display: block; font-size: 12px; font-weight: 700; color: var(--slate-6, #475569); margin-bottom: 5px; }
+.acces-field input, .acces-field textarea { width: 100%; box-sizing: border-box; border: 1.5px solid var(--slate-3, #e2e8f0); border-radius: 8px; padding: 10px 12px; font: inherit; font-size: 14px; }
+.acces-field input:focus, .acces-field textarea:focus { outline: none; border-color: var(--red, #e8392a); }
+.acces-btn { width: 100%; border: none; border-radius: 8px; padding: 12px; font: inherit; font-weight: 700; font-size: 14px; color: #fff; background: var(--red, #e8392a); cursor: pointer; }
+.acces-btn:disabled { opacity: .6; cursor: default; }
+.acces-btn.navy { background: var(--navy, #0f2744); }
+.acces-err { color: #dc2626; font-size: 13px; min-height: 18px; margin: 4px 0 10px; }
+.acces-lien { display: block; width: 100%; background: none; border: none; text-align: center; margin-top: 16px; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--navy, #0f2744); text-decoration: underline; cursor: pointer; }
+.acces-sep { border-top: 1.5px solid var(--slate-2, #f1f5f9); margin-top: 22px; padding-top: 6px; text-align: center; font-size: 13px; color: var(--slate-5, #64748b); }
+.pot-de-miel { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.chargement { display: flex; justify-content: center; padding: 120px 0; }
+.chargement span { width: 34px; height: 34px; border: 4px solid var(--red, #e8392a); border-top-color: transparent; border-radius: 50%; animation: tourne 0.9s linear infinite; }
+@keyframes tourne { to { transform: rotate(360deg); } }
+.client-chip { color: #fff; font-size: 13px; font-weight: 600; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+.btn-sortie { background: transparent; color: rgba(255,255,255,.8); border: 1.5px solid rgba(255,255,255,.25); border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-sortie:hover { color: #fff; border-color: rgba(255,255,255,.5); }
+button.btn-download { border: none; cursor: pointer; font: inherit; }
+.topbar-actions .btn-download, .topbar-actions .btn-sortie, .topbar-actions .badge-tag { white-space: nowrap; }
+@media (max-width: 980px) { .client-chip { display: none; } }
+.admin-bar { display: none; background: #fffbeb; border-bottom: 1.5px solid #fde68a; padding: 9px 16px; font-size: 13px; }
+.admin-bar.active { display: block; }
+.admin-bar-inner { max-width: 1400px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.admin-bar b { color: #92400e; }
+.admin-bar select { border: 1.5px solid #fcd34d; border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 13px; background: #fff; max-width: 100%; }
+.price-pub { font-size: 11.5px; color: var(--slate-5, #64748b); margin-top: 2px; }
+.price-pub s { opacity: .8; }
+.price-pub .remise { color: #059669; font-weight: 700; margin-left: 4px; }
+.mention-tarif { font-size: 12px; color: var(--slate-5, #64748b); margin: 28px 0 0; }
+@media (max-width: 640px) {
+  .client-chip { display: none; }
+  .topbar-actions .badge-tag { display: none; }
+}
+@media print {
+  .topbar-actions .btn-download, .topbar-actions .btn-sortie, .admin-bar, .nav, .search-wrap { display: none !important; }
+  .section { display: block !important; }
+  .card { break-inside: avoid; }
+  .gran-group { break-inside: avoid; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a href="https://www.isofloor.fr" class="brand">
+      <img class="brand-logo" src="/catalogue-tarif/logo-isofloor.png" alt="ISOFLOOR">
+    </a>
+    <div class="topbar-actions">
+      <span class="badge-tag">Prix HT · TVA 20%</span>
+      <span id="client-chip" class="client-chip"></span>
+      <button id="btn-pdf" class="btn-download" style="display:none" onclick="imprimer()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Télécharger PDF
+      </button>
+      <button id="btn-sortie" class="btn-sortie" style="display:none" onclick="deconnexion()">Déconnexion</button>
+    </div>
+  </div>
+</header>
+
+<div id="admin-bar" class="admin-bar">
+  <div class="admin-bar-inner">
+    <b>Aperçu admin :</b>
+    <select id="admin-client" onchange="choisirClient(this.value)"><option value="">Tarif public</option></select>
+    <span id="admin-info" style="color:#b45309"></span>
+  </div>
+</div>
+
+<div id="vue-chargement" class="vue active"><div class="chargement"><span></span></div></div>
+
+<div id="vue-login" class="vue">
+  <div class="acces-wrap">
+    <form class="acces-box" onsubmit="event.preventDefault(); connexion()">
+      <h2>Accès au tarif professionnel</h2>
+      <p class="intro">Réservé aux clients ISOFLOOR. Connectez-vous avec l'e-mail et le mot de passe transmis par votre commercial.</p>
+      <div class="acces-field"><label for="login-id">E-mail</label><input id="login-id" type="email" required autocomplete="username"></div>
+      <div class="acces-field"><label for="login-mdp">Mot de passe</label><input id="login-mdp" type="password" required autocomplete="current-password"></div>
+      <div id="login-err" class="acces-err"></div>
+      <button id="login-btn" class="acces-btn" type="submit">Se connecter</button>
+      <div class="acces-sep">Pas encore d'accès ?</div>
+      <button type="button" class="acces-lien" onclick="afficher('demande')">Demander un accès au tarif</button>
+    </form>
+  </div>
+</div>
+
+<div id="vue-demande" class="vue">
+  <div class="acces-wrap">
+    <form id="form-demande" class="acces-box" onsubmit="event.preventDefault(); envoyerDemande()">
+      <h2>Demande d'accès au tarif</h2>
+      <p class="intro">Professionnel du revêtement de sol ? Remplissez ce formulaire, nous vous ouvrons un accès à vos prix.</p>
+      <div class="acces-field"><label>Entreprise *</label><input name="entreprise" required maxlength="150" autocomplete="organization"></div>
+      <div class="acces-field"><label>Nom et prénom *</label><input name="nom" required maxlength="120" autocomplete="name"></div>
+      <div class="acces-field"><label>E-mail professionnel *</label><input name="email" type="email" required maxlength="160" autocomplete="email"></div>
+      <div class="acces-field"><label>Téléphone</label><input name="telephone" type="tel" maxlength="40" autocomplete="tel"></div>
+      <div class="acces-field"><label>SIRET</label><input name="siret" maxlength="20"></div>
+      <div class="acces-field"><label>Ville</label><input name="ville" maxlength="80" autocomplete="address-level2"></div>
+      <div class="acces-field"><label>Message</label><textarea name="message" rows="3" maxlength="2000" placeholder="Votre activité, vos besoins…"></textarea></div>
+      <div class="pot-de-miel" aria-hidden="true"><input name="site_web" tabindex="-1" autocomplete="off"></div>
+      <div id="demande-err" class="acces-err"></div>
+      <button id="demande-btn" class="acces-btn" type="submit">Envoyer ma demande</button>
+      <button type="button" class="acces-lien" onclick="afficher('login')">J'ai déjà un accès</button>
+    </form>
+    <div id="demande-ok" class="acces-box" style="display:none">
+      <h2>Demande envoyée</h2>
+      <p class="intro">Merci. Votre demande d'accès au tarif ISOFLOOR a bien été reçue ; votre commercial vous recontacte avec vos identifiants.</p>
+      <button class="acces-btn navy" onclick="afficher('login')">Retour à la connexion</button>
+    </div>
+  </div>
+</div>
+
+<div id="vue-catalogue" class="vue">
+<!--__CORPS__-->
+<div class="main" style="padding-top:0"><p class="mention-tarif">Prix HT, TVA 20 % en sus. Tarif établi le <span id="date-tarif"></span> ; la version en ligne fait foi.</p></div>
+<!--__PIED__-->
+</div>
+
+<script>
+/*__DONNEES__*/
+
+const sb = supabase.createClient(SB_URL, SB_CLE);
+const CLE_JETON = 'tarif_isofloor_jeton';
+const params = new URLSearchParams(location.search);
+let jeton = null;
+try { jeton = sessionStorage.getItem(CLE_JETON); } catch (e) {}
+let PRODUCTS = [];
+let curSec = 'all';
+let modeAdmin = false;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const f = n => n != null ? new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n) + ' €' : null;
+
+async function appel(body) {
+  const { data, error } = await sb.functions.invoke('tarif-catalogue', { body });
+  if (error) {
+    let msg = 'Service indisponible, réessayez plus tard.';
+    try { const j = await error.context.json(); if (j && j.erreur) msg = j.erreur; } catch (e) {}
+    const err = new Error(msg);
+    err.statut = error.context && error.context.status;
+    throw err;
+  }
+  return data;
+}
+
+function afficher(v) {
+  document.querySelectorAll('.vue').forEach(el => el.classList.toggle('active', el.id === 'vue-' + v));
+  const cat = v === 'catalogue';
+  document.getElementById('btn-pdf').style.display = cat ? '' : 'none';
+  document.getElementById('btn-sortie').style.display = cat && jeton ? '' : 'none';
+  if (v === 'demande') {
+    document.getElementById('form-demande').style.display = '';
+    document.getElementById('demande-ok').style.display = 'none';
+  }
+  window.scrollTo(0, 0);
+}
+
+/* ── catalogue (repris du catalogue ISOFLOOR, sans l'édition) ─────────── */
+/* catToSec / catToBc : recopiées du catalogue par le générateur. */
+/*__FONCTIONS__*/
+
+function appliquerTarif(t) {
+  const parRef = new Map(t.lignes.map(l => [l.reference, l]));
+  const utilisees = new Set();
+  PRODUCTS = BASE.map(b => {
+    const l = parRef.get(b.crm || b.ref);
+    if (l) utilisees.add(l.reference);
+    return Object.assign({}, b, {
+      prix: l ? l.prix : null,
+      prixPublic: l ? l.prixPublic : null,
+      remise: l ? l.remise : 0,
+      kg: l && l.prix != null && b.poids ? +(l.prix / b.poids).toFixed(2) : null,
+    });
+  });
+  /* Articles cochés « Catalogue » dans le CRM sans fiche dans le catalogue. */
+  t.lignes.filter(l => !utilisees.has(l.reference)).forEach(l => {
+    const sec = catToSec(l.categorie);
+    PRODUCTS.push({
+      ref: l.reference, name: esc(l.designation), cat: esc((l.categorie || '').split('/').pop().trim()),
+      bc: catToBc(sec), sec, poids: l.poids, u: esc(l.unite || ''), desc: '', img: null, delai: null,
+      prix: l.prix, prixPublic: l.prixPublic, remise: l.remise,
+      kg: l.prix != null && l.poids ? +(l.prix / l.poids).toFixed(2) : null,
+    });
+  });
+}
+
+function card(p) {
+  const img = p.img ? `<div class="card-img-wrap"><img class="card-img" src="${p.img}" alt="" loading="lazy"></div>` : '';
+  const pub = p.remise > 0 && p.prixPublic
+    ? `<div class="price-pub">Public <s>${f(p.prixPublic)}</s><span class="remise">−${String(p.remise).replace('.', ',')} %</span></div>` : '';
+  const priceBlock = p.prix != null
+    ? `<div class="price-main">${f(p.prix)}</div>${p.kg ? `<div class="price-kg">${f(p.kg)} / kg</div>` : ''}${pub}`
+    : `<div class="price-nd">Prix sur demande</div>`;
+  return `<article class="card">
+    ${img}
+    <div class="card-top">
+      <span class="card-ref">${esc(p.ref)}</span>
+      <span class="cat-badge ${p.bc}">${p.cat}</span>
+    </div>
+    <div class="card-body">
+      <h3 class="card-name">${p.name}</h3>
+      ${p.desc ? `<p class="card-desc">${p.desc}</p>` : ''}
+    </div>
+    <div class="card-foot">
+      <div>${priceBlock}</div>
+      <div class="card-meta">
+        <span class="meta-unite">${p.u}</span>
+        ${p.poids ? `<span class="meta-poids">⚖ ${p.poids} kg</span>` : ''}
+      </div>
+    </div>
+  </article>`;
+}
+
+function granTable(items) {
+  const groups = {};
+  items.forEach(p => { (groups[p.cat] = groups[p.cat] || []).push(p); });
+  return Object.entries(groups).map(([g, ps]) => {
+    const thumb = GRAN_IMGS[g] ? `<img class="gran-group-thumb" src="${GRAN_IMGS[g]}" alt="" loading="lazy">` : '';
+    return `
+    <div class="gran-group">
+      <div class="gran-group-header">${thumb}<span class="gran-group-title">${g}</span></div>
+      <table class="gran-table">
+        <thead><tr><th>Référence</th><th>Granulométrie</th><th>Tarif / sac 25 kg</th><th>Prix / kg</th><th>Délai</th></tr></thead>
+        <tbody>${ps.map(p => {
+          const dc = p.delai === 3 ? 'd3' : p.delai === 5 ? 'd5' : p.delai === 15 ? 'd15' : '';
+          const dt = p.delai ? `<span class="delai ${dc}">${p.delai} j</span>` : '—';
+          return `<tr>
+            <td class="td-ref">${esc(p.ref)}</td>
+            <td class="td-name">${p.name}</td>
+            <td class="td-price">${p.prix != null ? f(p.prix) : 'Sur demande'}</td>
+            <td class="td-kg">${p.kg != null ? f(p.kg).replace(' €', '/kg') : '—'}</td>
+            <td class="td-delai">${dt}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
+
+const SECS = ['epoxy', 'mma', 'pu', 'poly', 'mdp', 'gran', 'mat', 'poc'];
+function render(q = '', sec = 'all') {
+  let total = 0;
+  SECS.forEach(s => {
+    const el = document.getElementById('sec-' + s);
+    if (!el) return;
+    const items = PRODUCTS.filter(p => p.sec === s && (!q || (p.ref + ' ' + p.name + ' ' + (p.cat || '')).toLowerCase().includes(q)));
+    el.classList.toggle('visible', (sec === 'all' || sec === s) && items.length > 0);
+    if (!el.classList.contains('visible')) return;
+    total += items.length;
+    const g = document.getElementById('g-' + s);
+    g.innerHTML = s === 'gran' ? granTable(items) : items.map(card).join('');
+  });
+  document.getElementById('count').textContent = total + ' produit' + (total > 1 ? 's' : '');
+}
+function show(s, btn) {
+  curSec = s;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render(document.getElementById('search').value.toLowerCase(), s);
+}
+function filter(v) { render(v.toLowerCase(), curSec); }
+
+function renderTransport(t) {
+  const inner = document.getElementById('transport-inner');
+  if (!inner || !t) return;
+  inner.innerHTML = `<span class="transport-label">Transport</span>
+    ${t.tranches.map(tr => `<span class="chip">${tr.label} <b>${tr.prix} €</b></span>`).join('')}
+    <span class="chip">Hayon <b>${t.hayon} €</b></span>
+    <span class="chip">Relivraison <b>${t.relivraison} €</b></span>
+    <span class="chip">Dépalettisation <b>${t.depalettisation} €</b></span>
+    <span class="chip chip-green">Franco <b>${t.francoLabel}</b></span>`;
+}
+
+function montrerTarif(t) {
+  appliquerTarif(t);
+  const societe = t.client ? t.client.societe : '';
+  document.getElementById('client-chip').textContent = societe;
+  const h1 = document.querySelector('.hero h1');
+  if (h1) h1.innerHTML = societe ? `Tarif ${new Date(t.date).getFullYear()} <span>/ ${esc(societe)}</span>` : 'Catalogue Tarifs <span>/ Tarif public</span>';
+  const kpi = document.querySelector('.hero-kpis .kpi-n');
+  if (kpi) kpi.textContent = PRODUCTS.length;
+  document.getElementById('date-tarif').textContent = new Date(t.date).toLocaleDateString('fr-FR');
+  document.title = `Tarif ISOFLOOR${societe ? ' — ' + societe : ''}`;
+  renderTransport(TRANSPORT);
+  render(document.getElementById('search').value.toLowerCase(), curSec);
+  afficher('catalogue');
+}
+
+function imprimer() {
+  document.getElementById('search').value = '';
+  const tous = document.querySelector('.nav-btn');
+  if (tous) show('all', tous);
+  setTimeout(() => window.print(), 50);
+}
+
+/* ── accès ────────────────────────────────────────────────────────────── */
+async function connexion() {
+  const btn = document.getElementById('login-btn');
+  const err = document.getElementById('login-err');
+  btn.disabled = true; btn.textContent = 'Connexion…'; err.textContent = '';
+  try {
+    const r = await appel({ action: 'login', identifiant: document.getElementById('login-id').value, mdp: document.getElementById('login-mdp').value });
+    jeton = r.jeton;
+    try { sessionStorage.setItem(CLE_JETON, jeton); } catch (e) {}
+    await charger();
+  } catch (e) {
+    err.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Se connecter';
+  }
+}
+
+function deconnexion() {
+  jeton = null;
+  try { sessionStorage.removeItem(CLE_JETON); } catch (e) {}
+  document.getElementById('login-mdp').value = '';
+  document.getElementById('client-chip').textContent = '';
+  afficher('login');
+}
+
+async function envoyerDemande() {
+  const form = document.getElementById('form-demande');
+  const btn = document.getElementById('demande-btn');
+  const err = document.getElementById('demande-err');
+  btn.disabled = true; btn.textContent = 'Envoi…'; err.textContent = '';
+  try {
+    await appel(Object.assign({ action: 'demande' }, Object.fromEntries(new FormData(form))));
+    form.reset();
+    form.style.display = 'none';
+    document.getElementById('demande-ok').style.display = '';
+  } catch (e) {
+    err.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Envoyer ma demande';
+  }
+}
+
+async function choisirClient(id) {
+  const u = new URL(location.href);
+  if (id) u.searchParams.set('client', id); else u.searchParams.delete('client');
+  history.replaceState(null, '', u);
+  afficher('chargement');
+  try { montrerTarif(await appel({ action: 'tarif', client_id: id || undefined })); }
+  catch (e) { document.getElementById('admin-info').textContent = e.message; afficher('catalogue'); }
+}
+
+async function preparerAdmin(clientId) {
+  modeAdmin = true;
+  document.getElementById('admin-bar').classList.add('active');
+  const { data } = await sb.from('clients').select('id, societe, nom').eq('acces_tarif', true).order('societe');
+  const sel = document.getElementById('admin-client');
+  (data || []).forEach(c => sel.insertAdjacentHTML('beforeend', `<option value="${esc(c.id)}">${esc(c.societe || c.nom)}</option>`));
+  if (clientId && !(data || []).some(c => c.id === clientId)) {
+    sel.insertAdjacentHTML('beforeend', `<option value="${esc(clientId)}">Client sélectionné (sans accès)</option>`);
+  }
+  sel.value = clientId || '';
+  document.getElementById('admin-info').textContent = `${(data || []).length} client(s) avec accès`;
+}
+
+async function charger() {
+  afficher('chargement');
+  if (jeton) {
+    try { montrerTarif(await appel({ action: 'tarif', jeton })); return; }
+    catch (e) {
+      jeton = null;
+      try { sessionStorage.removeItem(CLE_JETON); } catch (x) {}
+      document.getElementById('login-err').textContent = e.message;
+    }
+  } else {
+    const { data } = await sb.auth.getSession();
+    if (data && data.session) {
+      try {
+        const clientId = params.get('client') || '';
+        const t = await appel({ action: 'tarif', client_id: clientId || undefined });
+        if (t.admin) await preparerAdmin(clientId);
+        montrerTarif(t);
+        return;
+      } catch (e) { /* session MonCRM sans droit admin : connexion du tarif */ }
+    }
+  }
+  afficher(params.has('demande') ? 'demande' : 'login');
+}
+
+charger();
+</script>
+</body>
+</html>

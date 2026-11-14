@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<!-- GÉNÉRÉ par scripts/tarif-catalogue/generer.mjs à partir du catalogue ISOFLOOR.
+     Ne pas modifier à la main : modifier le catalogue ou scripts/tarif-catalogue/modele.html,
+     puis relancer le script. -->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Tarif professionnel ISOFLOOR</title>
+<link rel="icon" href="/catalogue-tarif/logo-isofloor.png">
+<style>
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  --navy:     #0f2744;
+  --navy-2:   #1a3a5c;
+  --navy-3:   #264a72;
+  --red:      #e8401c;
+  --red-2:    #c73516;
+  --slate-1:  #f8fafc;
+  --slate-2:  #f1f5f9;
+  --slate-3:  #e2e8f0;
+  --slate-4:  #cbd5e1;
+  --slate-5:  #94a3b8;
+  --slate-6:  #64748b;
+  --slate-7:  #475569;
+  --slate-9:  #1e293b;
+  --white:    #ffffff;
+  --radius:   12px;
+  --radius-s: 6px;
+  --radius-l: 16px;
+  --shadow-s: 0 1px 3px rgba(15,39,68,.06), 0 1px 2px rgba(15,39,68,.04);
+  --shadow-m: 0 4px 16px rgba(15,39,68,.08), 0 2px 6px rgba(15,39,68,.05);
+  --shadow-l: 0 12px 40px rgba(15,39,68,.12), 0 4px 12px rgba(15,39,68,.06);
+}
+
+/* ── reset & base ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body { font-family: 'Inter', system-ui, sans-serif; background: var(--slate-1); color: var(--slate-9); -webkit-font-smoothing: antialiased; }
+
+/* ── TOPBAR ───────────────────────────────────────────────────────────── */
+.topbar {
+  position: sticky; top: 0; z-index: 200;
+  background: var(--navy);
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.topbar-inner {
+  max-width: 1440px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28px; height: 60px; gap: 20px;
+}
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.brand-logo { height: 34px; width: auto; display: block; background: white; padding: 5px 10px; border-radius: 6px; box-sizing: content-box; }
+/* conservé pour applyParams() mais invisible quand logo présent */
+.brand-mark { display: none; }
+.brand-name { display: none; }
+.brand-year { display: none; }
+.topbar-actions { display: flex; align-items: center; gap: 10px; }
+.badge-tag {
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.7);
+  border: 1px solid rgba(255,255,255,.12);
+  padding: 4px 12px; border-radius: 20px;
+  font-size: 12px; font-weight: 500; letter-spacing: .4px;
+}
+.btn-download {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--red); color: white;
+  border: none; padding: 8px 16px; border-radius: 8px;
+  font-size: 13px; font-weight: 600; cursor: pointer;
+  text-decoration: none; transition: background .15s, transform .1s;
+  font-family: inherit;
+}
+.btn-download:hover { background: var(--red-2); transform: translateY(-1px); }
+.btn-download svg { flex-shrink: 0; }
+
+/* ── NAV TABS ─────────────────────────────────────────────────────────── */
+.nav {
+  background: var(--navy);
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.nav-inner {
+  max-width: 1440px; margin: 0 auto;
+  display: flex; padding: 0 28px;
+  overflow-x: auto; scrollbar-width: none; gap: 2px;
+}
+.nav-inner::-webkit-scrollbar { display: none; }
+.nav-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 11px 16px; color: rgba(255,255,255,.5);
+  cursor: pointer; font-size: 12.5px; font-weight: 500;
+  white-space: nowrap; border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s; background: none;
+  border-top: none; border-left: none; border-right: none;
+  font-family: inherit; letter-spacing: .2px;
+}
+.nav-btn:hover { color: rgba(255,255,255,.85); }
+.nav-btn.active { color: white; border-bottom-color: var(--red); }
+.nav-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── HERO ─────────────────────────────────────────────────────────────── */
+.hero {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy-3) 60%, #1e4480 100%);
+  padding: 48px 28px 52px;
+}
+.hero-inner {
+  max-width: 1440px; margin: 0 auto;
+  display: grid; grid-template-columns: 1fr auto;
+  align-items: center; gap: 48px;
+}
+.hero h1 { color: white; font-size: 28px; font-weight: 800; letter-spacing: -.3px; line-height: 1.2; }
+.hero h1 span { color: rgba(255,255,255,.4); font-weight: 400; }
+.hero-sub { color: rgba(255,255,255,.55); font-size: 14px; margin-top: 8px; line-height: 1.6; max-width: 520px; }
+.hero-kpis { display: flex; gap: 32px; flex-shrink: 0; }
+.kpi { text-align: center; }
+.kpi-n { font-size: 34px; font-weight: 900; color: white; line-height: 1; letter-spacing: -1px; }
+.kpi-n span { font-size: 16px; color: var(--red); font-weight: 700; }
+.kpi-l { font-size: 11px; color: rgba(255,255,255,.4); text-transform: uppercase; letter-spacing: .8px; margin-top: 4px; }
+
+/* ── TRANSPORT STRIP ──────────────────────────────────────────────────── */
+.transport {
+  background: white;
+  border-bottom: 1px solid var(--slate-3);
+  padding: 10px 28px;
+}
+.transport-inner {
+  max-width: 1440px; margin: 0 auto;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.transport-label { font-size: 11px; font-weight: 700; color: var(--slate-5); text-transform: uppercase; letter-spacing: .8px; margin-right: 4px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--slate-2); border: 1px solid var(--slate-3);
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 11.5px; color: var(--slate-7);
+}
+.chip b { color: var(--navy); font-weight: 600; }
+.chip-green { background: #f0fdf4; border-color: #86efac; }
+.chip-green b { color: #16a34a; }
+
+/* ── MAIN LAYOUT ──────────────────────────────────────────────────────── */
+.main { max-width: 1440px; margin: 0 auto; padding: 32px 28px 64px; }
+
+/* ── SEARCH ───────────────────────────────────────────────────────────── */
+.search-wrap { position: relative; margin-bottom: 28px; }
+.search-icon {
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  color: var(--slate-5); pointer-events: none;
+}
+.search-input {
+  width: 100%; padding: 12px 16px 12px 42px;
+  background: white; border: 1.5px solid var(--slate-3);
+  border-radius: var(--radius); font-size: 14px;
+  font-family: inherit; color: var(--slate-9);
+  outline: none; transition: border-color .15s, box-shadow .15s;
+  box-shadow: var(--shadow-s);
+}
+.search-input:focus { border-color: var(--navy-2); box-shadow: 0 0 0 3px rgba(26,58,92,.1); }
+.search-input::placeholder { color: var(--slate-5); }
+.search-count {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  font-size: 12px; font-weight: 500; color: var(--slate-5); background: var(--slate-2);
+  padding: 2px 10px; border-radius: 12px;
+}
+
+/* ── SECTION ──────────────────────────────────────────────────────────── */
+.section { display: none; }
+.section.visible { display: block; }
+.sec-head { display: flex; align-items: center; gap: 14px; margin-bottom: 20px; }
+.sec-icon {
+  width: 44px; height: 44px; border-radius: 10px;
+  display: grid; place-items: center; font-size: 22px; flex-shrink: 0;
+}
+.sec-title { font-size: 19px; font-weight: 700; color: var(--navy); letter-spacing: -.2px; }
+.sec-sub { font-size: 13px; color: var(--slate-5); margin-top: 2px; }
+.sec-icon img { width: 100%; height: 100%; object-fit: contain; border-radius: 10px; }
+body.edit-mode .sec-title, body.edit-mode .sec-sub { outline: 1.5px dashed #93c5fd; outline-offset: 2px; border-radius: 4px; cursor: text; }
+body.edit-mode .sec-title:focus, body.edit-mode .sec-sub:focus { outline: 2px solid #3b82f6; background: #eff6ff; }
+body.edit-mode .footer [contenteditable="true"] { outline: 1.5px dashed rgba(147,197,253,.6); outline-offset: 2px; border-radius: 3px; cursor: text; }
+body.edit-mode .footer [contenteditable="true"]:focus { outline: 2px solid #60a5fa; background: rgba(255,255,255,.06); }
+body.edit-mode .sec-icon, body.edit-mode .brand-logo { outline: 1.5px dashed #93c5fd; outline-offset: 2px; cursor: pointer; }
+body.edit-mode .sec-icon:hover, body.edit-mode .brand-logo:hover { outline: 2px solid #3b82f6; }
+.sec-divider { border: none; border-top: 1.5px solid var(--slate-3); margin: 0 0 22px; }
+
+/* ── PRODUCT GRID ─────────────────────────────────────────────────────── */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(296px, 1fr)); gap: 14px; }
+
+/* ── PRODUCT CARD ─────────────────────────────────────────────────────── */
+.card {
+  background: white; border-radius: var(--radius-l);
+  border: 1.5px solid var(--slate-3);
+  display: flex; flex-direction: column;
+  transition: border-color .15s, box-shadow .2s, transform .15s;
+  overflow: hidden; cursor: default;
+  box-shadow: var(--shadow-s);
+}
+.card:hover {
+  border-color: var(--navy-3);
+  box-shadow: var(--shadow-m);
+  transform: translateY(-2px);
+}
+.card-top {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 14px 14px 10px; gap: 8px;
+}
+.card-ref {
+  font-size: 10px; font-weight: 600; font-family: 'SF Mono', 'Fira Code', monospace;
+  color: var(--slate-5); background: var(--slate-2); padding: 2px 8px;
+  border-radius: 4px; letter-spacing: .3px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 160px;
+}
+.cat-badge {
+  font-size: 10px; font-weight: 600; padding: 3px 9px;
+  border-radius: 20px; white-space: nowrap; flex-shrink: 0; letter-spacing: .2px;
+}
+.card-body { padding: 0 14px 12px; flex: 1; }
+.card-name {
+  font-size: 14px; font-weight: 700; color: var(--navy);
+  line-height: 1.35; letter-spacing: -.1px; margin-bottom: 5px;
+}
+.card-desc { font-size: 12px; color: var(--slate-6); line-height: 1.55; }
+.card-foot {
+  padding: 12px 14px;
+  background: var(--slate-1);
+  border-top: 1px solid var(--slate-3);
+  display: flex; justify-content: space-between; align-items: flex-end;
+}
+.price-main { font-size: 22px; font-weight: 800; color: var(--navy); line-height: 1; letter-spacing: -.5px; }
+.price-main sup { font-size: 13px; font-weight: 600; letter-spacing: 0; vertical-align: super; }
+.price-kg { font-size: 11.5px; color: var(--slate-5); margin-top: 3px; font-weight: 500; }
+.price-nd { font-size: 13px; color: var(--slate-5); font-style: italic; }
+.card-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.meta-unite {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  background: var(--navy); color: white; padding: 3px 9px; border-radius: 5px;
+}
+.meta-poids { font-size: 11px; color: var(--slate-5); font-weight: 500; }
+
+/* ── CARD IMAGE ───────────────────────────────────────────────────────── */
+.card-img-wrap {
+  position: relative;
+  width: 100%;
+}
+.card-img {
+  width: 100%; height: 160px;
+  object-fit: contain; object-position: center;
+  border-radius: var(--radius) var(--radius) 0 0;
+  display: block;
+  background: var(--slate-1);
+  padding: 8px;
+  box-sizing: border-box;
+}
+.card-img-placeholder {
+  display: none;
+  width: 100%; height: 160px;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--slate-1);
+  box-sizing: border-box;
+}
+/* Contrôles visibles uniquement en mode édition */
+.card-img-edit { display: none; position: absolute; inset: 0; border-radius: var(--radius) var(--radius) 0 0; }
+body.edit-mode .card-img-edit { display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(15,39,68,.35); }
+body.edit-mode .card-img-wrap:hover .card-img-edit { background: rgba(15,39,68,.55); }
+body.edit-mode .card-img-placeholder { display: block; }
+.btn-img-action {
+  display: flex; align-items: center; gap: 5px;
+  padding: 7px 12px; border-radius: var(--radius-s);
+  font-size: 12px; font-weight: 600; border: none; cursor: pointer;
+  font-family: inherit;
+}
+.btn-img-add    { background: white; color: var(--navy); }
+.btn-img-change { background: white; color: var(--navy); }
+.btn-img-del    { background: #fee2e2; color: #b91c1c; }
+/* Zone cliquable "Ajouter" quand pas d'image en mode édition */
+body.edit-mode .card-img-no-img { cursor: pointer; }
+body.edit-mode .card-img-no-img:hover { background: #e0f2fe; }
+
+/* ── GRANULATS TABLE ──────────────────────────────────────────────────── */
+.gran-group { margin-bottom: 24px; }
+.gran-group-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 0 6px; border-bottom: 1.5px solid var(--slate-3); margin-bottom: 0;
+}
+.gran-group-thumb {
+  width: 64px; height: 48px;
+  object-fit: cover; border-radius: 6px;
+  flex-shrink: 0; border: 1.5px solid var(--slate-3);
+}
+.gran-group-title {
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .8px; color: var(--slate-6);
+}
+.gran-table {
+  width: 100%; border-collapse: collapse;
+  background: white; border-radius: var(--radius);
+  overflow: hidden; border: 1.5px solid var(--slate-3);
+  box-shadow: var(--shadow-s); margin-top: 2px;
+}
+.gran-table thead th {
+  background: var(--navy); color: rgba(255,255,255,.85);
+  padding: 10px 14px; font-size: 11px; font-weight: 600;
+  letter-spacing: .5px; text-transform: uppercase; text-align: left;
+}
+.gran-table thead th:not(:first-child) { text-align: right; }
+.gran-table td {
+  padding: 9px 14px; font-size: 13px;
+  border-bottom: 1px solid var(--slate-2);
+}
+.gran-table tr:last-child td { border-bottom: none; }
+.gran-table tr:nth-child(even) td { background: var(--slate-1); }
+.gran-table tr:hover td { background: #eff6ff; }
+.td-ref { font-family: monospace; font-size: 10.5px; color: var(--slate-5); }
+.td-name { font-weight: 500; color: var(--slate-9); }
+.td-price { font-weight: 700; color: var(--navy); text-align: right; }
+.td-kg { color: var(--slate-5); font-size: 12px; text-align: right; }
+.td-delai { text-align: right; }
+.delai {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10.5px; font-weight: 600; padding: 2px 8px;
+  border-radius: 12px;
+}
+.d3  { background: #dcfce7; color: #16a34a; }
+.d5  { background: #dbeafe; color: #1d4ed8; }
+.d15 { background: #fef3c7; color: #b45309; }
+
+/* ── EMPTY STATE ──────────────────────────────────────────────────────── */
+.empty {
+  text-align: center; padding: 64px 32px; color: var(--slate-5);
+  background: white; border-radius: var(--radius-l);
+  border: 1.5px dashed var(--slate-3);
+}
+.empty p { font-size: 14px; margin-top: 8px; }
+
+/* ── FOOTER ───────────────────────────────────────────────────────────── */
+.footer {
+  background: var(--navy);
+  padding: 48px 28px 32px;
+}
+.footer-inner {
+  max-width: 1440px; margin: 0 auto;
+  display: grid; grid-template-columns: 2fr repeat(4,1fr);
+  gap: 32px; align-items: start;
+}
+.footer-brand-name { font-size: 22px; font-weight: 900; color: white; letter-spacing: 1px; }
+.footer-brand-name span { color: var(--red); }
+.footer-brand-desc { font-size: 12px; color: rgba(255,255,255,.35); margin-top: 6px; line-height: 1.6; }
+.footer-col h4 { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,.3); margin-bottom: 10px; }
+.footer-col p, .footer-col a { font-size: 12.5px; color: rgba(255,255,255,.65); line-height: 1.9; text-decoration: none; display: block; }
+.footer-col a:hover { color: white; }
+.footer-divider { border: none; border-top: 1px solid rgba(255,255,255,.07); margin: 28px 0 18px; }
+.footer-bottom {
+  max-width: 1440px; margin: 0 auto;
+  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+}
+.footer-bottom p { font-size: 11.5px; color: rgba(255,255,255,.25); }
+
+/* ── CATEGORY BADGE COLORS ────────────────────────────────────────────── */
+.bc-epoxy   { background: #dbeafe; color: #1d4ed8; }
+.bc-mma     { background: #dcfce7; color: #15803d; }
+.bc-pu      { background: #fef3c7; color: #b45309; }
+.bc-poly    { background: #fce7f3; color: #9d174d; }
+.bc-mdp     { background: #d1fae5; color: #065f46; }
+.bc-gran    { background: #f3e8ff; color: #7e22ce; }
+.bc-mat     { background: #fee2e2; color: #b91c1c; }
+.bc-poc     { background: #e0f2fe; color: #0369a1; }
+
+/* ── SECTION DOT COLORS ───────────────────────────────────────────────── */
+.dot-epoxy  { background: #3b82f6; }
+.dot-mma    { background: #22c55e; }
+.dot-pu     { background: #f59e0b; }
+.dot-poly   { background: #ec4899; }
+.dot-mdp    { background: #10b981; }
+.dot-gran   { background: #a855f7; }
+.dot-mat    { background: #ef4444; }
+.dot-poc    { background: #0ea5e9; }
+
+/* ── SECTION ICON BACKGROUNDS ─────────────────────────────────────────── */
+.si-epoxy   { background: #dbeafe; }
+.si-mma     { background: #dcfce7; }
+.si-pu      { background: #fef3c7; }
+.si-poly    { background: #fce7f3; }
+.si-mdp     { background: #d1fae5; }
+.si-gran    { background: #f3e8ff; }
+.si-mat     { background: #fee2e2; }
+.si-poc     { background: #e0f2fe; }
+
+/* ── RESPONSIVE ───────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .hero-inner { grid-template-columns: 1fr; }
+  .hero-kpis { justify-content: flex-start; }
+  .footer-inner { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 600px) {
+  .topbar-inner, .nav-inner, .hero, .transport, .main, .footer { padding-left: 16px; padding-right: 16px; }
+  .grid { grid-template-columns: 1fr; }
+  .footer-inner { grid-template-columns: 1fr; }
+}
+/* ── MODE ÉDITION ────────────────────────────────────────────────────── */
+.btn-edit {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 16px; border-radius: var(--radius-s);
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+  background: transparent; color: rgba(255,255,255,.8);
+  border: 1.5px solid rgba(255,255,255,.25);
+  transition: all .15s;
+}
+.btn-edit:hover  { background: rgba(255,255,255,.1); color: white; }
+.btn-edit.active { background: #f59e0b; color: white; border-color: #f59e0b; }
+.btn-modifs {
+  display: none; align-items: center; gap: 7px;
+  padding: 8px 14px; border-radius: var(--radius-s);
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+  background: #f59e0b; color: white; border: none;
+  transition: background .15s;
+}
+.btn-modifs:hover { background: #d97706; }
+.btn-modifs .badge-count {
+  background: white; color: #d97706;
+  border-radius: 999px; font-size: 11px; font-weight: 800;
+  padding: 1px 7px; min-width: 20px; text-align: center;
+}
+/* cartes en mode édition */
+body.edit-mode .card {
+  cursor: pointer;
+  outline: 2px dashed transparent;
+  transition: outline .12s, transform .12s;
+}
+body.edit-mode .card:hover {
+  outline: 2px dashed #f59e0b;
+  transform: translateY(-2px);
+}
+body.edit-mode .card.annotated {
+  outline: 2px solid #f59e0b;
+}
+/* badge annotation sur la fiche */
+.annot-badge {
+  position: absolute; top: 8px; right: 8px; z-index: 10;
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800;
+  box-shadow: 0 2px 6px rgba(0,0,0,.25);
+}
+.annot-badge.modifier  { background: #f59e0b; color: white; }
+.annot-badge.supprimer { background: #ef4444; color: white; }
+.annot-badge.nouveau-prix { background: #3b82f6; color: white; }
+.annot-badge.ok        { background: #22c55e; color: white; }
+.card { position: relative; }
+/* panneau annotation */
+.annot-overlay {
+  display: none; position: fixed; inset: 0; z-index: 9999;
+  background: rgba(15,39,68,.55); backdrop-filter: blur(4px);
+  align-items: center; justify-content: center;
+}
+.annot-box {
+  background: white; border-radius: var(--radius-l);
+  padding: 28px 28px 24px; width: 420px; max-width: 95vw;
+  box-shadow: var(--shadow-l);
+}
+.annot-box h3 { font-size: 15px; font-weight: 700; color: var(--navy); }
+.annot-box .annot-ref { font-size: 11px; color: var(--slate-5); font-family: monospace; margin-bottom: 16px; display: block; }
+.annot-status-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.annot-status-btn {
+  padding: 6px 14px; border-radius: 999px; border: 1.5px solid var(--slate-3);
+  font-size: 12px; font-weight: 600; cursor: pointer; background: white;
+  color: var(--slate-6); transition: all .12s;
+}
+.annot-status-btn:hover, .annot-status-btn.sel { color: white; border-color: transparent; }
+.annot-status-btn[data-s="modifier"].sel   { background: #f59e0b; }
+.annot-status-btn[data-s="supprimer"].sel  { background: #ef4444; }
+.annot-status-btn[data-s="nouveau-prix"].sel{ background: #3b82f6;}
+.annot-status-btn[data-s="ok"].sel         { background: #22c55e; }
+.annot-field { margin-bottom: 12px; }
+.annot-field label { display: block; font-size: 12px; font-weight: 600; color: var(--slate-7); margin-bottom: 5px; }
+.annot-box input[type="number"], .annot-box input[type="text"] {
+  padding: 7px 10px; border: 1.5px solid var(--slate-3);
+  border-radius: var(--radius-s); font-size: 13px; color: var(--slate-9);
+  box-sizing: border-box; outline: none; font-family: inherit; width: 100%;
+}
+.annot-box input[type="number"]:focus, .annot-box input[type="text"]:focus { border-color: var(--navy); }
+.annot-field input, .annot-field textarea {
+  width: 100%; padding: 9px 12px; border: 1.5px solid var(--slate-3);
+  border-radius: var(--radius-s); font-size: 13px; color: var(--slate-9);
+  box-sizing: border-box; outline: none; font-family: inherit; resize: vertical;
+}
+.annot-field input:focus, .annot-field textarea:focus { border-color: var(--navy); }
+.annot-actions { display: flex; gap: 10px; margin-top: 18px; }
+.btn-annot-save {
+  flex: 1; padding: 10px; border: none; border-radius: var(--radius-s);
+  background: var(--navy); color: white; font-size: 14px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+}
+.btn-annot-save:hover { background: var(--navy-2); }
+.btn-annot-cancel {
+  padding: 10px 16px; border: 1.5px solid var(--slate-3);
+  border-radius: var(--radius-s); background: white; font-size: 14px;
+  color: var(--slate-6); cursor: pointer; font-family: inherit;
+}
+.btn-annot-del {
+  padding: 10px 14px; border: 1.5px solid #fee2e2;
+  border-radius: var(--radius-s); background: white; font-size: 14px;
+  color: #ef4444; cursor: pointer; font-family: inherit;
+}
+/* panneau récapitulatif modifications */
+.modifs-overlay {
+  display: none; position: fixed; inset: 0; z-index: 9999;
+  background: rgba(15,39,68,.55); backdrop-filter: blur(4px);
+  align-items: flex-start; justify-content: flex-end;
+  padding: 72px 24px 24px;
+}
+.modifs-panel {
+  background: white; border-radius: var(--radius-l);
+  width: 480px; max-width: 95vw; max-height: 80vh;
+  box-shadow: var(--shadow-l); display: flex; flex-direction: column;
+}
+.modifs-header {
+  padding: 20px 24px 16px; border-bottom: 1.5px solid var(--slate-2);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modifs-header h3 { font-size: 16px; font-weight: 700; color: var(--navy); margin: 0; }
+.modifs-close {
+  background: none; border: none; font-size: 20px; cursor: pointer;
+  color: var(--slate-5); line-height: 1;
+}
+.modifs-list { flex: 1; overflow-y: auto; padding: 12px 0; }
+.modif-row {
+  padding: 12px 24px; border-bottom: 1px solid var(--slate-2);
+  cursor: pointer; transition: background .1s;
+}
+.modif-row:hover { background: var(--slate-1); }
+.modif-row:last-child { border-bottom: none; }
+.modif-row-top { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.modif-row-ref { font-family: monospace; font-size: 11px; color: var(--slate-5); }
+.modif-row-name { font-size: 13px; font-weight: 600; color: var(--slate-9); }
+.modif-row-note { font-size: 12px; color: var(--slate-6); }
+.modif-tag {
+  font-size: 10px; font-weight: 700; padding: 2px 8px;
+  border-radius: 999px; white-space: nowrap;
+}
+.mt-modifier    { background: #fef3c7; color: #b45309; }
+.mt-supprimer   { background: #fee2e2; color: #b91c1c; }
+.mt-nouveau-prix{ background: #dbeafe; color: #1d4ed8; }
+.mt-ok          { background: #dcfce7; color: #15803d; }
+.modifs-footer {
+  padding: 14px 24px; border-top: 1.5px solid var(--slate-2);
+  display: flex; gap: 10px;
+}
+.btn-export-modifs {
+  flex: 1; padding: 10px; border: none; border-radius: var(--radius-s);
+  background: var(--navy); color: white; font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+}
+.btn-clear-modifs {
+  padding: 10px 14px; border: 1.5px solid #fee2e2;
+  border-radius: var(--radius-s); background: white; font-size: 13px;
+  color: #ef4444; cursor: pointer; font-family: inherit;
+}
+/* ── SYNC CRM ─────────────────────────────────────────────────────────── */
+.btn-sync {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 16px; border-radius: var(--radius-s);
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+  background: #22c55e; color: white; border: none;
+  transition: background .15s;
+}
+.btn-sync:hover { background: #16a34a; }
+.btn-sync.syncing { background: var(--slate-5); pointer-events: none; }
+.btn-sync.error   { background: #ef4444; }
+.sync-status {
+  font-size: 11px; color: rgba(255,255,255,.5);
+  white-space: nowrap;
+}
+
+/* ── AUTH MODAL ───────────────────────────────────────────────────────── */
+.auth-overlay {
+  display: none; position: fixed; inset: 0; z-index: 9999;
+  background: rgba(15,39,68,.6); backdrop-filter: blur(4px);
+  align-items: center; justify-content: center;
+}
+.auth-box {
+  background: white; border-radius: var(--radius-l);
+  padding: 36px 32px; width: 340px;
+  box-shadow: var(--shadow-l);
+}
+.auth-box h3 { font-size: 17px; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
+.auth-box p  { font-size: 13px; color: var(--slate-6); margin-bottom: 20px; }
+.auth-field  { margin-bottom: 14px; }
+.auth-field label { display: block; font-size: 12px; font-weight: 600; color: var(--slate-7); margin-bottom: 5px; }
+.auth-field input {
+  width: 100%; padding: 10px 12px; border: 1.5px solid var(--slate-3);
+  border-radius: var(--radius-s); font-size: 14px; color: var(--slate-9);
+  box-sizing: border-box; outline: none; font-family: inherit;
+}
+.auth-field input:focus { border-color: var(--navy); }
+.auth-actions { display: flex; gap: 10px; margin-top: 20px; }
+.btn-auth-ok {
+  flex: 1; padding: 10px; border: none; border-radius: var(--radius-s);
+  background: var(--navy); color: white; font-size: 14px; font-weight: 600;
+  cursor: pointer; font-family: inherit;
+}
+.btn-auth-ok:hover { background: var(--navy-2); }
+.btn-auth-cancel {
+  padding: 10px 16px; border: 1.5px solid var(--slate-3);
+  border-radius: var(--radius-s); background: white; font-size: 14px;
+  color: var(--slate-6); cursor: pointer; font-family: inherit;
+}
+.auth-error { font-size: 12px; color: #ef4444; margin-top: 10px; min-height: 16px; }
+
+/* ── AJOUT PRODUIT CRM ────────────────────────────────────────────────── */
+.btn-add-crm {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px; border-radius: var(--radius-s);
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+  background: #f0f9ff; color: #0369a1; border: 1.5px solid #bae6fd;
+  transition: background .15s;
+}
+.btn-add-crm:hover { background: #e0f2fe; }
+.addcrm-overlay {
+  display: none; position: fixed; inset: 0; z-index: 9999;
+  background: rgba(15,39,68,.55); backdrop-filter: blur(4px);
+  align-items: flex-start; justify-content: center; padding: 72px 24px 24px;
+}
+.addcrm-panel {
+  background: white; border-radius: var(--radius-l);
+  width: 560px; max-width: 95vw; max-height: 80vh;
+  box-shadow: var(--shadow-l); display: flex; flex-direction: column;
+}
+.addcrm-header {
+  padding: 20px 24px 16px; border-bottom: 1.5px solid var(--slate-2);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.addcrm-header h3 { font-size: 16px; font-weight: 700; color: var(--navy); margin: 0; }
+.addcrm-close {
+  background: none; border: none; cursor: pointer; font-size: 20px;
+  color: var(--slate-5); line-height: 1; padding: 0;
+}
+.addcrm-search-row { padding: 14px 24px; border-bottom: 1.5px solid var(--slate-2); }
+.addcrm-search-row input {
+  width: 100%; padding: 10px 12px; border: 1.5px solid var(--slate-3);
+  border-radius: var(--radius-s); font-size: 14px; color: var(--slate-9);
+  box-sizing: border-box; outline: none; font-family: inherit;
+}
+.addcrm-search-row input:focus { border-color: var(--navy); }
+.addcrm-results { flex: 1; overflow-y: auto; padding: 10px 0; }
+.addcrm-empty { text-align: center; padding: 32px; color: var(--slate-5); font-size: 13px; }
+.addcrm-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 24px; cursor: default; transition: background .1s;
+}
+.addcrm-row:hover { background: var(--slate-1); }
+.addcrm-row-info { flex: 1; min-width: 0; }
+.addcrm-row-ref { font-family: monospace; font-size: 11px; color: var(--slate-5); }
+.addcrm-row-name { font-size: 13px; font-weight: 600; color: var(--slate-9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.addcrm-row-price { font-size: 12px; color: var(--slate-6); }
+.btn-addcrm-row {
+  padding: 6px 14px; border: none; border-radius: var(--radius-s);
+  background: var(--navy); color: white; font-size: 12px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; font-family: inherit;
+}
+.btn-addcrm-row:hover { background: var(--navy-2); }
+.btn-addcrm-row:disabled { background: #22c55e; cursor: default; }
+.addcrm-status { padding: 10px 24px; font-size: 12px; color: var(--slate-5); border-top: 1.5px solid var(--slate-2); }
+
+
+/* ── Tarif en ligne : ajouts au style du catalogue ────────────────────── */
+.vue { display: none; }
+.vue.active { display: block; }
+.acces-wrap { min-height: calc(100vh - 64px); display: flex; align-items: flex-start; justify-content: center; padding: 56px 16px; background: var(--slate-1, #f8fafc); }
+.acces-box { width: 100%; max-width: 440px; background: #fff; border: 1.5px solid var(--slate-3, #e2e8f0); border-radius: 14px; padding: 30px 28px; box-shadow: 0 8px 30px rgba(15,39,68,.06); }
+.acces-box h2 { font-size: 20px; font-weight: 800; color: var(--navy, #0f2744); margin: 0 0 6px; }
+.acces-box p.intro { font-size: 13.5px; color: var(--slate-5, #64748b); margin: 0 0 22px; line-height: 1.5; }
+.acces-field { margin-bottom: 14px; }
+.acces-field label { display: block; font-size: 12px; font-weight: 700; color: var(--slate-6, #475569); margin-bottom: 5px; }
+.acces-field input, .acces-field textarea { width: 100%; box-sizing: border-box; border: 1.5px solid var(--slate-3, #e2e8f0); border-radius: 8px; padding: 10px 12px; font: inherit; font-size: 14px; }
+.acces-field input:focus, .acces-field textarea:focus { outline: none; border-color: var(--red, #e8392a); }
+.acces-btn { width: 100%; border: none; border-radius: 8px; padding: 12px; font: inherit; font-weight: 700; font-size: 14px; color: #fff; background: var(--red, #e8392a); cursor: pointer; }
+.acces-btn:disabled { opacity: .6; cursor: default; }
+.acces-btn.navy { background: var(--navy, #0f2744); }
+.acces-err { color: #dc2626; font-size: 13px; min-height: 18px; margin: 4px 0 10px; }
+.acces-lien { display: block; width: 100%; background: none; border: none; text-align: center; margin-top: 16px; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--navy, #0f2744); text-decoration: underline; cursor: pointer; }
+.acces-sep { border-top: 1.5px solid var(--slate-2, #f1f5f9); margin-top: 22px; padding-top: 6px; text-align: center; font-size: 13px; color: var(--slate-5, #64748b); }
+.pot-de-miel { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.chargement { display: flex; justify-content: center; padding: 120px 0; }
+.chargement span { width: 34px; height: 34px; border: 4px solid var(--red, #e8392a); border-top-color: transparent; border-radius: 50%; animation: tourne 0.9s linear infinite; }
+@keyframes tourne { to { transform: rotate(360deg); } }
+.client-chip { color: #fff; font-size: 13px; font-weight: 600; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+.btn-sortie { background: transparent; color: rgba(255,255,255,.8); border: 1.5px solid rgba(255,255,255,.25); border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.btn-sortie:hover { color: #fff; border-color: rgba(255,255,255,.5); }
+button.btn-download { border: none; cursor: pointer; font: inherit; }
+.topbar-actions .btn-download, .topbar-actions .btn-sortie, .topbar-actions .badge-tag { white-space: nowrap; }
+@media (max-width: 980px) { .client-chip { display: none; } }
+.admin-bar { display: none; background: #fffbeb; border-bottom: 1.5px solid #fde68a; padding: 9px 16px; font-size: 13px; }
+.admin-bar.active { display: block; }
+.admin-bar-inner { max-width: 1400px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.admin-bar b { color: #92400e; }
+.admin-bar select { border: 1.5px solid #fcd34d; border-radius: 6px; padding: 5px 8px; font: inherit; font-size: 13px; background: #fff; max-width: 100%; }
+.price-pub { font-size: 11.5px; color: var(--slate-5, #64748b); margin-top: 2px; }
+.price-pub s { opacity: .8; }
+.price-pub .remise { color: #059669; font-weight: 700; margin-left: 4px; }
+.mention-tarif { font-size: 12px; color: var(--slate-5, #64748b); margin: 28px 0 0; }
+@media (max-width: 640px) {
+  .client-chip { display: none; }
+  .topbar-actions .badge-tag { display: none; }
+}
+@media print {
+  .topbar-actions .btn-download, .topbar-actions .btn-sortie, .admin-bar, .nav, .search-wrap { display: none !important; }
+  .section { display: block !important; }
+  .card { break-inside: avoid; }
+  .gran-group { break-inside: avoid; }
+  body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.4/dist/umd/supabase.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <a href="https://www.isofloor.fr" class="brand">
+      <img class="brand-logo" src="/catalogue-tarif/logo-isofloor.png" alt="ISOFLOOR">
+    </a>
+    <div class="topbar-actions">
+      <span class="badge-tag">Prix HT · TVA 20%</span>
+      <span id="client-chip" class="client-chip"></span>
+      <button id="btn-pdf" class="btn-download" style="display:none" onclick="imprimer()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Télécharger PDF
+      </button>
+      <button id="btn-sortie" class="btn-sortie" style="display:none" onclick="deconnexion()">Déconnexion</button>
+    </div>
+  </div>
+</header>
+
+<div id="admin-bar" class="admin-bar">
+  <div class="admin-bar-inner">
+    <b>Aperçu admin :</b>
+    <select id="admin-client" onchange="choisirClient(this.value)"><option value="">Tarif public</option></select>
+    <span id="admin-info" style="color:#b45309"></span>
+  </div>
+</div>
+
+<div id="vue-chargement" class="vue active"><div class="chargement"><span></span></div></div>
+
+<div id="vue-login" class="vue">
+  <div class="acces-wrap">
+    <form class="acces-box" onsubmit="event.preventDefault(); connexion()">
+      <h2>Accès au tarif professionnel</h2>
+      <p class="intro">Réservé aux clients ISOFLOOR. Connectez-vous avec l'e-mail et le mot de passe transmis par votre commercial.</p>
+      <div class="acces-field"><label for="login-id">E-mail</label><input id="login-id" type="email" required autocomplete="username"></div>
+      <div class="acces-field"><label for="login-mdp">Mot de passe</label><input id="login-mdp" type="password" required autocomplete="current-password"></div>
+      <div id="login-err" class="acces-err"></div>
+      <button id="login-btn" class="acces-btn" type="submit">Se connecter</button>
+      <div class="acces-sep">Pas encore d'accès ?</div>
+      <button type="button" class="acces-lien" onclick="afficher('demande')">Demander un accès au tarif</button>
+    </form>
+  </div>
+</div>
+
+<div id="vue-demande" class="vue">
+  <div class="acces-wrap">
+    <form id="form-demande" class="acces-box" onsubmit="event.preventDefault(); envoyerDemande()">
+      <h2>Demande d'accès au tarif</h2>
+      <p class="intro">Professionnel du revêtement de sol ? Remplissez ce formulaire, nous vous ouvrons un accès à vos prix.</p>
+      <div class="acces-field"><label>Entreprise *</label><input name="entreprise" required maxlength="150" autocomplete="organization"></div>
+      <div class="acces-field"><label>Nom et prénom *</label><input name="nom" required maxlength="120" autocomplete="name"></div>
+      <div class="acces-field"><label>E-mail professionnel *</label><input name="email" type="email" required maxlength="160" autocomplete="email"></div>
+      <div class="acces-field"><label>Téléphone</label><input name="telephone" type="tel" maxlength="40" autocomplete="tel"></div>
+      <div class="acces-field"><label>SIRET</label><input name="siret" maxlength="20"></div>
+      <div class="acces-field"><label>Ville</label><input name="ville" maxlength="80" autocomplete="address-level2"></div>
+      <div class="acces-field"><label>Message</label><textarea name="message" rows="3" maxlength="2000" placeholder="Votre activité, vos besoins…"></textarea></div>
+      <div class="pot-de-miel" aria-hidden="true"><input name="site_web" tabindex="-1" autocomplete="off"></div>
+      <div id="demande-err" class="acces-err"></div>
+      <button id="demande-btn" class="acces-btn" type="submit">Envoyer ma demande</button>
+      <button type="button" class="acces-lien" onclick="afficher('login')">J'ai déjà un accès</button>
+    </form>
+    <div id="demande-ok" class="acces-box" style="display:none">
+      <h2>Demande envoyée</h2>
+      <p class="intro">Merci. Votre demande d'accès au tarif ISOFLOOR a bien été reçue ; votre commercial vous recontacte avec vos identifiants.</p>
+      <button class="acces-btn navy" onclick="afficher('login')">Retour à la connexion</button>
+    </div>
+  </div>
+</div>
+
+<div id="vue-catalogue" class="vue">
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-inner">
+    <button class="nav-btn active" onclick="show('all',this)"><span class="nav-dot" style="background:#94a3b8"></span>Tous</button>
+    <button class="nav-btn" onclick="show('epoxy',this)"><span class="nav-dot dot-epoxy"></span>Époxy</button>
+    <button class="nav-btn" onclick="show('mma',this)"><span class="nav-dot dot-mma"></span>MMA Flowfast</button>
+    <button class="nav-btn" onclick="show('pu',this)"><span class="nav-dot dot-pu"></span>Polyuréthane</button>
+    <button class="nav-btn" onclick="show('poly',this)"><span class="nav-dot dot-poly"></span>Polyaspartique</button>
+    <button class="nav-btn" onclick="show('mdp',this)"><span class="nav-dot dot-mdp"></span>Moquette de Pierre</button>
+    <button class="nav-btn" onclick="show('gran',this)"><span class="nav-dot dot-gran"></span>Granulats</button>
+    <button class="nav-btn" onclick="show('mat',this)"><span class="nav-dot dot-mat"></span>Matériel</button>
+    <button class="nav-btn" onclick="show('poc',this)"><span class="nav-dot dot-poc"></span>Pochoirs</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-inner">
+    <div>
+      <h1>Catalogue Tarifs <span>/ Liste de Prix</span></h1>
+      <p class="hero-sub">Résines époxy, polyuréthane, MMA et PUMA pour sols industriels, parking, agroalimentaire et pharmaceutique. Tarifs applicables au 1er janvier 2026.</p>
+    </div>
+    <div class="hero-kpis">
+      <div class="kpi"><div class="kpi-n">95</div><div class="kpi-l">Références</div></div>
+      <div class="kpi"><div class="kpi-n">12</div><div class="kpi-l">Catégories</div></div>
+      <div class="kpi"><div class="kpi-n">2<span>T</span></div><div class="kpi-l">Franco port</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- TRANSPORT -->
+<div class="transport">
+  <div id="transport-inner" class="transport-inner">
+    <span class="transport-label">Transport</span>
+  </div>
+</div>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- SEARCH -->
+  <div class="search-wrap">
+    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" class="search-input" id="search" placeholder="Rechercher un produit, une référence, une catégorie…" oninput="filter(this.value)">
+    <span class="search-count" id="count">95 produits</span>
+  </div>
+
+  <!-- SECTIONS -->
+  <div id="sec-epoxy" class="section visible">
+    <div class="sec-head">
+      <div class="sec-icon si-epoxy">🔵</div>
+      <div><div class="sec-title">Systèmes Époxy</div><div class="sec-sub">Liants, primaires, filmogènes autolissants, finitions et top coats</div></div>
+    </div>
+    <hr class="sec-divider">
+    <div class="grid" id="g-epoxy"></div>
+  </div>
+
+  <div id="sec-mma" class="section">
+    <div class="sec-head">
+      <div class="sec-icon si-mma">🟢</div>
+      <div><div class="sec-title">Gamme MMA — Flowfast</div><div class="sec-sub">Résines MMA, PUMA, liants, charges minérales, systèmes route et saupoudré</div></div>
+    </div>
+    <hr class="sec-divider">
+    <div class="grid" id="g-mma"></div>
+  </div>
+
+  <div id="sec-pu" class="section">
+    <div class="sec-head">
+      <div class="sec-icon si-pu">🟡</div>
+      <div><div class="sec-title">Systèmes Polyuréthane — Deckshield</div><div class="sec-sub">Parkings, planchers intermédiaires, étanchéité circulable</div></div>
+    </div>
+    <hr class="sec-divider">
+    <div class="grid" id="g-pu"></div>
+  </div>
+
+  <div id="sec-poly" class="section">
+    <div class="sec-head">
+      <div class="sec-icon si-poly">🩷</div>
+      <div><div class="sec-title">Polyaspartique</div><div class="sec-sub">Finitions haute brillance, résistance UV et aux intempéries</div></div>
+    </div>
+    <hr class="sec-divider">
+    <div class="grid" id="g-poly"></div>
+  </div>
+
+  <div id="sec-mdp" class="section">
+    <div class="sec-head">
+      <div class="sec-icon si-mdp">🪨</div>
+      <div><div class="sec-title">Moquette de Pierre</div><div class="sec-sub">Liants époxy et polyuréthane pour tapis et moquette de pierre</div></div>
+    </div>
+    <hr class="sec-divider">
+    <div class="grid" id="g-mdp"></div>
+  </div>
+
+  <div id="sec-gran" class="section">
+    <div class="sec-head">
+      <div class="sec-icon si-gran">⚪</div>
+      <div><div class="sec-title">Granulats — Quartz, Granite, Basalte, Marbre</div><div class="sec-sub">Charges minérales concassées et roulées, sacs de 25 kg</div></div>
+    </div>
+    <hr class="sec-divider">
+    <div id="g-gran"></div>
+  </div>
+
+  <div id="sec-mat" class="section">
+    <div class="sec-head">
+      <div class="sec-icon si-mat">🔧</div>
+      <div><div class="sec-title">Matériel d'Application</div><div class="sec-sub">Râteaux, spatules, balances, rouleaux, chariots et accessoires</div></div>
+    </div>
+    <hr class="sec-divider">
+    <div class="grid" id="g-mat"></div>
+  </div>
+
+  <div id="sec-poc" class="section">
+    <div class="sec-head">
+      <div class="sec-icon si-poc">🔲</div>
+      <div><div class="sec-title">Pochoirs, Trames et Gabarits</div><div class="sec-sub">Trames pavé HD et adhésives, pochoirs, gabarits polymère</div></div>
+    </div>
+    <hr class="sec-divider">
+    <div class="grid" id="g-poc"></div>
+  </div>
+
+</main>
+<div class="main" style="padding-top:0"><p class="mention-tarif">Prix HT, TVA 20 % en sus. Tarif établi le <span id="date-tarif"></span> ; la version en ligne fait foi.</p></div>
+<!-- FOOTER -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div>
+      <div class="footer-brand-name">ISO<span>FLOOR</span></div>
+      <p class="footer-brand-desc">Systèmes de revêtements de sol en résine.<br>Catalogue Tarifs 2026 — Prix HT.<br>Franco de port 2 tonnes (hors granulats).</p>
+    </div>
+    <div class="footer-col">
+      <h4>Nord & Île-de-France</h4>
+      <p>François MOUHOT</p>
+      <a href="mailto:nord@isosign.fr">nord@isosign.fr</a>
+      <a href="tel:+33631611596">06.31.61.15.96</a>
+    </div>
+    <div class="footer-col">
+      <h4>Nord-Est</h4>
+      <p>Dante TORELLA</p>
+      <a href="mailto:nord-est@isosign.fr">nord-est@isosign.fr</a>
+      <a href="tel:+33621850759">06.21.85.07.59</a>
+    </div>
+
+    <div class="footer-col">
+      <h4>Sud</h4>
+      <p>Caroline MARIE</p>
+      <a href="mailto:sud@isosign.fr">sud@isosign.fr</a>
+      <a href="tel:+33629780944">06.29.78.09.44</a>
+    </div>
+  </div>
+  <hr class="footer-divider">
+  <div class="footer-bottom">
+    <p>© 2026 ISOFLOOR / ISOSIGN — Tous droits réservés</p>
+    <p><a href="https://www.isofloor.fr" style="color:rgba(255,255,255,.35);text-decoration:none;">www.isofloor.fr</a></p>
+  </div>
+</footer>
+</div>
+
+<script>
+const SB_URL = "https://qkjxcfosutclnahvxflf.supabase.co";
+const SB_CLE = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFranhjZm9zdXRjbG5haHZ4ZmxmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MjUxNTAsImV4cCI6MjA4OTEwMTE1MH0.f58MNUBfySu5H6VS4nftxt5IAz966jw5frFpzlfJt-w";
+const BASE = [{"ref":"PROTOP1000-15KG","crm":"PROTOP1000","name":"PROTOP 1000 — Kit A+B 15 kg","cat":"EPOXY - Liants","bc":"bc-epoxy","sec":"epoxy","poids":15,"u":"kit","desc":"Résine époxy bicomposant non solvantée. Liant universel pour tous les systèmes de revêtements de sol.","img":null,"delai":null},{"ref":"FLOWPRIME-LW-25KG","crm":"FLOWPRIMELW25","name":"Flowprime LW — Kit A+B 25 kg","cat":"EPOXY - Liants","bc":"bc-epoxy","sec":"epoxy","poids":25,"u":"kit","desc":"Primaire époxydique 2 composants sans solvant. Ferme parfaitement les pores du béton.","img":null,"delai":null},{"ref":"HYDRASEAL-DPM-12KG","crm":"HYDRASEALDPM","name":"HYDRASEAL DPM — Kit A+B 12 kg","cat":"EPOXY - Liants","bc":"bc-epoxy","sec":"epoxy","poids":12,"u":"kit","desc":"Résine époxy sans solvant, membrane pare-vapeur sous les systèmes de sol.","img":null,"delai":null},{"ref":"PERAN-TCW-LE-12KG","crm":"PERANTCWLE","name":"Peran TCW LE — Kit A+B 12,75 kg","cat":"EPOXY - Liants","bc":"bc-epoxy","sec":"epoxy","poids":12.75,"u":"kit","desc":"Époxy thixotropée faible teneur COV. Résistante au contact précoce avec l'eau (24h à +20°C).","img":null,"delai":null},{"ref":"PERAN-STC-24KG","crm":"PERANSTC24","name":"Peran STC — Kit A+B 24 kg","cat":"EPOXY - Liants","bc":"bc-epoxy","sec":"epoxy","poids":24,"u":"kit","desc":"Époxy bicomposant transparente. Primaire, liant universel ou couche de finition. Très bonne résistance UV.","img":null,"delai":null},{"ref":"PERAN-STC-LE-12KG","crm":null,"name":"Peran STC LE — Kit A+B 12,75 kg","cat":"EPOXY - Liants","bc":"bc-epoxy","sec":"epoxy","poids":12.75,"u":"kit","desc":"Époxy faible émission. Très bonne résistance aux UV.","img":null,"delai":null},{"ref":"PERAN-STC-LE-STR-12KG","crm":"PERANSTCLEST","name":"Peran STC LE Structure — Kit 12 kg","cat":"EPOXY - Liants","bc":"bc-epoxy","sec":"epoxy","poids":12,"u":"kit","desc":"Résine transparente époxy faible émission. Sans alcool benzylique. Haute résistance chimique.","img":null,"delai":null},{"ref":"PERAN-ESD-PRIMER-10KG","crm":null,"name":"Peran ESD Primer W — Kit 10 kg","cat":"EPOXY - ESD","bc":"bc-epoxy","sec":"epoxy","poids":10,"u":"kit","desc":"Primaire conducteur époxy phase aqueuse. Assure la continuité électrique sous revêtements ESD.","img":null,"delai":null},{"ref":"FLOWFRESH-ESD-SL-27KG","crm":"FLOWFRESHESDSL","name":"Flowfresh ESD SL — Kit 26,97 kg","cat":"EPOXY - ESD","bc":"bc-epoxy","sec":"epoxy","poids":26.97,"u":"kit","desc":"Revêtement conducteur autonivelant hybride 4 composants PU ciment. Conforme EN IEC 61340.","img":null,"delai":null},{"ref":"FLOWBUILD-COVE-F-10KG","crm":"FLOWBUILDCOVEF","name":"Flowbuild Cove F — Kit 10 kg","cat":"EPOXY - Mortier","bc":"bc-epoxy","sec":"epoxy","poids":10,"u":"kit","desc":"Mortier époxy thixotrope. Plinthes à gorges, remplissage de trous et cavités.","img":null,"delai":null},{"ref":"FLOWBUILD-COVE-F-25KG","crm":"FLOWBUILDCOVEF25","name":"Flowbuild Cove F — Kit 25 kg","cat":"EPOXY - Mortier","bc":"bc-epoxy","sec":"epoxy","poids":25,"u":"kit","desc":"Mortier époxy thixotrope grand conditionnement. Plinthes et remplissage.","img":null,"delai":null},{"ref":"ACCEL-EPOXY-2.5KG","crm":"ACCELEREP01","name":"Accélérateur Epoxy — Kit 2,5 kg","cat":"EPOXY - Liants","bc":"bc-epoxy","sec":"epoxy","poids":2.5,"u":"kit","desc":"Produit liquide ambré pour accélérer les résines époxy. Réduit les temps de recouvrement.","img":null,"delai":null},{"ref":"PERAN-SL20-14KG","crm":"PERANSL20","name":"Peran SL 20 — Kit A+B 14,2 kg","cat":"EPOXY - Autolissant","bc":"bc-epoxy","sec":"epoxy","poids":14.2,"u":"kit","desc":"Époxy autolissante pigmentée. Sols industriels avec bonne résistance mécanique et chimique.","img":null,"delai":null},{"ref":"FLOWCOAT-SK-14KG","crm":"FLOWCOATSK","name":"FLOWCOAT SK — Kit A+B 14 kg","cat":"EPOXY - Filmogène","bc":"bc-epoxy","sec":"epoxy","poids":14,"u":"kit","desc":"Revêtement époxy haute performance pour hangars d'aviation. Résistant aux fluides SKYDROL.","img":null,"delai":null},{"ref":"FLOWCOAT-PD-25KG","crm":"FLOWCOATPD","name":"FLOWCOAT Parc Deck PD — Kit 25 kg","cat":"EPOXY - Filmogène","bc":"bc-epoxy","sec":"epoxy","poids":25,"u":"kit","desc":"Revêtement filmogène époxy bi-composant pour parkings et zones de circulation.","img":null,"delai":null},{"ref":"FLOWCOAT-SF41-14KG","crm":"FLOWCOATSF41","name":"FLOWCOAT SF 41 — Kit 14 kg","cat":"EPOXY - Filmogène","bc":"bc-epoxy","sec":"epoxy","poids":14,"u":"kit","desc":"Filmogène époxy non solvanté hautes performances. Industries, ateliers, parkings.","img":null,"delai":null},{"ref":"FLOWCOAT-SF41-25KG","crm":"FLOWCOATSF4125","name":"FLOWCOAT SF 41 — Kit 25 kg","cat":"EPOXY - Filmogène","bc":"bc-epoxy","sec":"epoxy","poids":25,"u":"kit","desc":"Filmogène époxy non solvanté hautes performances, grand conditionnement.","img":null,"delai":null},{"ref":"FLOWCOAT-SF41-LE-24KG","crm":null,"name":"FLOWCOAT SF 41 LE — Kit 24,3 kg","cat":"EPOXY - Filmogène LE","bc":"bc-epoxy","sec":"epoxy","poids":24.3,"u":"kit","desc":"Filmogène époxy Low Emission sans solvant. Résistance UV améliorée.","img":null,"delai":null},{"ref":"FLOWCOAT-SF41-LE-BLANK","crm":"FLOWCOATSF41.23","name":"FLOWCOAT SF 41 LE BLANK — Kit 23 kg","cat":"EPOXY - Filmogène LE","bc":"bc-epoxy","sec":"epoxy","poids":23,"u":"kit","desc":"Filmogène époxy LE non teinté (blank). Résistance UV améliorée.","img":null,"delai":null},{"ref":"FLOWCOAT-SF41-BLANK-14","crm":"FLOWCOATSF41B","name":"FLOWCOAT SF 41 Blank — Kit 14 kg","cat":"EPOXY - Filmogène","bc":"bc-epoxy","sec":"epoxy","poids":14,"u":"kit","desc":"Filmogène époxy blank. Sèche rapidement, très bonne résistance à l'abrasion.","img":null,"delai":null},{"ref":"FLOWSEAL-EPW-MAT","crm":"FLOWSEALEPWMAT.10,1","name":"FLOWSEAL EPW Mat — Kit 10,1 kg","cat":"EPOXY - Finition","bc":"bc-epoxy","sec":"epoxy","poids":10.1,"u":"kit","desc":"Revêtement époxy phase aqueuse coloré MAT. Sans solvants, sans odeur.","img":null,"delai":null},{"ref":"FLOWSEAL-EPW-BRILL","crm":"FLOWSEALEPW","name":"FLOWSEAL EPW Brillant — Kit 9,1 kg","cat":"EPOXY - Finition","bc":"bc-epoxy","sec":"epoxy","poids":9.1,"u":"kit","desc":"Revêtement époxy phase aqueuse coloré BRILLANT. Sans solvants, sans odeur.","img":null,"delai":null},{"ref":"TOILE-VERRE-250M2","crm":null,"name":"Toile de verre 50 g/m² — Rouleau 250 m²","cat":"EPOXY - Finition","bc":"bc-epoxy","sec":"epoxy","poids":null,"u":"rouleau","desc":"Toile de verre de renfort pour systèmes de revêtements de sol en résine.","img":null,"delai":null},{"ref":"FLOWCOAT-EPN-12KG","crm":"FLOWCOATEPN","name":"FLOWCOAT EPN — Kit A+B 12,5 kg","cat":"EPOXY - Finition","bc":"bc-epoxy","sec":"epoxy","poids":12.5,"u":"kit","desc":"Époxy Novolac bi-composant. Résistant à 98% acide sulfurique concentré.","img":null,"delai":null},{"ref":"FF-F1-MORTAR-20KG","crm":"FLOWFASTF1","name":"Flowfast F1 Mortar — Kit 20 kg","cat":"MMA - Mortier","bc":"bc-mma","sec":"mma","poids":20,"u":"kit","desc":"Mortier de réparation MMA prise rapide. Haute résistance mécanique. Version Cold Grade disponible.","img":null,"delai":null},{"ref":"FF-107-PRIMER-20KG","crm":"FLOWFAST107","name":"Flowfast 107 Ceramic Primer — 20 kg","cat":"MMA - Résine","bc":"bc-mma","sec":"mma","poids":20,"u":"seau","desc":"Primaire MMA Ceramic pour béton, carrelage et métal.","img":null,"delai":null},{"ref":"FF-203-HOT-20KG","crm":"FLOWFAST203","name":"Flowfast 203 Hot Binder — 20 kg","cat":"MMA - Résine","bc":"bc-mma","sec":"mma","poids":20,"u":"seau","desc":"Couche de masse MMA résistante à l'eau chaude.","img":null,"delai":null},{"ref":"FF-205-STD-20KG","crm":"FL205611537","name":"Flowfast 205 Standard Binder — 20 kg","cat":"MMA - Résine","bc":"bc-mma","sec":"mma","poids":20,"u":"seau","desc":"Couche de masse MMA standard pour système quartz/chips.","img":null,"delai":null},{"ref":"FF-208-COVE-20KG","crm":"FLOWFAST208","name":"Flowfast 208 Cove Mix — 20 kg","cat":"MMA - Résine","bc":"bc-mma","sec":"mma","poids":20,"u":"seau","desc":"Gel MMA pour confection de plinthes, application verticale. Dureté Mohs = 8.","img":null,"delai":null},{"ref":"FF-215-FLEX-20KG","crm":"FLOWFAST215","name":"Flowfast 215 Flexible Binder — 20 kg","cat":"MMA - PUMA","bc":"bc-mma","sec":"mma","poids":20,"u":"seau","desc":"PUMA — Couche de masse souple pour système quartz/chips.","img":null,"delai":null},{"ref":"FF-216-FLEX-R-20KG","crm":"FLOWFAST216","name":"Flowfast 216 Flexible Binder R — 20 kg","cat":"MMA - PUMA","bc":"bc-mma","sec":"mma","poids":20,"u":"seau","desc":"PUMA — Couche de masse souple thixotropée pour système quartz/chips.","img":null,"delai":null},{"ref":"FF-319-UNPIG-20KG","crm":"FLOWFAST319","name":"Flowfast 319 Unpigmented — 20 kg","cat":"MMA - Finition","bc":"bc-mma","sec":"mma","poids":20,"u":"seau","desc":"MMA — Finition teintable. À combiner avec pigment poudre micronisé au choix.","img":null,"delai":null},{"ref":"FF-319-CLEAR-20KG","crm":"FLOWFAST319C","name":"Flowfast 319 CLEAR — 20 kg","cat":"MMA - Finition","bc":"bc-mma","sec":"mma","poids":20,"u":"seau","desc":"MMA — Finition transparente CLEAR.","img":null,"delai":null},{"ref":"FF-405-CLEAN-20KG","crm":"FLOWFASTF405","name":"Flowfast 405 Cleaner — 20 kg","cat":"MMA - Accessoire","bc":"bc-mma","sec":"mma","poids":20,"u":"seau","desc":"MMA — Diluant/nettoyant pour résines MMA.","img":null,"delai":null},{"ref":"QUARTZ-TF15-25KG","crm":null,"name":"Quartz TF15 (0,1/0,35) — 25 kg","cat":"MMA - Charge","bc":"bc-mma","sec":"mma","poids":25,"u":"seau","desc":"Charge silice 0,1/0,35 mm. Mélange avec liant Flowfast, Deckshield ou Flowshield.","img":null,"delai":null},{"ref":"QUARTZ-TF35-25KG","crm":null,"name":"Quartz TF35 (0,3/0,8) — 25 kg","cat":"MMA - Charge","bc":"bc-mma","sec":"mma","poids":25,"u":"seau","desc":"Charge silice 0,3/0,8 mm. Charge minérale antidérapante.","img":null,"delai":null},{"ref":"QUARTZ-TG2-25KG","crm":null,"name":"Quartz TG2 (0,6/1,2) — 25 kg","cat":"MMA - Charge","bc":"bc-mma","sec":"mma","poids":25,"u":"seau","desc":"Charge silice 0,6/1,2 mm. Charge minérale antidérapante.","img":null,"delai":null},{"ref":"HDK-N20-10KG","crm":"HDKN20","name":"HDK N20 — 10 kg","cat":"MMA - Charge","bc":"bc-mma","sec":"mma","poids":10,"u":"seau","desc":"Agent thixotrope pour résines MMA.","img":null,"delai":null},{"ref":"ISGB1-10KG","crm":null,"name":"ISGB1 — Charge étagée 10 kg","cat":"MMA - Charge","bc":"bc-mma","sec":"mma","poids":10,"u":"seau","desc":"Charge étagée à mortier Epoxy ou MMA.","img":null,"delai":null},{"ref":"FF-215-KIT-35KG","crm":"FLOWFAST21535","name":"FLOWFAST 215 Kit — A+B 35 kg","cat":"MMA - Sprink Rock","bc":"bc-mma","sec":"mma","poids":35,"u":"kit","desc":"PU/MMA saupoudré Sprink Rock. Conso: Ø<4 → 3,2 kg/m² | Ø>5 → 4,5 kg/m².","img":"/catalogue-tarif/img/16d66b455249.jpg","delai":null},{"ref":"FF-CATALYST-2KG","crm":"CATALYST2","name":"Catalyst MMA — 2 kg","cat":"MMA - Catalyseur","bc":"bc-mma","sec":"mma","poids":2,"u":"pièce","desc":"Durcisseur/Catalyseur MMA adaptable aux conditions de température.","img":null,"delai":null},{"ref":"FF-PIGMENT-0.5KG","crm":"PIGMENT05","name":"Pigment poudre micronisé — 0,5 kg","cat":"MMA - Pigment","bc":"bc-mma","sec":"mma","poids":0.5,"u":"pièce","desc":"Pigment poudre micronisé pour résines 215 (dosage 5%).","img":"/catalogue-tarif/img/0dafc6412699.jpg","delai":null},{"ref":"FF-PIGMENT-1KG","crm":"PIGMENTKG","name":"Pigment poudre micronisé — 1 kg","cat":"MMA - Pigment","bc":"bc-mma","sec":"mma","poids":1,"u":"pièce","desc":"Pigment poudre micronisé pour résines 319 (dosage 10%).","img":"/catalogue-tarif/img/0dafc6412699.jpg","delai":null},{"ref":"FF-PIGMENT-25KG","crm":"PIGMENT25KG","name":"Pigment poudre micronisé — 25 kg","cat":"MMA - Pigment","bc":"bc-mma","sec":"mma","poids":25,"u":"seau","desc":"Pigment poudre micronisé, grand conditionnement. 28,00 €/kg.","img":"/catalogue-tarif/img/0dafc6412699.jpg","delai":null},{"ref":"FF-319-ROAD-43KG","crm":"FLOWFAST319R45","name":"Flowfast 319 Road Kit — 43,3 kg","cat":"MMA - Route","bc":"bc-mma","sec":"mma","poids":43.3,"u":"kit","desc":"MMA route teintable formule anti-glissante. Rendement jusqu'à 600 m²/j.","img":"/catalogue-tarif/img/e282b50a28f4.jpg","delai":null},{"ref":"FF-319-ROAD-AD-45KG","crm":null,"name":"Flowfast 319 Road AD — 45,3 kg","cat":"MMA - Route AD","bc":"bc-mma","sec":"mma","poids":45.3,"u":"kit","desc":"MMA route formule anti-dérapante. SRT = 0,68. Conso ~900 g/m².","img":"/catalogue-tarif/img/e282b50a28f4.jpg","delai":null},{"ref":"FF-CATALYST-ROUTE","crm":null,"name":"Catalyseur Route MMA","cat":"MMA - Route","bc":"bc-mma","sec":"mma","poids":null,"u":"seau","desc":"Catalyseur adaptable aux conditions température du chantier.","img":null,"delai":null},{"ref":"SNL-319-ROAD-11KG","crm":"SNLR11","name":"SNL 319 Road — 11,65 kg","cat":"MMA - Route","bc":"bc-mma","sec":"mma","poids":11.65,"u":"seau","desc":"Charge formule anti-glissante (0,4-0,9 mm) pour Flowfast 319 Road.","img":null,"delai":null},{"ref":"DECKSHIELD-SF-30KG","crm":"DECKSHIELDSF30","name":"Deckshield SF — Kit A+B+C 30 kg","cat":"PU - Deckshield","bc":"bc-pu","sec":"pu","poids":30,"u":"kit","desc":"Masse PU flexible 3 composants. Béton ou asphalte. Antidérapant, tenue au feu, tenue à la fissuration.","img":"/catalogue-tarif/img/33a4e77ac1bb.jpg","delai":null},{"ref":"DECKSHIELD-FINISH-20KG","crm":"DECKSHIELDFIN","name":"Deckshield Finish — Kit A+B 20 kg","cat":"PU - Deckshield","bc":"bc-pu","sec":"pu","poids":20,"u":"kit","desc":"Finition polyuréthane flexible bi-composant colorée pour systèmes Deckshield.","img":"/catalogue-tarif/img/a60d8769cf44.jpg","delai":null},{"ref":"DECKSHIELD-UV-TC-10KG","crm":"DECKSHIELDUV","name":"Deckshield UV Top Coat — Kit 10 kg","cat":"PU - Deckshield","bc":"bc-pu","sec":"pu","poids":10,"u":"kit","desc":"Couche de finition polyuréthane bi-composant stable aux UV.","img":"/catalogue-tarif/img/8d23847dd920.jpg","delai":null},{"ref":"DECKSHIELD-PU-MBR","crm":"DECKSHIELDPUM","name":"Deckshield PU Membrane — Kit 19,6 kg","cat":"PU - Deckshield","bc":"bc-pu","sec":"pu","poids":19.6,"u":"kit","desc":"Membrane d'étanchéité autolissante PU aromatique sans solvant. Élongation ~400%.","img":"/catalogue-tarif/img/9fa582e82966.jpg","delai":null},{"ref":"FLOWCOAT-PA331-10KG","crm":"FLOWCOATPA331","name":"FLOWCOAT PA331 — Kit A+B 10 kg","cat":"Polyaspartique","bc":"bc-poly","sec":"poly","poids":10,"u":"kit","desc":"Résine aliphatique polyaspartique teintée sans solvants. Finition haute brillance, excellente résistance UV.","img":null,"delai":null},{"ref":"PERAN-STC-LE-STR-MDP","crm":"PERANSTCLEST","name":"Peran STC LE Structure — Kit 12 kg","cat":"Moquette de Pierre","bc":"bc-mdp","sec":"mdp","poids":12,"u":"kit","desc":"Époxy transparente faible émission pour moquette de pierre intérieur. Résistance au jaunissement.","img":"/catalogue-tarif/img/94991dec06af.jpg","delai":null},{"ref":"FLOWBIND-2700-10KG","crm":"FLOWBIND270010","name":"Flowbind 2700 — Kit A+B 10 kg","cat":"Moquette de Pierre","bc":"bc-mdp","sec":"mdp","poids":10,"u":"kit","desc":"Résine PU Aliphatique. Liant pour revêtements moquette de pierre, intérieur et extérieur.","img":"/catalogue-tarif/img/6f24b3ab631c.jpg","delai":null},{"ref":"FLOWBIND-2700-25KG","crm":"FLOWBIND270025","name":"Flowbind 2700 — Kit A+B 25 kg","cat":"Moquette de Pierre","bc":"bc-mdp","sec":"mdp","poids":25,"u":"kit","desc":"Résine PU Aliphatique grand conditionnement. Liant moquette de pierre.","img":"/catalogue-tarif/img/6baa7b72eeec.jpg","delai":null},{"ref":"QUARTZ-0.1-0.3","crm":null,"name":"Quartz 0,1-0,3 mm","cat":"Quartz","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":3},{"ref":"QUARTZ-0.3-0.8","crm":null,"name":"Quartz 0,3-0,8 mm","cat":"Quartz","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":3},{"ref":"QUARTZ-0.6-1.2","crm":null,"name":"Quartz 0,6-1,2 mm","cat":"Quartz","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":3},{"ref":"QUARTZ-1-2.5","crm":null,"name":"Quartz 1-2,5 mm","cat":"Quartz","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":3},{"ref":"QUARTZ-BLANC-2-5","crm":null,"name":"Quartz Blanc 2-5 mm","cat":"Quartz","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":3},{"ref":"GRANITE-GRIS-0.5-1","crm":null,"name":"Granite Gris Moucheté 0,5-1 mm","cat":"Granite Gris","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":3},{"ref":"GRANITE-GRIS-1-2","crm":null,"name":"Granite Gris Moucheté 1-2 mm","cat":"Granite Gris","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":15},{"ref":"GRANITE-GRIS-2-5","crm":null,"name":"Granite Gris Moucheté 2-5 mm","cat":"Granite Gris","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":15},{"ref":"GRANITE-GRIS-5-8","crm":null,"name":"Granite Gris Moucheté 5-8 mm","cat":"Granite Gris","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":15},{"ref":"GRANITE-ROUGE-1-2","crm":null,"name":"Granite Rouge 1-2 mm","cat":"Granite Rouge","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":3},{"ref":"GRANITE-ROUGE-1-3","crm":"GRANITROUGE1-3","name":"Granite Rouge 1-3 mm","cat":"Granite Rouge","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":3},{"ref":"GRANITE-AMBRE-0.1-0.6","crm":null,"name":"Granite Ambre VE36 0,1-0,6 mm","cat":"Granite Ambre","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":15},{"ref":"GRANITE-AMBRE-0.5-1","crm":null,"name":"Granite Ambre VE36 0,5-1 mm","cat":"Granite Ambre","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":3},{"ref":"GRANITE-ROSE-0.5-1","crm":null,"name":"Granite Rouge/Rosé 0,5-1 mm","cat":"Granite Rosé","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":15},{"ref":"GRANITE-JASPER-0.5-1","crm":null,"name":"Granite Jasper 0,5-1 mm","cat":"Granite Jasper","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":3},{"ref":"GRANITE-LEUCITE-0.5-1","crm":null,"name":"Granite Leucite VE54 0,5-1 mm","cat":"Granite Leucite","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":15},{"ref":"BASALTE-GRIS-2-4","crm":"BASALTE GRIS","name":"Basalte Gris Foncé 2-4 mm","cat":"Basalte","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":15},{"ref":"BASALTE-NOIR-2-4","crm":null,"name":"Basalte Noir 2-4 mm","cat":"Basalte","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":15},{"ref":"BASALTE-NOIR-0.5-1","crm":null,"name":"Basalte Noir 0,5-1 mm","cat":"Basalte","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":3},{"ref":"GRANITE-SELECT","crm":null,"name":"Granit PU Color Select 0,1-0,6 mm","cat":"Gamme Select","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":15},{"ref":"GRANOFLOOR-GRIS","crm":null,"name":"Granofloor Gris 0,5-1 mm","cat":"Marbre Roulé","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":5},{"ref":"GRANOFLOOR-ROSE","crm":null,"name":"Granofloor Rose 0,5-1 mm","cat":"Marbre Roulé","bc":"bc-gran","sec":"gran","poids":25,"u":"sac","desc":"","img":null,"delai":null},{"ref":"MAT-RATEAU-58-D4","crm":null,"name":"Râteau 58 cm dents 4 mm","cat":"Râteaux","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Pour application résine debout.","img":null,"delai":null},{"ref":"MAT-RATEAU-58-D6","crm":null,"name":"Râteau 58 cm dents 6 mm","cat":"Râteaux","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Pour application résine debout.","img":null,"delai":null},{"ref":"MAT-RATEAU-58-LAM","crm":null,"name":"Râteau 58 cm pour lames dentées","cat":"Râteaux","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Pour application résine debout.","img":null,"delai":null},{"ref":"MAT-LAME-4.2-280","crm":null,"name":"Lames dentées 280 mm — 4,2 mm — lot 5","cat":"Lames","bc":"bc-mat","sec":"mat","poids":null,"u":"lot","desc":"Pour application résine.","img":null,"delai":null},{"ref":"MAT-LAME-6.6-280","crm":null,"name":"Lames dentées 280 mm — 6,6 mm — lot 5","cat":"Lames","bc":"bc-mat","sec":"mat","poids":null,"u":"lot","desc":"Pour application résine.","img":null,"delai":null},{"ref":"MAT-SPATULE-5MM","crm":null,"name":"Spatule crantée 400 — Dents 5 mm","cat":"Spatules","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Application résine manuelle.","img":null,"delai":null},{"ref":"MAT-SPATULE-7MM","crm":null,"name":"Spatule crantée 400 — Dents 7 mm","cat":"Spatules","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Application résine manuelle.","img":null,"delai":null},{"ref":"MAT-SEMELLES-30","crm":"SEMELLEPRO","name":"Semelles cloutées pro 30 mm","cat":"EPI","bc":"bc-mat","sec":"mat","poids":null,"u":"paire","desc":"Sangles velcro pour application résine debout.","img":null,"delai":null},{"ref":"MAT-THERMOMETRE","crm":null,"name":"Thermomètre laser","cat":"Mesure","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Mesure de la température du support.","img":null,"delai":null},{"ref":"MAT-BALANCE-3KG","crm":"Balance301","name":"Balance numérique 3 kg — 0,01 g","cat":"Mesure","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Balance de précision pour dosage résine.","img":null,"delai":null},{"ref":"MAT-BALANCE-50KG","crm":"Balance502","name":"Balance numérique 50 kg — 2 g","cat":"Mesure","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Balance pour seau résine.","img":null,"delai":null},{"ref":"MAT-PERCHE-2X100","crm":"PERCHETELACIER","name":"Perche télescopique acier 2×100 cm","cat":"Accessoires","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Pour application résine.","img":null,"delai":null},{"ref":"MAT-SEAU-27L","crm":null,"name":"Seau plastique 27,3 L","cat":"Accessoires","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Seau de mélange avec anse métal.","img":null,"delai":null},{"ref":"MAT-BAC-65L","crm":"BAC65ECO","name":"Bac rond 65 L éco","cat":"Accessoires","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Pour manipulation résine.","img":null,"delai":null},{"ref":"MAT-CHARIOT-30L","crm":"CHARIOTV30","name":"Chariot verseur galvanisé — 30 L","cat":"Accessoires","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Pour manipulation seau 30 litres.","img":"/catalogue-tarif/img/6757abe1292c.jpg","delai":null},{"ref":"MAT-CHARIOT-65L","crm":"CHARIOTV65","name":"Chariot verseur galvanisé — 65 L","cat":"Accessoires","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Pour manipulation seau 65 litres.","img":"/catalogue-tarif/img/6757abe1292c.jpg","delai":null},{"ref":"MAT-SUPPORT-MEL","crm":null,"name":"Support mélangeur","cat":"Mélange","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Support professionnel pour mélangeur résine.","img":"/catalogue-tarif/img/d73b1fb7173c.jpg","delai":null},{"ref":"MAT-MANCHON-250","crm":"MANCHONPOLY25012","name":"Manchon Polyamide texturé 250 mm","cat":"Rouleaux","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Pour application enduit à froid liquide.","img":null,"delai":null},{"ref":"MAT-MANCHON-500","crm":"MANCHONPOLY50012","name":"Manchon Polyamide texturé 500 mm","cat":"Rouleaux","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Pour application enduit à froid liquide.","img":null,"delai":null},{"ref":"MAT-MONTURE-250","crm":"MONTUREMARINE250","name":"Monture marine 250 mm","cat":"Rouleaux","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Monture pour application résine.","img":null,"delai":null},{"ref":"MAT-MONTURE-500","crm":"MONTUREMARINE500","name":"Monture marine 500 mm","cat":"Rouleaux","bc":"bc-mat","sec":"mat","poids":null,"u":"pièce","desc":"Monture pour application résine.","img":null,"delai":null},{"ref":"POCHOIR-HD-2MM-A","crm":null,"name":"Pochoir HD 2 mm — > 0,5 m²","cat":"Pochoirs HD","bc":"bc-poc","sec":"poc","poids":null,"u":"m²","desc":"Pochoir réutilisable pour mortier de résine. Surfaces > 0,5 m².","img":null,"delai":null},{"ref":"POCHOIR-HD-2MM-B","crm":null,"name":"Pochoir HD 2 mm — < 0,5 m²","cat":"Pochoirs HD","bc":"bc-poc","sec":"poc","poids":null,"u":"m²","desc":"Pochoir réutilisable pour mortier de résine. Surfaces < 0,5 m².","img":null,"delai":null},{"ref":"POCHOIR-BLACK-1MM","crm":"POCHKRAFTADH","name":"Pochoir Black Line Adhésif 1 mm","cat":"Pochoirs Adh.","bc":"bc-poc","sec":"poc","poids":null,"u":"m²","desc":"Pochoir adhésif 1 à 2 utilisations, fort adhésif.","img":null,"delai":null},{"ref":"POCHOIR-GREN","crm":null,"name":"Pochoir Grenaillage","cat":"Pochoirs Adh.","bc":"bc-poc","sec":"poc","poids":null,"u":"m²","desc":"Pochoir adhésif pour grenaillage.","img":null,"delai":null},{"ref":"TRAME-HD-2MM","crm":null,"name":"Trame Pavé HD 2 mm — unité 2 m²","cat":"Trames","bc":"bc-poc","sec":"poc","poids":null,"u":"unité","desc":"Trame réutilisable pour mortier de résine. Carton 6 unités × 2 m².","img":null,"delai":null},{"ref":"TRAME-BLACK-2MM","crm":null,"name":"Trame Pavé Black Line 2 mm","cat":"Trames","bc":"bc-poc","sec":"poc","poids":null,"u":"unité","desc":"Trame adhésive Black Line. Carton 10 unités.","img":null,"delai":null},{"ref":"TRAME-BLACK-3MM","crm":null,"name":"Trame Pavé Black Line 3 mm","cat":"Trames","bc":"bc-poc","sec":"poc","poids":null,"u":"unité","desc":"Trame adhésive Black Line épaisseur 3 mm. Carton 10 unités.","img":null,"delai":null},{"ref":"GABARIT-POLY-3MM","crm":"POCHBAO","name":"Gabarit polymère BAO 3 mm","cat":"Gabarits","bc":"bc-poc","sec":"poc","poids":null,"u":"ml","desc":"10 ml = 9 modules (1 m + 2×414 ml + 2 angles). Carton 10 unités.","img":"/catalogue-tarif/img/be074fdb28ac.jpg","delai":null}];
+const GRAN_IMGS = {"Quartz":"/catalogue-tarif/img/435a09a7a6fa.jpg","Granite Gris":"/catalogue-tarif/img/1608500d18e1.jpg","Granite Rouge":"/catalogue-tarif/img/c81027c99573.jpg","Granite Ambre":"/catalogue-tarif/img/2c0b682d0986.jpg","Granite Rosé":"/catalogue-tarif/img/9829e59275bb.jpg","Granite Jasper":"/catalogue-tarif/img/f9ea19b1d08a.jpg","Granite Leucite":"/catalogue-tarif/img/78c110fee4bc.jpg","Basalte":"/catalogue-tarif/img/1a10818478d6.jpg","Gamme Select":"/catalogue-tarif/img/95405a27fbd3.jpg","Marbre Roulé":"/catalogue-tarif/img/ed821f32ac0a.jpg"};
+const TRANSPORT = {"tranches":[{"label":"0–25 kg","prix":51},{"label":"26–100 kg","prix":87},{"label":"101–700 kg","prix":178},{"label":"701–2000 kg","prix":235}],"hayon":12,"relivraison":75,"depalettisation":35,"francoLabel":"≥ 2 tonnes"};
+
+const sb = supabase.createClient(SB_URL, SB_CLE);
+const CLE_JETON = 'tarif_isofloor_jeton';
+const params = new URLSearchParams(location.search);
+let jeton = null;
+try { jeton = sessionStorage.getItem(CLE_JETON); } catch (e) {}
+let PRODUCTS = [];
+let curSec = 'all';
+let modeAdmin = false;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const f = n => n != null ? new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n) + ' €' : null;
+
+async function appel(body) {
+  const { data, error } = await sb.functions.invoke('tarif-catalogue', { body });
+  if (error) {
+    let msg = 'Service indisponible, réessayez plus tard.';
+    try { const j = await error.context.json(); if (j && j.erreur) msg = j.erreur; } catch (e) {}
+    const err = new Error(msg);
+    err.statut = error.context && error.context.status;
+    throw err;
+  }
+  return data;
+}
+
+function afficher(v) {
+  document.querySelectorAll('.vue').forEach(el => el.classList.toggle('active', el.id === 'vue-' + v));
+  const cat = v === 'catalogue';
+  document.getElementById('btn-pdf').style.display = cat ? '' : 'none';
+  document.getElementById('btn-sortie').style.display = cat && jeton ? '' : 'none';
+  if (v === 'demande') {
+    document.getElementById('form-demande').style.display = '';
+    document.getElementById('demande-ok').style.display = 'none';
+  }
+  window.scrollTo(0, 0);
+}
+
+/* ── catalogue (repris du catalogue ISOFLOOR, sans l'édition) ─────────── */
+/* catToSec / catToBc : recopiées du catalogue par le générateur. */
+function catToSec(cat) {
+  if (!cat) return 'epoxy';
+  const c = cat.toLowerCase();
+  if (c.includes('polyaspartique') || c.includes('poly'))  return 'poly';
+  if (c.includes('mma'))                                   return 'mma';
+  if (c.includes('pu') || c.includes('polyuréthane') || c.includes('polyurethane')) return 'pu';
+  if (c.includes('granulat') || c.includes('quartz'))      return 'gran';
+  if (c.includes('matériau') || c.includes('materiau'))    return 'mat';
+  if (c.includes('marquage') || c.includes('mdp'))         return 'mdp';
+  return 'epoxy';
+}
+function catToBc(sec) {
+  return { epoxy:'bc-epoxy', mma:'bc-mma', pu:'bc-pu', poly:'bc-poly',
+           gran:'bc-gran', mat:'bc-mat', mdp:'bc-mdp', poc:'bc-poc' }[sec] || 'bc-epoxy';
+}
+
+function appliquerTarif(t) {
+  const parRef = new Map(t.lignes.map(l => [l.reference, l]));
+  const utilisees = new Set();
+  PRODUCTS = BASE.map(b => {
+    const l = parRef.get(b.crm || b.ref);
+    if (l) utilisees.add(l.reference);
+    return Object.assign({}, b, {
+      prix: l ? l.prix : null,
+      prixPublic: l ? l.prixPublic : null,
+      remise: l ? l.remise : 0,
+      kg: l && l.prix != null && b.poids ? +(l.prix / b.poids).toFixed(2) : null,
+    });
+  });
+  /* Articles cochés « Catalogue » dans le CRM sans fiche dans le catalogue. */
+  t.lignes.filter(l => !utilisees.has(l.reference)).forEach(l => {
+    const sec = catToSec(l.categorie);
+    PRODUCTS.push({
+      ref: l.reference, name: esc(l.designation), cat: esc((l.categorie || '').split('/').pop().trim()),
+      bc: catToBc(sec), sec, poids: l.poids, u: esc(l.unite || ''), desc: '', img: null, delai: null,
+      prix: l.prix, prixPublic: l.prixPublic, remise: l.remise,
+      kg: l.prix != null && l.poids ? +(l.prix / l.poids).toFixed(2) : null,
+    });
+  });
+}
+
+function card(p) {
+  const img = p.img ? `<div class="card-img-wrap"><img class="card-img" src="${p.img}" alt="" loading="lazy"></div>` : '';
+  const pub = p.remise > 0 && p.prixPublic
+    ? `<div class="price-pub">Public <s>${f(p.prixPublic)}</s><span class="remise">−${String(p.remise).replace('.', ',')} %</span></div>` : '';
+  const priceBlock = p.prix != null
+    ? `<div class="price-main">${f(p.prix)}</div>${p.kg ? `<div class="price-kg">${f(p.kg)} / kg</div>` : ''}${pub}`
+    : `<div class="price-nd">Prix sur demande</div>`;
+  return `<article class="card">
+    ${img}
+    <div class="card-top">
+      <span class="card-ref">${esc(p.ref)}</span>
+      <span class="cat-badge ${p.bc}">${p.cat}</span>
+    </div>
+    <div class="card-body">
+      <h3 class="card-name">${p.name}</h3>
+      ${p.desc ? `<p class="card-desc">${p.desc}</p>` : ''}
+    </div>
+    <div class="card-foot">
+      <div>${priceBlock}</div>
+      <div class="card-meta">
+        <span class="meta-unite">${p.u}</span>
+        ${p.poids ? `<span class="meta-poids">⚖ ${p.poids} kg</span>` : ''}
+      </div>
+    </div>
+  </article>`;
+}
+
+function granTable(items) {
+  const groups = {};
+  items.forEach(p => { (groups[p.cat] = groups[p.cat] || []).push(p); });
+  return Object.entries(groups).map(([g, ps]) => {
+    const thumb = GRAN_IMGS[g] ? `<img class="gran-group-thumb" src="${GRAN_IMGS[g]}" alt="" loading="lazy">` : '';
+    return `
+    <div class="gran-group">
+      <div class="gran-group-header">${thumb}<span class="gran-group-title">${g}</span></div>
+      <table class="gran-table">
+        <thead><tr><th>Référence</th><th>Granulométrie</th><th>Tarif / sac 25 kg</th><th>Prix / kg</th><th>Délai</th></tr></thead>
+        <tbody>${ps.map(p => {
+          const dc = p.delai === 3 ? 'd3' : p.delai === 5 ? 'd5' : p.delai === 15 ? 'd15' : '';
+          const dt = p.delai ? `<span class="delai ${dc}">${p.delai} j</span>` : '—';
+          return `<tr>
+            <td class="td-ref">${esc(p.ref)}</td>
+            <td class="td-name">${p.name}</td>
+            <td class="td-price">${p.prix != null ? f(p.prix) : 'Sur demande'}</td>
+            <td class="td-kg">${p.kg != null ? f(p.kg).replace(' €', '/kg') : '—'}</td>
+            <td class="td-delai">${dt}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+}
+
+const SECS = ['epoxy', 'mma', 'pu', 'poly', 'mdp', 'gran', 'mat', 'poc'];
+function render(q = '', sec = 'all') {
+  let total = 0;
+  SECS.forEach(s => {
+    const el = document.getElementById('sec-' + s);
+    if (!el) return;
+    const items = PRODUCTS.filter(p => p.sec === s && (!q || (p.ref + ' ' + p.name + ' ' + (p.cat || '')).toLowerCase().includes(q)));
+    el.classList.toggle('visible', (sec === 'all' || sec === s) && items.length > 0);
+    if (!el.classList.contains('visible')) return;
+    total += items.length;
+    const g = document.getElementById('g-' + s);
+    g.innerHTML = s === 'gran' ? granTable(items) : items.map(card).join('');
+  });
+  document.getElementById('count').textContent = total + ' produit' + (total > 1 ? 's' : '');
+}
+function show(s, btn) {
+  curSec = s;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  render(document.getElementById('search').value.toLowerCase(), s);
+}
+function filter(v) { render(v.toLowerCase(), curSec); }
+
+function renderTransport(t) {
+  const inner = document.getElementById('transport-inner');
+  if (!inner || !t) return;
+  inner.innerHTML = `<span class="transport-label">Transport</span>
+    ${t.tranches.map(tr => `<span class="chip">${tr.label} <b>${tr.prix} €</b></span>`).join('')}
+    <span class="chip">Hayon <b>${t.hayon} €</b></span>
+    <span class="chip">Relivraison <b>${t.relivraison} €</b></span>
+    <span class="chip">Dépalettisation <b>${t.depalettisation} €</b></span>
+    <span class="chip chip-green">Franco <b>${t.francoLabel}</b></span>`;
+}
+
+function montrerTarif(t) {
+  appliquerTarif(t);
+  const societe = t.client ? t.client.societe : '';
+  document.getElementById('client-chip').textContent = societe;
+  const h1 = document.querySelector('.hero h1');
+  if (h1) h1.innerHTML = societe ? `Tarif ${new Date(t.date).getFullYear()} <span>/ ${esc(societe)}</span>` : 'Catalogue Tarifs <span>/ Tarif public</span>';
+  const kpi = document.querySelector('.hero-kpis .kpi-n');
+  if (kpi) kpi.textContent = PRODUCTS.length;
+  document.getElementById('date-tarif').textContent = new Date(t.date).toLocaleDateString('fr-FR');
+  document.title = `Tarif ISOFLOOR${societe ? ' — ' + societe : ''}`;
+  renderTransport(TRANSPORT);
+  render(document.getElementById('search').value.toLowerCase(), curSec);
+  afficher('catalogue');
+}
+
+function imprimer() {
+  document.getElementById('search').value = '';
+  const tous = document.querySelector('.nav-btn');
+  if (tous) show('all', tous);
+  setTimeout(() => window.print(), 50);
+}
+
+/* ── accès ────────────────────────────────────────────────────────────── */
+async function connexion() {
+  const btn = document.getElementById('login-btn');
+  const err = document.getElementById('login-err');
+  btn.disabled = true; btn.textContent = 'Connexion…'; err.textContent = '';
+  try {
+    const r = await appel({ action: 'login', identifiant: document.getElementById('login-id').value, mdp: document.getElementById('login-mdp').value });
+    jeton = r.jeton;
+    try { sessionStorage.setItem(CLE_JETON, jeton); } catch (e) {}
+    await charger();
+  } catch (e) {
+    err.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Se connecter';
+  }
+}
+
+function deconnexion() {
+  jeton = null;
+  try { sessionStorage.removeItem(CLE_JETON); } catch (e) {}
+  document.getElementById('login-mdp').value = '';
+  document.getElementById('client-chip').textContent = '';
+  afficher('login');
+}
+
+async function envoyerDemande() {
+  const form = document.getElementById('form-demande');
+  const btn = document.getElementById('demande-btn');
+  const err = document.getElementById('demande-err');
+  btn.disabled = true; btn.textContent = 'Envoi…'; err.textContent = '';
+  try {
+    await appel(Object.assign({ action: 'demande' }, Object.fromEntries(new FormData(form))));
+    form.reset();
+    form.style.display = 'none';
+    document.getElementById('demande-ok').style.display = '';
+  } catch (e) {
+    err.textContent = e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Envoyer ma demande';
+  }
+}
+
+async function choisirClient(id) {
+  const u = new URL(location.href);
+  if (id) u.searchParams.set('client', id); else u.searchParams.delete('client');
+  history.replaceState(null, '', u);
+  afficher('chargement');
+  try { montrerTarif(await appel({ action: 'tarif', client_id: id || undefined })); }
+  catch (e) { document.getElementById('admin-info').textContent = e.message; afficher('catalogue'); }
+}
+
+async function preparerAdmin(clientId) {
+  modeAdmin = true;
+  document.getElementById('admin-bar').classList.add('active');
+  const { data } = await sb.from('clients').select('id, societe, nom').eq('acces_tarif', true).order('societe');
+  const sel = document.getElementById('admin-client');
+  (data || []).forEach(c => sel.insertAdjacentHTML('beforeend', `<option value="${esc(c.id)}">${esc(c.societe || c.nom)}</option>`));
+  if (clientId && !(data || []).some(c => c.id === clientId)) {
+    sel.insertAdjacentHTML('beforeend', `<option value="${esc(clientId)}">Client sélectionné (sans accès)</option>`);
+  }
+  sel.value = clientId || '';
+  document.getElementById('admin-info').textContent = `${(data || []).length} client(s) avec accès`;
+}
+
+async function charger() {
+  afficher('chargement');
+  if (jeton) {
+    try { montrerTarif(await appel({ action: 'tarif', jeton })); return; }
+    catch (e) {
+      jeton = null;
+      try { sessionStorage.removeItem(CLE_JETON); } catch (x) {}
+      document.getElementById('login-err').textContent = e.message;
+    }
+  } else {
+    const { data } = await sb.auth.getSession();
+    if (data && data.session) {
+      try {
+        const clientId = params.get('client') || '';
+        const t = await appel({ action: 'tarif', client_id: clientId || undefined });
+        if (t.admin) await preparerAdmin(clientId);
+        montrerTarif(t);
+        return;
+      } catch (e) { /* session MonCRM sans droit admin : connexion du tarif */ }
+    }
+  }
+  afficher(params.has('demande') ? 'demande' : 'login');
+}
+
+charger();
+</script>
+</body>
+</html>

@@ -58,6 +58,8 @@ export default defineConfig(({ mode }) => ({
           "**/ral/**",
           "**/quartz/**",
           "**/paillettes/**",
+          "**/catalogue-tarif/**",
+          "**/tarif.html",
           "**/CRM.xlsx",
         ],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // pdf.worker ~2,1 Mo
@@ -76,6 +78,9 @@ export default defineConfig(({ mode }) => ({
           /^\/(ral|quartz|paillettes)\//,
           // Retour de la connexion Microsoft (Agent mail) : jamais l'application.
           /^\/auth-ms/,
+          // Tarif en ligne : page statique générée (scripts/tarif-catalogue).
+          /^\/tarif\.html/,
+          /^\/catalogue-tarif\//,
         ],
         runtimeCaching: [
           {
