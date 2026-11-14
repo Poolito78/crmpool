@@ -106,6 +106,9 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 // Fiche produit publique : ouverte depuis un lien de mail, par quelqu'un qui
 // n'a pas de compte. Elle doit donc être servie AVANT toute garde de session.
 const FichePublique = lazy(() => import("@/pages/FichePublique"));
+// Tarif en ligne ISOFLOOR : le client s'y connecte par le mot de passe du
+// tarif (fonction `tarif-catalogue`), sans compte MonCRM.
+const TarifEnLigne = lazy(() => import("@/pages/TarifEnLigne"));
 
 const queryClient = new QueryClient();
 
@@ -118,6 +121,20 @@ function AppRoutes() {
   // compte actif) : le destinataire d'un devis n'a pas de compte, et un lien
   // de mail qui atterrit sur l'écran de connexion est un lien mort. La page ne
   // lit qu'une fonction Postgres ouverte à `anon`, sans prix.
+  if (pathname === '/tarif') {
+    return (
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center bg-white">
+          <div className="animate-spin w-8 h-8 border-4 border-[#FF2E17] border-t-transparent rounded-full" />
+        </div>
+      }>
+        <Routes>
+          <Route path="/tarif" element={<TarifEnLigne />} />
+        </Routes>
+      </Suspense>
+    );
+  }
+
   if (pathname.startsWith('/p/')) {
     return (
       <Suspense fallback={

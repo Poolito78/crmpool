@@ -5,6 +5,7 @@ import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2
 import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
 import ClientsImportExport from '@/components/ClientsImportExport';
 import AdminAccessPanel from '@/components/AdminAccessPanel';
+import DemandesTarifPanel from '@/components/DemandesTarifPanel';
 import UsageStockagePanel from '@/components/UsageStockagePanel';
 import MailsTypesPanel from '@/components/MailsTypesPanel';
 import { useCurrentUser } from '@/hooks/useAuth';
@@ -472,7 +473,10 @@ export default function Parametres() {
         </TabsContent>
         <TabsContent value="administration" className="space-y-4 mt-4">
           {isAdmin ? (
-            <AdminAccessPanel />
+            <>
+              <AdminAccessPanel />
+              <DemandesTarifPanel />
+            </>
           ) : (
             <div className="bg-card rounded-xl border border-border p-5 text-sm text-muted-foreground">
               Accès réservé aux administrateurs.

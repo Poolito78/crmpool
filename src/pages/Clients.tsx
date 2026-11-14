@@ -23,6 +23,7 @@ import ColResizeHandle from '@/components/ColResizeHandle';
 import { useCurrentUser } from '@/hooks/useAuth';
 import { useCommercials } from '@/hooks/useCommercials';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
+import AccesTarifClient from '@/components/AccesTarifClient';
 import AnalyseCroisee from '@/components/AnalyseCroisee';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput from '@/components/FilterChoiceInput';
@@ -375,7 +376,7 @@ export default function Clients() {
     if (contacts.length === 0 && (c.nom || c.email || c.telephone)) {
       contacts = [{ id: generateId(), nom: c.nom || '', prenom: '', email: c.email || '', telephone: c.telephone || '', telephoneMobile: c.telephoneMobile || '', fonction: '' }];
     }
-    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts, delaiReglement: c.delaiReglement || '45J FDM', siret: c.siret || '', codeApe: c.codeApe || '', libelleApe: c.libelleApe || '', formeJuridique: c.formeJuridique || '', tvaIntra: c.tvaIntra || '', rcs: c.rcs || '', trancheEffectif: c.trancheEffectif || '', dateCreationEntreprise: c.dateCreationEntreprise || '', capitalSocial: c.capitalSocial || '', niveauTarif: c.niveauTarif ?? null, listePrixOdoo: c.listePrixOdoo || '', contratCadreOdoo: c.contratCadreOdoo || '', tarifsOdooMaj: c.tarifsOdooMaj || '' });
+    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, accesTarif: c.accesTarif || false, contacts, delaiReglement: c.delaiReglement || '45J FDM', siret: c.siret || '', codeApe: c.codeApe || '', libelleApe: c.libelleApe || '', formeJuridique: c.formeJuridique || '', tvaIntra: c.tvaIntra || '', rcs: c.rcs || '', trancheEffectif: c.trancheEffectif || '', dateCreationEntreprise: c.dateCreationEntreprise || '', capitalSocial: c.capitalSocial || '', niveauTarif: c.niveauTarif ?? null, listePrixOdoo: c.listePrixOdoo || '', contratCadreOdoo: c.contratCadreOdoo || '', tarifsOdooMaj: c.tarifsOdooMaj || '' });
     setSiretOpen(false);
     setSiretResults([]);
     setSiretQuery('');
@@ -1283,6 +1284,16 @@ export default function Clients() {
                 </div>
               )}
             </div>
+
+            {isAdmin && (
+              <AccesTarifClient
+                clientId={editingClient?.id}
+                email={form.email}
+                nomContact={form.contacts?.[0]?.nom || form.nom}
+                checked={form.accesTarif || false}
+                onChange={v => setForm(prev => ({ ...prev, accesTarif: v }))}
+              />
+            )}
           </div>
 
           {/* ── Onglet Infos (form) ─────────────────────────────────────────── */}

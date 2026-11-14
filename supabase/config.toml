@@ -38,3 +38,8 @@ verify_jwt = true
 # est posé, le secret AGENT_MAIL_SECRET (?s= dans l'URL du webhook).
 [functions.agent-mail-depot]
 verify_jwt = false
+
+# Tarif en ligne (/tarif) : le client du tarif n'a pas de session MonCRM. Il se
+# connecte par le mot de passe de `tarif_acces`, vérifié dans la fonction.
+[functions.tarif-catalogue]
+verify_jwt = false

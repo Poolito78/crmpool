@@ -197,6 +197,7 @@ export type Database = {
       }
       clients: {
         Row: {
+          acces_tarif: boolean
           adresse: string
           adresses_livraison: Json | null
           capital_social: string | null
@@ -230,6 +231,7 @@ export type Database = {
           ville: string
         }
         Insert: {
+          acces_tarif?: boolean
           adresse?: string
           adresses_livraison?: Json | null
           capital_social?: string | null
@@ -263,6 +265,7 @@ export type Database = {
           ville?: string
         }
         Update: {
+          acces_tarif?: boolean
           adresse?: string
           adresses_livraison?: Json | null
           capital_social?: string | null
@@ -2428,6 +2431,75 @@ export type Database = {
           poids_max?: number | null
           poids_min?: number
           prix_ht?: number
+        }
+        Relationships: []
+      }
+      tarif_acces: {
+        Row: {
+          client_id: string
+          cree_le: string
+          derniere_connexion: string | null
+          identifiant: string
+          mdp_hash: string
+        }
+        Insert: {
+          client_id: string
+          cree_le?: string
+          derniere_connexion?: string | null
+          identifiant: string
+          mdp_hash: string
+        }
+        Update: {
+          client_id?: string
+          cree_le?: string
+          derniere_connexion?: string | null
+          identifiant?: string
+          mdp_hash?: string
+        }
+        Relationships: []
+      }
+      tarif_demandes: {
+        Row: {
+          client_id: string | null
+          cree_le: string
+          email: string
+          entreprise: string
+          id: string
+          message: string | null
+          nom: string
+          siret: string | null
+          statut: string
+          telephone: string | null
+          traitee_le: string | null
+          ville: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          cree_le?: string
+          email: string
+          entreprise: string
+          id?: string
+          message?: string | null
+          nom: string
+          siret?: string | null
+          statut?: string
+          telephone?: string | null
+          traitee_le?: string | null
+          ville?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          cree_le?: string
+          email?: string
+          entreprise?: string
+          id?: string
+          message?: string | null
+          nom?: string
+          siret?: string | null
+          statut?: string
+          telephone?: string | null
+          traitee_le?: string | null
+          ville?: string | null
         }
         Relationships: []
       }

@@ -1,5 +1,5 @@
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic, MailSearch, Ruler, Power } from 'lucide-react';
+import { Tag, LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic, MailSearch, Ruler, Power } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef, useCallback, useContext, createContext, lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -149,6 +149,7 @@ const NAV: NavEntry[] = [
   },
   { type: 'link',  label: 'Stock',            icon: BarChart3,       path: '/stock' },
   { type: 'link',  label: 'Calcul Transport', icon: Calculator,      path: '/calculateur-ups' },
+  { type: 'link',  label: 'Tarif en ligne',   icon: Tag,             path: '/tarif' },
   {
     type: 'group', label: 'Paramètres', icon: Settings,
     items: [
@@ -379,6 +380,7 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
   const navDroits = useMemo<NavEntry[]>(() => NAV
     .filter(e => canAchat || !(e.type === 'group' && e.label === 'Achat'))
     .filter(e => canCrm || !(e.type === 'link' && e.path === '/crm'))
+    .filter(e => isAdmin || !(e.type === 'link' && e.path === '/tarif'))
     .map(e => e.type === 'group'
       ? { ...e, items: e.items.filter(i => isAdmin || !['/parametres?tab=administration', '/parametres?tab=entrepots', '/parametres?tab=general', '/parametres?tab=clients', '/parametres?tab=veille'].includes(i.path)) }
       : e),

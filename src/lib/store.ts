@@ -56,6 +56,8 @@ export interface Client {
   adressesLivraison: AdresseLivraison[];
   estRevendeur?: boolean;
   remisesParCategorie?: Record<string, number>;
+  /** Accès au tarif en ligne `/tarif`, à ses prix (fonction `tarif-catalogue`). */
+  accesTarif?: boolean;
   contacts?: Contact[];
   delaiReglement?: string;
   /**
@@ -1101,6 +1103,7 @@ function dbToClient(r: any): Client {
     adressesLivraison: (r.adresses_livraison as any[]) || [],
     estRevendeur: r.est_revendeur || false,
     remisesParCategorie: (r.remises_par_categorie as Record<string, number>) || {},
+    accesTarif: r.acces_tarif ?? undefined,
     contacts: (r.contacts as Contact[]) || [],
     delaiReglement: r.delai_reglement || undefined,
     niveauTarif: /^R[0-4]$/.test(r.niveau_tarif || '') ? r.niveau_tarif : undefined,
@@ -1151,6 +1154,7 @@ function clientToDb(c: Client, userId: string): Record<string, unknown> {
     ...(c.trancheEffectif !== undefined ? { tranche_effectif: c.trancheEffectif } : {}),
     ...(c.dateCreationEntreprise !== undefined ? { date_creation_entreprise: c.dateCreationEntreprise } : {}),
     ...(c.capitalSocial !== undefined ? { capital_social: c.capitalSocial } : {}),
+    ...(c.accesTarif !== undefined ? { acces_tarif: c.accesTarif } : {}),
   };
 }
 

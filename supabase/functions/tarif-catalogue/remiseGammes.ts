@@ -1,0 +1,320 @@
+/**
+ * Remises sur tarif public des gammes ISOMARK et ISOFLOOR.
+ *
+ * ISOSIGN ne vend pas ces deux gammes au prix public : l'applicateur et le
+ * revendeur paient un pourcentage de ce prix, et ce pourcentage se lit sur la
+ * CATÉGORIE Odoo de l'article, pas sur le client.
+ *
+ *   ISOMARK / H1     50 % de remise    expédié depuis ISOSIGN
+ *   ISOMARK / H2     30 % de remise    expédié depuis l'usine ISOMARK
+ *   ISOFLOOR         30 % de remise    époxy, MMA, polyuréthane, accessoires…
+ *
+ * H1 et H2 ne sont donc pas deux clients ni deux devis : ce sont deux
+ * familles d'articles qui cohabitent sur un même devis, avec chacune sa
+ * remise ET son expédition. C'est pour cela qu'on lit le niveau ligne à
+ * ligne — un devis panaché en porte plusieurs.
+ *
+ * La catégorie arrive telle qu'Odoo l'écrit, chemin complet compris :
+ * « ISOMARK / H2 », « ISOMARK / FLOORING / EPOXY », « GRANULATS », « MMA ».
+ * Sur les 1 213 articles ISOMARK de la copie locale, 771 portent H2 et 92
+ * portent H1 ; les 134 ISOFLOOR se répartissent entre EPOXY, MMA, PU,
+ * GRANULATS, PIGMENTS, VANDEX et ACCESSOIRES.
+ */
+
+/** Niveau de remise d'un article. `null` = on ne sait pas, donc on ne remise pas. */
+export type NiveauGamme = 'H1' | 'H2' | 'ISOFLOOR' | null;
+
+/** Taux de remise sur le tarif public, par niveau. */
+export const REMISE_GAMME: Record<Exclude<NiveauGamme, null>, number> = {
+  H1: 0.50,
+  H2: 0.30,
+  ISOFLOOR: 0.30,
+};
+
+/**
+ * Catégories ISOFLOOR — celles que la remise de 30 % couvre hors ISOMARK.
+ *
+ * La liste vient des catégories réellement portées par les 134 articles du
+ * catalogue ISOFLOOR. « CHARGE » et « AUTRES » en font partie : ce sont des
+ * additifs de résine, vendus dans les mêmes conditions.
+ */
+const CATEGORIES_ISOFLOOR = [
+  'EPOXY', 'MMA', 'PU', 'POLYURETHANE', 'POLYURÉTHANE', 'GRANULATS',
+  'PIGMENTS', 'VANDEX', 'ACCESSOIRES', 'CHARGE', 'AUTRES',
+];
+
+/**
+ * Une prestation n'est pas une marchandise et ne se remise pas.
+ *
+ * POSE-MARQUAGE compte 218 articles chez ISOMARK : ce sont des lignes de
+ * pose, de préparation et de main-d'œuvre. Leur appliquer 50 % ferait
+ * travailler les équipes à moitié prix.
+ */
+function estPrestation(categorie: string): boolean {
+  return /\b(POSE-?MARQUAGE|MAIN.?D.?OEUVRE|MAIN.?D.?ŒUVRE|TRANSPORT)\b/i
+    .test(categorie);
+}
+
+/**
+ * Niveau de remise d'un article, lu dans sa catégorie Odoo.
+ *
+ * `catalogue` sert de filet quand la catégorie ne dit rien d'exploitable :
+ * un article rangé au catalogue ISOFLOOR relève d'ISOFLOOR même si sa
+ * catégorie est vide. Chez ISOMARK en revanche, l'absence de H1 ou de H2
+ * laisse le doute entier — FILM en compte 64 — et on préfère le dire.
+ */
+export function niveauGamme(categorie?: string, catalogue?: string): NiveauGamme {
+  const c = String(categorie || '').toUpperCase();
+  const cat = String(catalogue || '').toUpperCase();
+
+  if (estPrestation(c)) return null;
+
+  /* H1 et H2 d'abord : ils tranchent, même sous « ISOMARK / FLOORING ». */
+  if (/(^|[\s/])H1([\s/]|$)/.test(c)) return 'H1';
+  if (/(^|[\s/])H2([\s/]|$)/.test(c)) return 'H2';
+
+  if (cat === 'ISOFLOOR') return 'ISOFLOOR';
+
+  /* Le chemin Odoo doit être EXACTEMENT l'un de ces mots, ou passer par
+     FLOORING. Se contenter de les chercher dans le chemin rangeait
+     « ELEMENTS DE FIXATION / Accessoires Mats / Ancrage » chez ISOFLOOR et
+     remisait de 30 % 84 articles de fixation ISOSIGN. Les catégories
+     ISOFLOOR, elles, sont des mots nus — « EPOXY », « MMA », « GRANULATS ». */
+  if (/(^|[\s/])FLOORING([\s/]|$)/.test(c)) return 'ISOFLOOR';
+  if (CATEGORIES_ISOFLOOR.includes(c.trim())) return 'ISOFLOOR';
+  return null;
+}
+
+/**
+ * Familles tarifaires reconnues dans la fiche client.
+ *
+ * Ce sont les clés de `remisesParCategorie` : ACCESSIBILITE s'y ajoute aux
+ * catégories ISOFLOOR, elle n'est pas une gamme mais elle se remise.
+ */
+const FAMILLES_REMISE = [...CATEGORIES_ISOFLOOR, 'ACCESSIBILITE'];
+
+/**
+ * Famille tarifaire d'un article, lue dans sa catégorie Odoo.
+ *
+ * Odoo range ses catégories en chemins : l'Hydraseal DPM est classé
+ * « ISOMARK / FLOORING / EPOXY ». La fiche client, elle, ne connaît que le
+ * dernier mot — EPOXY, MMA, PU. Chercher la clé telle quelle ne trouvait
+ * donc rien, et la remise négociée du client restait lettre morte.
+ *
+ * On compare SEGMENT PAR SEGMENT, jamais en sous-chaîne : « Accessoires
+ * Mats » ne doit pas passer pour ACCESSOIRES, sous peine de remiser 30 % des
+ * articles de fixation ISOSIGN qui n'y ont pas droit.
+ */
+export function familleRemise(categorie?: string): string | undefined {
+  const chemin = String(categorie || '').toUpperCase();
+  if (!chemin || estPrestation(chemin)) return undefined;
+  for (const seg of chemin.split('/').map(s => s.trim())) {
+    if (FAMILLES_REMISE.includes(seg)) return seg;
+  }
+  return undefined;
+}
+
+/**
+ * La remise que la fiche client porte pour une catégorie d'article.
+ *
+ * ⚠️ **LA CATÉGORIE ODOO FAIT FOI** (règle du 10/11/2026) : la fiche client
+ * liste les catégories telles que le catalogue les porte, chemin complet
+ * compris — « ISOMARK / FLOORING / MMA » à côté de « MMA ». Seule la clé
+ * nue était lue : une remise saisie sur la ligne Odoo restait lettre morte.
+ * Ordre de lecture :
+ *   1. la clé égale à la catégorie de l'article (sans casse ni espaces) ;
+ *   2. la clé de sa famille (« MMA ») ;
+ *   3. une autre catégorie de la même famille (« ISOMARK / FLOORING / MMA »
+ *      pour un article rangé en « MMA »), si toutes disent le même taux —
+ *      deux taux différents ne se départagent pas.
+ */
+export function tauxRemiseClient(
+  categorie?: string,
+  remisesParCategorie?: Record<string, number>,
+): number | undefined {
+  if (!remisesParCategorie) return undefined;
+  const cle = (s: string) => s.trim().replace(/\s+/g, ' ').toUpperCase();
+  const lire = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  const entrees = Object.entries(remisesParCategorie);
+  const cat = cle(String(categorie || ''));
+  if (cat) {
+    const exacte = entrees.find(([k]) => cle(k) === cat);
+    if (exacte && lire(exacte[1]) !== undefined) return lire(exacte[1]);
+  }
+  const famille = familleRemise(categorie);
+  if (!famille) return undefined;
+  const nue = entrees.find(([k]) => cle(k) === famille);
+  if (nue && lire(nue[1]) !== undefined) return lire(nue[1]);
+  const taux = new Set(entrees
+    .filter(([k]) => familleRemise(k) === famille)
+    .map(([, v]) => lire(v))
+    .filter((v): v is number => v !== undefined));
+  return taux.size === 1 ? [...taux][0] : undefined;
+}
+
+/**
+ * Prix revendeur : le prix PUBLIC moins la remise que porte la fiche client
+ * pour la famille de l'article.
+ *
+ * C'est la règle, sans exception : les exceptions sont justement ce que la
+ * fiche client enregistre, famille par famille. Le tarif de gamme —
+ * ISOFLOOR à 30 %, ISOMARK H1 à 50 % — n'est qu'un défaut pour les clients
+ * qui n'ont rien de négocié.
+ *
+ * La base est le prix public, jamais `prixTarif` : sur l'Hydraseal DPM les
+ * deux diffèrent (264,70 € contre 244,80 €) et prendre le second remisait
+ * 13,93 € de trop sur le seau.
+ */
+export function prixRevendeur(
+  prixPublic: number | null | undefined,
+  categorie?: string,
+  remisesParCategorie?: Record<string, number>,
+): PrixGamme | null {
+  const pub = Number(prixPublic) || 0;
+  if (pub <= 0 || !remisesParCategorie) return null;
+
+  const famille = familleRemise(categorie);
+  if (!famille) return null;
+
+  const taux = tauxRemiseClient(categorie, remisesParCategorie) ?? NaN;
+  if (!Number.isFinite(taux) || taux <= 0) return null;
+
+  const remise = taux / 100;
+  const prix = Math.round(pub * (1 - remise) * 100) / 100;
+  return {
+    /* Une remise négociée ne relève d'aucune gamme : le niveau reste vide,
+       et c'est le libellé qui porte l'information. */
+    niveau: null,
+    libelle: `remise client ${famille}`,
+    public: pub,
+    prix,
+    remise,
+    explication: `remise client ${famille} — ${taux.toFixed(0)} % sur `
+      + `${pub.toFixed(2)} € public → ${prix.toFixed(2)} €`,
+  };
+}
+
+/** Ces deux gammes seules relèvent de ces remises. */
+export function estGamme(catalogue?: string): boolean {
+  const c = String(catalogue || '').toUpperCase();
+  return c === 'ISOMARK' || c === 'ISOFLOOR';
+}
+
+export interface PrixGamme {
+  niveau: NiveauGamme;
+  /**
+   * Ce qu'il faut afficher pour dire d'où vient la remise — « ISOFLOOR »,
+   * « ISOMARK H1 », « remise client EPOXY ».
+   *
+   * L'écran le composait à partir de `niveau`, en préfixant « ISOMARK » à
+   * tout ce qui n'était pas ISOFLOOR. Une remise négociée par le client n'a
+   * pas de niveau de gamme : elle serait sortie en « ISOMARK EPOXY », ce qui
+   * ne veut rien dire.
+   */
+  libelle: string;
+  /** Tarif public HT, avant remise. */
+  public: number;
+  /** Prix applicateur HT. Égal au public quand le niveau est inconnu. */
+  prix: number;
+  remise: number;
+  explication: string;
+}
+
+/**
+ * Prix applicateur d'un article de gamme.
+ *
+ * Renvoie `null` quand l'article ne relève pas de ces gammes ou n'a pas de
+ * tarif public exploitable : mieux vaut laisser le circuit habituel décider
+ * que d'inventer une remise sur un prix qui n'en est pas un.
+ */
+export function prixApplicateur(
+  prixPublic: number | null | undefined,
+  categorie?: string,
+  catalogue?: string,
+): PrixGamme | null {
+  const pub = Number(prixPublic) || 0;
+  if (pub <= 0) return null;
+
+  const niveau = niveauGamme(categorie, catalogue);
+  if (niveau === null) {
+    return {
+      niveau, libelle: 'tarif public', public: pub, prix: pub, remise: 0,
+      explication: `tarif public — niveau de remise inconnu `
+        + `(catégorie « ${categorie || '—'} »)`,
+    };
+  }
+  const remise = REMISE_GAMME[niveau];
+  const prix = Math.round(pub * (1 - remise) * 100) / 100;
+  return {
+    niveau,
+    libelle: niveau === 'ISOFLOOR' ? 'ISOFLOOR' : `ISOMARK ${niveau}`,
+    public: pub, prix, remise,
+    explication: `${niveau} — ${(remise * 100).toFixed(0)} % sur `
+      + `${pub.toFixed(2)} € public → ${prix.toFixed(2)} €`,
+  };
+}
+
+/**
+ * Prix d'un article ISOMARK / ISOFLOOR pour un client donné — la même règle
+ * à l'analyse d'une demande et dans le devis.
+ *
+ * ⚠️ **LA BASE EST LE PRIX PUBLIC DE LA FICHE, JAMAIS `prixTarif`** (règle du
+ * 14/10/2026). Le dernier prix est celui de la fiche : FLOWFASTF1 à 130,36 €
+ * partait à 79,22 € chez SPIE, client sans remise, parce que la gamme
+ * remisait 30 % sur un `prixTarif` de 113,17 € resté d'un ancien catalogue.
+ *
+ *   1. remise saisie sur la fiche client (famille de l'article) → public − remise
+ *      (30 % sur 130,36 € → 91,25 €) ;
+ *   2. client REVENDEUR sans remise saisie → remise de la gamme sur le public
+ *      (ISOFLOOR / H2 30 %, H1 50 %) ;
+ *   3. sinon → `null` : le client paie le prix public de la fiche (palier
+ *      compris), par le circuit ordinaire.
+ *
+ * ⚠️ **LE DEVIS NE DOIT PAS RETOMBER SUR LE PRIX REVENDEUR DE LA FICHE.**
+ * Celui-ci est recopié d'Odoo, et il a été faux sur les pavés : un revendeur
+ * passe donc par la remise de gamme (cas 2), jamais par `prixRevendeur`.
+ */
+export function prixGamme(
+  p: ArticleAPaliers & { categorie?: string; catalogue?: string },
+  remisesParCategorie?: Record<string, number>,
+  estRevendeur?: boolean,
+  /** Quantité de la ligne : la remise porte sur le public de SON palier. */
+  quantite?: number,
+): PrixGamme | null {
+  if (!estGamme(p.catalogue) && niveauGamme(p.categorie, p.catalogue) === null) return null;
+  const pub = publicPourQuantite(p, quantite);
+  const negociee = prixRevendeur(pub, p.categorie, remisesParCategorie);
+  if (negociee) return negociee;
+  if (!estRevendeur) return null;
+  const gamme = prixApplicateur(pub, p.categorie, p.catalogue);
+  return gamme && gamme.remise > 0 ? gamme : null;
+}
+
+/** Ce qu'il faut d'un article pour lire son prix public au palier. */
+export interface ArticleAPaliers {
+  prixHT?: number | null;
+  paliersPrix?: { qteMin: number; prixHT: number }[];
+}
+
+/**
+ * Le prix PUBLIC d'un article pour une quantité : celui du palier atteint,
+ * le prix de la fiche en dessous du premier palier ou sans quantité.
+ *
+ * ⚠️ **LA REMISE DE GAMME SE CALCULE SUR CE PRIX-LÀ, PAS SUR LA FICHE.**
+ * Mesuré le 16/10/2026 sur PTSNCFALERTE100 (ISOMARK / H2) : paliers 10 →
+ * 558,27 € public et 100 → 530,37 €, saisis à l'import du devis
+ * fournisseur. Chez un revendeur, la ligne de 100 partait à 390,79 € —
+ * 30 % du public de la FICHE — au lieu de 371,26 € ; le coût, lui, suivait
+ * le palier, et la marge montait sans que le prix bouge.
+ */
+export function publicPourQuantite(p: ArticleAPaliers, quantite?: number): number {
+  const fiche = Number(p.prixHT) || 0;
+  if (!quantite || !p.paliersPrix?.length) return fiche;
+  const palier = [...p.paliersPrix]
+    .sort((a, b) => b.qteMin - a.qteMin)
+    .find(x => quantite >= x.qteMin);
+  return palier ? Number(palier.prixHT) || 0 : fiche;
+}
