@@ -149,9 +149,10 @@ const COLUMNS = [
   { key: 'stockOdooPrevu', label: 'Prévisionnel Odoo', align: 'right'  as const },
   { key: 'disponibleVente', label: 'Dispo vente',      align: 'center' as const },
   { key: 'documents',      label: 'Documents',        align: 'center' as const },
+  { key: 'catalogueTarif', label: 'Catalogue',        align: 'center' as const },
 ] as const;
 type ColKey = typeof COLUMNS[number]['key'];
-const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'origine', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'stockOdoo', 'stockOdooPrevu', 'qteVendue', 'qteCommandeeF', 'valeurStock', 'prixAchatMaj', 'prixVenteMaj', 'documents'];
+const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'origine', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'stockOdoo', 'stockOdooPrevu', 'qteVendue', 'qteCommandeeF', 'valeurStock', 'prixAchatMaj', 'prixVenteMaj', 'documents', 'catalogueTarif'];
 
 const emptyProduit = {
   reference: '', referenceOdoo: '', origine: 'crm' as Origine, description: '', descriptionDetaillee: '', prixAchatMaj: '', prixVenteMaj: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
@@ -241,6 +242,10 @@ export default function Produits() {
         if (saved.size > 0 && !localStorage.getItem('produits_col_documents_vue')) {
           saved.add('documents');
           localStorage.setItem('produits_col_documents_vue', '1');
+        }
+        if (saved.size > 0 && !localStorage.getItem('produits_col_catalogue_vue')) {
+          saved.add('catalogueTarif');
+          localStorage.setItem('produits_col_catalogue_vue', '1');
         }
         if (saved.size > 0) { saved.add('qteCommandeeF'); saved.add('valeurStock'); saved.add('stockOdoo'); saved.add('stockOdooPrevu'); saved.add('prixAchatMaj'); saved.add('prixVenteMaj'); return saved; } // nouvelles colonnes : visibles chez les utilisateurs existants
       }
@@ -533,6 +538,13 @@ export default function Produits() {
         { value: '', label: 'Toutes' },
         { value: 'odoo', label: 'Odoo' },
         { value: 'crm', label: 'CRM' },
+      ]} />;
+    }
+    if (colKey === 'catalogueTarif') {
+      return <FilterChoiceInput value={fVal} onChange={set} options={[
+        { value: '', label: 'Tous' },
+        { value: 'oui', label: 'Au catalogue' },
+        { value: 'non', label: 'Hors catalogue' },
       ]} />;
     }
     if (colKey === 'disponibleVente') {
@@ -862,6 +874,7 @@ export default function Produits() {
         case 'qteCommandeeF': if (isNonVide ? !(qteCommandeeFournParProduit[p.id] > 0) : !String(qteCommandeeFournParProduit[p.id] || 0).includes(v)) return false; break;
         case 'valeurStock':  if (isNonVide ? !(valeurStockParProduit[p.id] > 0) : !String(Math.round(valeurStockParProduit[p.id] || 0)).includes(v)) return false; break;
         case 'origine':      if (!isNonVide && origineProduit(p) !== v) return false; break;
+        case 'catalogueTarif': if (isNonVide ? !p.catalogue_tarif : !(p.catalogue_tarif ? 'oui' : 'non').includes(v)) return false; break;
         case 'disponibleVente': if (isNonVide ? !(p.disponibleVente !== false) : !String(p.disponibleVente !== false ? 'oui' : 'non').includes(v)) return false; break;
       }
     }
@@ -895,7 +908,8 @@ export default function Produits() {
         case 'qteCommandeeF':   av = qteCommandeeFournParProduit[a.id] || 0; bv = qteCommandeeFournParProduit[b.id] || 0; break;
         case 'valeurStock':     av = valeurStockParProduit[a.id] || 0; bv = valeurStockParProduit[b.id] || 0; break;
         case 'origine':      av = origineProduit(a); bv = origineProduit(b); break;
-        case 'disponibleVente': av = (a.disponibleVente !== false ? 1 : 0); bv = (b.disponibleVente !== false ? 1 : 0); break;
+        case 'catalogueTarif': av = a.catalogue_tarif ? 1 : 0; bv = b.catalogue_tarif ? 1 : 0; break;
+        case 'disponibleVente': av =(a.disponibleVente !== false ? 1 : 0); bv = (b.disponibleVente !== false ? 1 : 0); break;
       }
       if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
       return sortDir === 'asc' ? av - (bv as number) : (bv as number) - av;
@@ -1772,6 +1786,7 @@ export default function Produits() {
               let display = v;
               if (v === '!empty') display = '≠ vide';
               else if (k === 'disponibleVente') display = v === 'oui' ? 'Disponible' : v === 'non' ? 'Non dispo' : v;
+              else if (k === 'catalogueTarif') display = v === 'oui' ? 'Au catalogue' : v === 'non' ? 'Hors catalogue' : v;
               else {
                 const cs = parseChoiceFilter(v);
                 if (cs.mode === 'exclude') display = `sauf ${cs.excluded.join(', ')}`;
@@ -1818,7 +1833,7 @@ export default function Produits() {
                           {col.align !== 'right' && <SortIcon className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
                         </button>
                         {isFilterOpen ? (() => {
-                          const isChoice = col.key === 'disponibleVente';
+                          const isChoice = col.key === 'disponibleVente' || col.key === 'catalogueTarif';
                           return (
                             <span className="font-normal inline-flex items-center gap-0.5 min-w-0" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} draggable={false}>
                               <span className={isChoice ? 'shrink-0' : 'min-w-0 w-28'}>{renderProdFilter(col.key)}</span>
@@ -2031,6 +2046,20 @@ export default function Produits() {
                         {p.disponibleVente !== false
                           ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-success/15 text-success text-xs font-bold">✓</span>
                           : <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted text-muted-foreground text-xs">✕</span>}
+                      </td>
+                    );
+                    case 'catalogueTarif': return (
+                      <td className="px-2 py-2.5 text-center">
+                        <input
+                          type="checkbox"
+                          title={p.catalogue_tarif ? 'Retirer du catalogue tarif ISOFLOOR' : 'Ajouter au catalogue tarif ISOFLOOR'}
+                          checked={!!p.catalogue_tarif}
+                          onChange={e => {
+                            const v = e.target.checked;
+                            updateProduits(prev => prev.map(x => x.id === p.id ? { ...x, catalogue_tarif: v } : x));
+                          }}
+                          className="rounded border-input cursor-pointer"
+                        />
                       </td>
                     );
                     default:             return <td />;
