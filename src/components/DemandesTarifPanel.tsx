@@ -116,7 +116,8 @@ export default function DemandesTarifPanel() {
             {nbNouvelles > 0 && <Badge>{nbNouvelles}</Badge>}
           </h3>
           <p className="text-xs text-muted-foreground">
-            Formulaire public de <a href={urlTarif()} target="_blank" rel="noopener noreferrer" className="underline">{urlTarif()}</a>
+            Formulaire public : <a href={`${urlTarif()}?demande`} target="_blank" rel="noopener noreferrer" className="underline">{urlTarif()}?demande</a>
+            {' '}— le lien du tarif ne s'envoie qu'aux clients validés.
           </p>
         </div>
         <div className="flex gap-2">

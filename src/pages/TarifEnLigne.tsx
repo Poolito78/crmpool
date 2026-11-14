@@ -175,7 +175,10 @@ export default function TarifEnLigne() {
   const [jeton, setJeton] = useState<string | null>(() => {
     try { return sessionStorage.getItem(CLE_JETON); } catch { return null; }
   });
-  const [vue, setVue] = useState<'login' | 'demande'>('login');
+  /* `/tarif?demande` ouvre directement le formulaire : c'est l'adresse à
+     mettre derrière un bouton « Demander un accès pro » sur isofloor.fr. Le
+     lien du tarif lui-même ne s'envoie qu'aux clients validés, par mail. */
+  const [vue, setVue] = useState<'login' | 'demande'>(() => (params.has('demande') ? 'demande' : 'login'));
   const [tarif, setTarif] = useState<ReponseTarif | null>(null);
   const [charge, setCharge] = useState(true);
   const [erreur, setErreur] = useState('');
