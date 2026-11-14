@@ -380,7 +380,6 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
   const navDroits = useMemo<NavEntry[]>(() => NAV
     .filter(e => canAchat || !(e.type === 'group' && e.label === 'Achat'))
     .filter(e => canCrm || !(e.type === 'link' && e.path === '/crm'))
-    .filter(e => isAdmin || !(e.type === 'link' && e.path === '/tarif'))
     .map(e => e.type === 'group'
       ? { ...e, items: e.items.filter(i => isAdmin || !['/parametres?tab=administration', '/parametres?tab=entrepots', '/parametres?tab=general', '/parametres?tab=clients', '/parametres?tab=veille'].includes(i.path)) }
       : e),

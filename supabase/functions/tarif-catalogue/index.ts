@@ -22,7 +22,9 @@
  * Actions (POST JSON `{ action, … }`) :
  *   demande      formulaire public de demande d'accès → `tarif_demandes`
  *   login        { identifiant, mdp } → { jeton, client }
- *   tarif        { jeton } ou session admin MonCRM (+ client_id facultatif)
+ *   tarif        { jeton } ou session MonCRM (+ client_id facultatif) : admin =
+ *                tout client ; commercial = client ouvert de SON portefeuille
+ *   clients_acces session MonCRM → clients ouverts (tous / son portefeuille)
  *   identifiants admin : { client_id } → crée / renouvelle le mot de passe,
  *                rendu UNE fois en clair, coche `acces_tarif`
  *
@@ -109,14 +111,25 @@ async function lireJeton(jeton: string): Promise<string | null> {
   } catch { return null; }
 }
 
-/* ── session admin MonCRM ─────────────────────────────────────────────── */
-async function estAdmin(req: Request): Promise<boolean> {
+/* ── session MonCRM : admin ou commercial ─────────────────────────────────
+   L'admin ouvre et coupe les accès et voit tous les tarifs. Un commercial
+   (compte MonCRM actif) CONSULTE le tarif ouvert de SES clients — ceux dont
+   il est le commercial (`clients.user_id`, même règle que la RLS des
+   clients) —, jamais celui des clients d'un collègue, et n'ouvre rien. */
+type Equipe = { role: "admin" | "commercial"; uid: string } | null;
+async function equipe(req: Request): Promise<Equipe> {
   const jwt = (req.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-  if (!jwt) return false;
+  if (!jwt) return null;
   const { data } = await db.auth.getUser(jwt);
-  if (!data?.user) return false;
-  const { data: role } = await db.from("veille_roles").select("role").eq("user_id", data.user.id).maybeSingle();
-  return role?.role === "admin";
+  if (!data?.user) return null;
+  const { data: r } = await db.from("veille_roles")
+    .select("role, crm_active, crm_access").eq("user_id", data.user.id).maybeSingle();
+  if (!r) return null;
+  if (r.role === "admin") return { role: "admin", uid: data.user.id };
+  return (r.crm_active ?? r.crm_access) ? { role: "commercial", uid: data.user.id } : null;
+}
+async function estAdmin(req: Request): Promise<boolean> {
+  return (await equipe(req))?.role === "admin";
 }
 
 const court = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
@@ -167,25 +180,30 @@ async function login(b: Record<string, unknown>) {
 
 async function tarif(req: Request, b: Record<string, unknown>) {
   let clientId: string | null = null;
-  let admin = false;
+  let staff: Equipe = null;
   if (b.jeton) {
     clientId = await lireJeton(String(b.jeton));
     if (!clientId) return rep({ erreur: "Session expirée, reconnectez-vous." }, 401);
-  } else if (await estAdmin(req)) {
-    admin = true;
+  } else if ((staff = await equipe(req))) {
     clientId = b.client_id ? court(b.client_id, 40) : null;
   } else {
     return rep({ erreur: "Non autorisé." }, 401);
   }
+  const admin = staff?.role === "admin";
 
-  let client: { societe?: string; nom?: string; est_revendeur?: boolean; remises_par_categorie?: Record<string, number>; acces_tarif?: boolean } | null = null;
+  let client: { societe?: string; nom?: string; est_revendeur?: boolean; remises_par_categorie?: Record<string, number>; acces_tarif?: boolean; user_id?: string } | null = null;
   if (clientId) {
     const { data } = await db.from("clients")
-      .select("societe, nom, est_revendeur, remises_par_categorie, acces_tarif").eq("id", clientId).maybeSingle();
+      .select("societe, nom, est_revendeur, remises_par_categorie, acces_tarif, user_id").eq("id", clientId).maybeSingle();
     client = data;
     if (!client) return rep({ erreur: "Client introuvable." }, 404);
+    if (staff?.role === "commercial" && client.user_id !== staff.uid) {
+      return rep({ erreur: "Ce client n'est pas dans votre portefeuille." }, 403);
+    }
     if (!admin && !client.acces_tarif) {
-      return rep({ erreur: "Votre accès au tarif n'est plus actif." }, 403);
+      return rep({ erreur: staff
+        ? "Le tarif de ce client n'est pas ouvert : seul l'administrateur ouvre les accès."
+        : "Votre accès au tarif n'est plus actif." }, 403);
     }
   }
 
@@ -220,9 +238,22 @@ async function tarif(req: Request, b: Record<string, unknown>) {
   return rep({
     client: client ? { societe: client.societe || client.nom || "" } : null,
     admin,
+    equipe: staff?.role ?? null,
     date: new Date().toISOString(),
     lignes,
   });
+}
+
+/* Clients dont le tarif est ouvert, pour le sélecteur d'aperçu : tous pour
+   l'admin, ceux de son portefeuille pour un commercial. */
+async function clientsAcces(req: Request) {
+  const staff = await equipe(req);
+  if (!staff) return rep({ erreur: "Non autorisé." }, 401);
+  let requete = db.from("clients").select("id, societe, nom").eq("acces_tarif", true);
+  if (staff.role === "commercial") requete = requete.eq("user_id", staff.uid);
+  const { data, error } = await requete.order("societe");
+  if (error) return rep({ erreur: error.message }, 500);
+  return rep({ clients: (data || []).map(c => ({ id: c.id, nom: c.societe || c.nom })) });
 }
 
 async function identifiants(req: Request, b: Record<string, unknown>) {
@@ -258,6 +289,7 @@ serve(async (req) => {
       case "login": return await login(b);
       case "tarif": return await tarif(req, b);
       case "identifiants": return await identifiants(req, b);
+      case "clients_acces": return await clientsAcces(req);
       default: return rep({ erreur: "Action inconnue." }, 400);
     }
   } catch (e) {

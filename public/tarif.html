@@ -735,7 +735,7 @@ button.btn-download { border: none; cursor: pointer; font: inherit; }
 
 <div id="admin-bar" class="admin-bar">
   <div class="admin-bar-inner">
-    <b>Aperçu admin :</b>
+    <b id="admin-titre">Aperçu :</b>
     <select id="admin-client" onchange="choisirClient(this.value)"><option value="">Tarif public</option></select>
     <span id="admin-info" style="color:#b45309"></span>
   </div>
@@ -1187,17 +1187,23 @@ async function choisirClient(id) {
   catch (e) { document.getElementById('admin-info').textContent = e.message; afficher('catalogue'); }
 }
 
-async function preparerAdmin(clientId) {
-  modeAdmin = true;
+/* Admin : tous les clients ouverts. Commercial : ceux de son portefeuille
+   (la fonction filtre — la page ne choisit rien). */
+async function preparerApercu(role, clientId) {
+  modeAdmin = role === 'admin';
   document.getElementById('admin-bar').classList.add('active');
-  const { data } = await sb.from('clients').select('id, societe, nom').eq('acces_tarif', true).order('societe');
+  document.getElementById('admin-titre').textContent = modeAdmin ? 'Aperçu admin :' : 'Aperçu commercial :';
+  let liste = [];
+  try { liste = (await appel({ action: 'clients_acces' })).clients || []; } catch (e) {}
   const sel = document.getElementById('admin-client');
-  (data || []).forEach(c => sel.insertAdjacentHTML('beforeend', `<option value="${esc(c.id)}">${esc(c.societe || c.nom)}</option>`));
-  if (clientId && !(data || []).some(c => c.id === clientId)) {
+  liste.forEach(c => sel.insertAdjacentHTML('beforeend', `<option value="${esc(c.id)}">${esc(c.nom)}</option>`));
+  if (clientId && modeAdmin && !liste.some(c => c.id === clientId)) {
     sel.insertAdjacentHTML('beforeend', `<option value="${esc(clientId)}">Client sélectionné (sans accès)</option>`);
   }
   sel.value = clientId || '';
-  document.getElementById('admin-info').textContent = `${(data || []).length} client(s) avec accès`;
+  document.getElementById('admin-info').textContent = modeAdmin
+    ? `${liste.length} client(s) avec accès`
+    : `${liste.length} client(s) de votre portefeuille avec accès`;
 }
 
 async function charger() {
@@ -1214,11 +1220,19 @@ async function charger() {
     if (data && data.session) {
       try {
         const clientId = params.get('client') || '';
-        const t = await appel({ action: 'tarif', client_id: clientId || undefined });
-        if (t.admin) await preparerAdmin(clientId);
+        let t, refus = '';
+        try { t = await appel({ action: 'tarif', client_id: clientId || undefined }); }
+        catch (e) {
+          /* Client hors portefeuille / non ouvert : on retombe sur le tarif public. */
+          if (!clientId || e.statut !== 403) throw e;
+          t = await appel({ action: 'tarif' });
+          refus = e.message;
+        }
+        if (t.equipe) await preparerApercu(t.equipe, refus ? '' : clientId);
+        if (refus) document.getElementById('admin-info').textContent = refus + ' Tarif public affiché.';
         montrerTarif(t);
         return;
-      } catch (e) { /* session MonCRM sans droit admin : connexion du tarif */ }
+      } catch (e) { /* session MonCRM sans droit : connexion du tarif */ }
     }
   }
   afficher(params.has('demande') ? 'demande' : 'login');

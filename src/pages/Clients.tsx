@@ -1285,6 +1285,19 @@ export default function Clients() {
               )}
             </div>
 
+            {!isAdmin && editingClient?.id && (
+              <div className="border-t border-border pt-4 text-sm flex flex-wrap items-center gap-3">
+                <span className="font-semibold">Tarif en ligne :</span>
+                {form.accesTarif ? (
+                  <>
+                    <Badge variant="secondary">ouvert</Badge>
+                    <a href={`/tarif?client=${editingClient.id}`} target="_blank" rel="noopener noreferrer" className="underline text-primary">Voir son tarif</a>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">non ouvert — l'administrateur ouvre les accès.</span>
+                )}
+              </div>
+            )}
             {isAdmin && (
               <AccesTarifClient
                 clientId={editingClient?.id}
