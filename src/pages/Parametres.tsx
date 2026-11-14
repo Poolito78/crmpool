@@ -6,6 +6,7 @@ import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
 import ClientsImportExport from '@/components/ClientsImportExport';
 import AdminAccessPanel from '@/components/AdminAccessPanel';
 import DemandesTarifPanel from '@/components/DemandesTarifPanel';
+import AccesTarifClientsPanel from '@/components/AccesTarifClientsPanel';
 import UsageStockagePanel from '@/components/UsageStockagePanel';
 import MailsTypesPanel from '@/components/MailsTypesPanel';
 import { useCurrentUser } from '@/hooks/useAuth';
@@ -476,6 +477,7 @@ export default function Parametres() {
             <>
               <AdminAccessPanel />
               <DemandesTarifPanel />
+              <AccesTarifClientsPanel />
             </>
           ) : (
             <div className="bg-card rounded-xl border border-border p-5 text-sm text-muted-foreground">

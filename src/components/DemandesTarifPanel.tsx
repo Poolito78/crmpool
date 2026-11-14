@@ -87,6 +87,7 @@ export default function DemandesTarifPanel() {
         .update({ statut: 'acceptee', client_id: client.id, traitee_le: new Date().toISOString() }).eq('id', d.id);
       if (error) toast.error(error.message);
       setResultat({ demandeId: d.id, ids, nom: d.nom });
+      window.dispatchEvent(new Event('tarif-acces-maj'));
       toast.success(`Accès ouvert pour ${d.entreprise}. Réglez ses remises dans sa fiche client.`);
       charger();
     } catch (e) {
