@@ -699,13 +699,24 @@ button.btn-download { border: none; cursor: pointer; font: inherit; }
 .price-pub { font-size: 11.5px; color: var(--slate-5, #64748b); margin-top: 2px; }
 .price-pub s { opacity: .8; }
 .price-pub .remise { color: #059669; font-weight: 700; margin-left: 4px; }
+.vue-toggle { display: inline-flex; gap: 2px; padding: 3px; background: #fff; border: 1.5px solid var(--slate-3, #e2e8f0); border-radius: 10px; margin: 0 0 22px; }
+.vue-toggle button { display: inline-flex; align-items: center; gap: 6px; border: none; background: transparent; border-radius: 7px; padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 600; color: var(--slate-5, #64748b); cursor: pointer; }
+.vue-toggle button.on { background: var(--navy, #0f2744); color: #fff; }
+.grid.grid-liste { display: block; }
+.gran-table.liste-table thead th:nth-child(-n+3), .liste-table td:nth-child(-n+3) { text-align: left; }
+.liste-table td:nth-child(n+4) { text-align: right; }
+.liste-table td.td-name small { display: block; font-size: 11px; color: var(--slate-5, #64748b); margin-top: 2px; }
+.liste-table .td-pub { color: var(--slate-5, #64748b); white-space: nowrap; }
+.liste-table .td-price .remise { display: block; font-size: 11px; font-weight: 700; color: #059669; }
+.liste-table .td-cond { white-space: nowrap; color: var(--slate-5, #64748b); }
 .mention-tarif { font-size: 12px; color: var(--slate-5, #64748b); margin: 28px 0 0; }
 @media (max-width: 640px) {
   .client-chip { display: none; }
   .topbar-actions .badge-tag { display: none; }
 }
 @media print {
-  .topbar-actions .btn-download, .topbar-actions .btn-sortie, .admin-bar, .nav, .search-wrap { display: none !important; }
+  .topbar-actions .btn-download, .topbar-actions .btn-sortie, .admin-bar, .nav, .search-wrap, .vue-toggle { display: none !important; }
+  .liste-table tr { break-inside: avoid; }
   .section { display: block !important; }
   .card { break-inside: avoid; }
   .gran-group { break-inside: avoid; }
@@ -1080,6 +1091,48 @@ function granTable(items) {
   }).join('');
 }
 
+/* Vue liste : chaque gamme en tableau, au style du tableau des granulats. */
+function listeTable(items) {
+  const avecRemise = items.some(p => p.remise > 0);
+  return `
+  <div class="gran-group">
+    <table class="gran-table liste-table">
+      <thead><tr>
+        <th>Référence</th><th>Désignation</th><th>Cond.</th>
+        ${avecRemise ? '<th>Public HT</th>' : ''}<th>${avecRemise ? 'Votre prix HT' : 'Prix HT'}</th><th>Prix / kg</th>
+      </tr></thead>
+      <tbody>${items.map(p => `<tr>
+        <td class="td-ref">${esc(p.ref)}</td>
+        <td class="td-name">${p.name}<small>${p.cat}</small></td>
+        <td class="td-cond">${[p.u, p.poids ? p.poids + ' kg' : ''].filter(Boolean).join(' · ')}</td>
+        ${avecRemise ? `<td class="td-pub">${p.remise > 0 && p.prixPublic ? `<s>${f(p.prixPublic)}</s>` : (p.prixPublic ? f(p.prixPublic) : '—')}</td>` : ''}
+        <td class="td-price">${p.prix != null ? f(p.prix) : 'Sur demande'}${p.remise > 0 ? `<span class="remise">−${String(p.remise).replace('.', ',')} %</span>` : ''}</td>
+        <td class="td-kg">${p.kg != null ? f(p.kg).replace(' €', '/kg') : '—'}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>`;
+}
+
+let vueListe = false;
+try { vueListe = localStorage.getItem('tarif_isofloor_vue') === 'liste'; } catch (e) {}
+function choisirVue(liste) {
+  vueListe = liste;
+  try { localStorage.setItem('tarif_isofloor_vue', liste ? 'liste' : 'cartes'); } catch (e) {}
+  document.querySelectorAll('.vue-toggle button').forEach(b => b.classList.toggle('on', (b.dataset.vue === 'liste') === liste));
+  render(document.getElementById('search').value.toLowerCase(), curSec);
+}
+function installerToggleVue() {
+  const s = document.querySelector('.search-wrap');
+  if (!s || document.querySelector('.vue-toggle')) return;
+  s.insertAdjacentHTML('afterend', `<div class="vue-toggle" role="group" aria-label="Affichage">
+    <button type="button" data-vue="cartes" onclick="choisirVue(false)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Cartes</button>
+    <button type="button" data-vue="liste" onclick="choisirVue(true)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg>Liste</button>
+  </div>`);
+  document.querySelectorAll('.vue-toggle button').forEach(b => b.classList.toggle('on', (b.dataset.vue === 'liste') === vueListe));
+}
+
 const SECS = ['epoxy', 'mma', 'pu', 'poly', 'mdp', 'gran', 'mat', 'poc'];
 function render(q = '', sec = 'all') {
   let total = 0;
@@ -1091,7 +1144,8 @@ function render(q = '', sec = 'all') {
     if (!el.classList.contains('visible')) return;
     total += items.length;
     const g = document.getElementById('g-' + s);
-    g.innerHTML = s === 'gran' ? granTable(items) : items.map(card).join('');
+    g.classList.toggle('grid-liste', vueListe);
+    g.innerHTML = s === 'gran' ? granTable(items) : vueListe ? listeTable(items) : items.map(card).join('');
   });
   document.getElementById('count').textContent = total + ' produit' + (total > 1 ? 's' : '');
 }
@@ -1125,6 +1179,7 @@ function montrerTarif(t) {
   document.getElementById('date-tarif').textContent = new Date(t.date).toLocaleDateString('fr-FR');
   document.title = `Tarif ISOFLOOR${societe ? ' — ' + societe : ''}`;
   renderTransport(TRANSPORT);
+  installerToggleVue();
   render(document.getElementById('search').value.toLowerCase(), curSec);
   afficher('catalogue');
 }
