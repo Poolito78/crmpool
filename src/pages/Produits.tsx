@@ -157,6 +157,7 @@ const emptyProduit = {
   reference: '', referenceOdoo: '', origine: 'crm' as Origine, description: '', descriptionDetaillee: '', prixAchatMaj: '', prixVenteMaj: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
   proprietaire: 'isosign' as 'isosign' | 'fournisseur', proprietaireFournisseurId: '',
   disponibleVente: true,
+  catalogue_tarif: undefined as boolean | undefined,
   adr: undefined as boolean | undefined,
   kgParPalette: undefined as number | undefined,
   consoUnite: undefined as 'kg' | 'm2' | undefined,
@@ -1146,7 +1147,7 @@ export default function Produits() {
     const coefficient = prixEnregistres && prixAchat > 0 && prixRevendeur > 0
       ? Math.round(prixRevendeur / prixAchat * 10000) / 10000
       : p.coefficient;
-    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient, prixHT, coeffRevendeur: coefficient, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', ficheType: p.ficheType, fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, kgParPalette: p.kgParPalette, consoUnite: p.consoUnite, consommationMl: p.consommationMl, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined, dosageEpaisseur: p.dosageEpaisseur ? structuredClone(p.dosageEpaisseur) : undefined });
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient, prixHT, coeffRevendeur: coefficient, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', ficheType: p.ficheType, fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, catalogue_tarif: p.catalogue_tarif, adr: p.adr, kgParPalette: p.kgParPalette, consoUnite: p.consoUnite, consommationMl: p.consommationMl, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined, dosageEpaisseur: p.dosageEpaisseur ? structuredClone(p.dosageEpaisseur) : undefined });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -2296,6 +2297,18 @@ export default function Produits() {
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-muted-foreground mt-0.5">Une fiche dupliquée devient CRM.</p>
+              </div>
+              <div className="col-span-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="rounded border-border w-4 h-4 accent-primary"
+                    checked={form.catalogue_tarif ?? false}
+                    onChange={e => setForm(p => ({ ...p, catalogue_tarif: e.target.checked }))}
+                  />
+                  <span className="text-sm font-medium">Présent dans le catalogue tarif ISOFLOOR</span>
+                  <span className="text-[11px] text-muted-foreground ml-1">— vignette visible dans le catalogue 2026</span>
+                </label>
               </div>
             </div>
             <div><Label>Description *</Label><Input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>

@@ -1730,6 +1730,7 @@ export type Database = {
           achats_historique: Json | null
           adr: boolean | null
           catalogue: string | null
+          catalogue_tarif: boolean | null
           categorie: string | null
           code_tarif: string | null
           coeff_revendeur: number
@@ -1792,6 +1793,7 @@ export type Database = {
           achats_historique?: Json | null
           adr?: boolean | null
           catalogue?: string | null
+          catalogue_tarif?: boolean | null
           categorie?: string | null
           code_tarif?: string | null
           coeff_revendeur?: number
@@ -1854,6 +1856,7 @@ export type Database = {
           achats_historique?: Json | null
           adr?: boolean | null
           catalogue?: string | null
+          catalogue_tarif?: boolean | null
           categorie?: string | null
           code_tarif?: string | null
           coeff_revendeur?: number

@@ -579,6 +579,8 @@ export interface Produit {
   /** D'où vient prixTarif : ISOMARK ou ISOFLOOR. */
   sourceTarif?: string;
   achatsHistorique?: AchatDate[];            // historique manuel des achats datés (valorisation)
+  /** Présent dans le catalogue tarif ISOFLOOR (catalogue_2026_preview.html). */
+  catalogue_tarif?: boolean;
 }
 
 export interface PalierPort {
@@ -1334,6 +1336,7 @@ function dbToProduit(r: any): Produit {
     codeTarif: r.code_tarif || undefined,
     sourceTarif: r.source_tarif || undefined,
     achatsHistorique: r.achats_historique ? (Array.isArray(r.achats_historique) ? r.achats_historique : JSON.parse(r.achats_historique)) : undefined,
+    catalogue_tarif: r.catalogue_tarif ?? undefined,
   };
 }
 
@@ -1425,6 +1428,7 @@ function produitToDb(p: Produit, userId: string) {
     ...(p.kgParPalette !== undefined ? { kg_par_palette: p.kgParPalette > 0 ? p.kgParPalette : null } : {}),
     ...(p.achatsHistorique !== undefined ? { achats_historique: p.achatsHistorique && p.achatsHistorique.length > 0 ? p.achatsHistorique : null } : {}),
     ...(p.descriptionVariante !== undefined ? { description_variante: p.descriptionVariante || null } : {}),
+    ...(p.catalogue_tarif !== undefined ? { catalogue_tarif: p.catalogue_tarif } : {}),
   };
 }
 
