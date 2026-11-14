@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ExternalLink, KeyRound, Loader2, Mail, Search } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useCRM } from '@/lib/StoreContext';
 import type { Client } from '@/lib/store';
@@ -33,6 +34,7 @@ const MAX_LIGNES = 60;
  */
 export default function AccesTarifClientsPanel() {
   const { clients, updateClients } = useCRM();
+  const navigate = useNavigate();
   const [acces, setAcces] = useState<Map<string, Acces>>(new Map());
   const [demandeurs, setDemandeurs] = useState<Set<string>>(new Set());
   const [q, setQ] = useState('');
@@ -179,7 +181,12 @@ export default function AccesTarifClientsPanel() {
                 return (
                   <tr key={c.id} className="border-b border-border last:border-0 align-top">
                     <td className="py-2 pr-3">
-                      <p className="font-medium">{c.societe || c.nom}</p>
+                      <button
+                        type="button"
+                        className="font-medium text-left hover:text-primary hover:underline"
+                        title="Ouvrir la fiche client"
+                        onClick={() => navigate(`/clients?editClient=${encodeURIComponent(c.id)}`)}
+                      >{c.societe || c.nom}</button>
                       {c.ville && <p className="text-xs text-muted-foreground">{c.ville}</p>}
                     </td>
                     <td className="py-2 pr-3">

@@ -249,6 +249,8 @@ async function tarif(req: Request, b: Record<string, unknown>) {
         )
       : null;
     return {
+      /* L'admin ouvre la fiche article MonCRM d'un clic : l'id ne sort que pour lui. */
+      ...(admin ? { id: p.id } : {}),
       reference: p.reference,
       designation: designationProduit({ description: p.description || "", descriptionVariante: p.description_variante || "" }),
       categorie: p.categorie || "",

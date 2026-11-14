@@ -62,6 +62,10 @@ button.btn-download { border: none; cursor: pointer; font: inherit; }
 .fiches a:hover { border-color: #0f2744; }
 .fiches a.recap { border-color: #fca5a5; color: #b91c1c; background: #fef2f2; }
 .liste-table .fiches, .gran-table .fiches { margin-top: 4px; }
+a.lien-admin { color: inherit; text-decoration: none; display: inline-block; border-radius: 6px; cursor: pointer; }
+a.lien-admin:hover { outline: 2px dashed #f59e0b; outline-offset: 3px; }
+td a.lien-admin:hover { text-decoration: underline; outline: none; }
+@media print { a.lien-admin:hover { outline: none; } }
 .mention-tarif { font-size: 12px; color: var(--slate-5, #64748b); margin: 28px 0 0; }
 @media (max-width: 640px) {
   .client-chip { display: none; }
@@ -196,7 +200,20 @@ function afficher(v) {
 /* catToSec / catToBc : recopiées du catalogue par le générateur. */
 /*__FONCTIONS__*/
 
+/* Admin : un clic sur un prix ouvre la fiche article MonCRM (l'id n'est
+   renvoyé qu'à l'admin) ; article non relié → la page Produits, recherche
+   sur la référence, pour le relier. */
+let ADMIN = false;
+function lienAdmin(p, html) {
+  if (!ADMIN) return html;
+  const url = p.crmId ? '/produits?highlight=' + encodeURIComponent(p.crmId)
+    : '/produits?search=' + encodeURIComponent(p.crm || p.ref);
+  const titre = p.crmId ? 'Ouvrir la fiche article dans MonCRM' : 'Article non relié au CRM : chercher dans MonCRM';
+  return `<a class="lien-admin" href="${url}" target="_blank" rel="noopener" title="${titre}">${html}</a>`;
+}
+
 function appliquerTarif(t) {
+  ADMIN = !!t.admin;
   const parRef = new Map(t.lignes.map(l => [l.reference, l]));
   const utilisees = new Set();
   PRODUCTS = BASE.map(b => {
@@ -208,6 +225,7 @@ function appliquerTarif(t) {
       remise: l ? l.remise : 0,
       kg: l && l.prix != null && b.poids ? +(l.prix / b.poids).toFixed(2) : null,
       fiches: l ? (l.fiches || []) : [],
+      crmId: l && l.id ? l.id : null,
     });
   });
   /* Articles cochés « Catalogue » dans le CRM sans fiche dans le catalogue. */
@@ -219,6 +237,7 @@ function appliquerTarif(t) {
       prix: l.prix, prixPublic: l.prixPublic, remise: l.remise,
       kg: l.prix != null && l.poids ? +(l.prix / l.poids).toFixed(2) : null,
       fiches: l.fiches || [],
+      crmId: l.id || null,
     });
   });
 }
@@ -251,7 +270,7 @@ function card(p) {
       ${liensFiches(p)}
     </div>
     <div class="card-foot">
-      <div>${priceBlock}</div>
+      <div>${lienAdmin(p, priceBlock)}</div>
       <div class="card-meta">
         <span class="meta-unite">${p.u}</span>
         ${p.poids ? `<span class="meta-poids">⚖ ${p.poids} kg</span>` : ''}
@@ -276,7 +295,7 @@ function granTable(items) {
           return `<tr>
             <td class="td-ref">${esc(p.ref)}</td>
             <td class="td-name">${p.name}${liensFiches(p)}</td>
-            <td class="td-price">${p.prix != null ? f(p.prix) : 'Sur demande'}</td>
+            <td class="td-price">${lienAdmin(p, p.prix != null ? f(p.prix) : 'Sur demande')}</td>
             <td class="td-kg">${p.kg != null ? f(p.kg).replace(' €', '/kg') : '—'}</td>
             <td class="td-delai">${dt}</td>
           </tr>`;
@@ -301,7 +320,7 @@ function listeTable(items) {
         <td class="td-name">${p.name}<small>${p.cat}</small>${liensFiches(p)}</td>
         <td class="td-cond">${[p.u, p.poids ? p.poids + ' kg' : ''].filter(Boolean).join(' · ')}</td>
         ${avecRemise ? `<td class="td-pub">${p.remise > 0 && p.prixPublic ? `<s>${f(p.prixPublic)}</s>` : (p.prixPublic ? f(p.prixPublic) : '—')}</td>` : ''}
-        <td class="td-price">${p.prix != null ? f(p.prix) : 'Sur demande'}${p.remise > 0 ? `<span class="remise">−${String(p.remise).replace('.', ',')} %</span>` : ''}</td>
+        <td class="td-price">${lienAdmin(p, p.prix != null ? f(p.prix) : 'Sur demande')}${p.remise > 0 ? `<span class="remise">−${String(p.remise).replace('.', ',')} %</span>` : ''}</td>
         <td class="td-kg">${p.kg != null ? f(p.kg).replace(' €', '/kg') : '—'}</td>
       </tr>`).join('')}</tbody>
     </table>
