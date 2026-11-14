@@ -57,6 +57,11 @@ button.btn-download { border: none; cursor: pointer; font: inherit; }
 .liste-table .td-pub { color: var(--slate-5, #64748b); white-space: nowrap; }
 .liste-table .td-price .remise { display: block; font-size: 11px; font-weight: 700; color: #059669; }
 .liste-table .td-cond { white-space: nowrap; color: var(--slate-5, #64748b); }
+.fiches { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.fiches a { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; text-decoration: none; padding: 3px 8px; border-radius: 999px; border: 1px solid #cbd5e1; color: #0f2744; background: #f8fafc; white-space: nowrap; }
+.fiches a:hover { border-color: #0f2744; }
+.fiches a.recap { border-color: #fca5a5; color: #b91c1c; background: #fef2f2; }
+.liste-table .fiches, .gran-table .fiches { margin-top: 4px; }
 .mention-tarif { font-size: 12px; color: var(--slate-5, #64748b); margin: 28px 0 0; }
 @media (max-width: 640px) {
   .client-chip { display: none; }
@@ -202,6 +207,7 @@ function appliquerTarif(t) {
       prixPublic: l ? l.prixPublic : null,
       remise: l ? l.remise : 0,
       kg: l && l.prix != null && b.poids ? +(l.prix / b.poids).toFixed(2) : null,
+      fiches: l ? (l.fiches || []) : [],
     });
   });
   /* Articles cochés « Catalogue » dans le CRM sans fiche dans le catalogue. */
@@ -212,8 +218,18 @@ function appliquerTarif(t) {
       bc: catToBc(sec), sec, poids: l.poids, u: esc(l.unite || ''), desc: '', img: null, delai: null,
       prix: l.prix, prixPublic: l.prixPublic, remise: l.remise,
       kg: l.prix != null && l.poids ? +(l.prix / l.poids).toFixed(2) : null,
+      fiches: l.fiches || [],
     });
   });
+}
+
+/* Liens fiche technique / fiche récap système de l'article, quand ils existent. */
+function liensFiches(p) {
+  const fs = (p.fiches || []).filter(x => /^https?:\/\//i.test(x.url || ''));
+  if (!fs.length) return '';
+  return `<div class="fiches">${fs.map(x =>
+    `<a class="${x.type === 'recap' ? 'recap' : ''}" href="${esc(x.url)}" target="_blank" rel="noopener">${x.type === 'recap' ? '📋' : '📄'} ${esc(x.label)}</a>`
+  ).join('')}</div>`;
 }
 
 function card(p) {
@@ -232,6 +248,7 @@ function card(p) {
     <div class="card-body">
       <h3 class="card-name">${p.name}</h3>
       ${p.desc ? `<p class="card-desc">${p.desc}</p>` : ''}
+      ${liensFiches(p)}
     </div>
     <div class="card-foot">
       <div>${priceBlock}</div>
@@ -258,7 +275,7 @@ function granTable(items) {
           const dt = p.delai ? `<span class="delai ${dc}">${p.delai} j</span>` : '—';
           return `<tr>
             <td class="td-ref">${esc(p.ref)}</td>
-            <td class="td-name">${p.name}</td>
+            <td class="td-name">${p.name}${liensFiches(p)}</td>
             <td class="td-price">${p.prix != null ? f(p.prix) : 'Sur demande'}</td>
             <td class="td-kg">${p.kg != null ? f(p.kg).replace(' €', '/kg') : '—'}</td>
             <td class="td-delai">${dt}</td>
@@ -281,7 +298,7 @@ function listeTable(items) {
       </tr></thead>
       <tbody>${items.map(p => `<tr>
         <td class="td-ref">${esc(p.ref)}</td>
-        <td class="td-name">${p.name}<small>${p.cat}</small></td>
+        <td class="td-name">${p.name}<small>${p.cat}</small>${liensFiches(p)}</td>
         <td class="td-cond">${[p.u, p.poids ? p.poids + ' kg' : ''].filter(Boolean).join(' · ')}</td>
         ${avecRemise ? `<td class="td-pub">${p.remise > 0 && p.prixPublic ? `<s>${f(p.prixPublic)}</s>` : (p.prixPublic ? f(p.prixPublic) : '—')}</td>` : ''}
         <td class="td-price">${p.prix != null ? f(p.prix) : 'Sur demande'}${p.remise > 0 ? `<span class="remise">−${String(p.remise).replace('.', ',')} %</span>` : ''}</td>

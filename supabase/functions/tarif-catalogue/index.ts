@@ -208,10 +208,36 @@ async function tarif(req: Request, b: Record<string, unknown>) {
   }
 
   const { data: produits, error } = await db.from("produits")
-    .select("reference, description, description_variante, categorie, catalogue, prix_ht, paliers_prix, unite, poids, fiche_url")
+    .select("id, reference, description, description_variante, categorie, catalogue, prix_ht, paliers_prix, unite, poids, fiche_url, fiches_supplementaires")
     .eq("catalogue_tarif", true)
     .order("categorie").order("reference");
   if (error) return rep({ erreur: "Lecture du catalogue impossible." }, 500);
+
+  /* Fiches récap des systèmes actifs dont l'article est un composant. */
+  const recaps = new Map<string, { label: string; url: string }[]>();
+  const ids = (produits || []).map(p => p.id);
+  if (ids.length) {
+    const { data: comp } = await db.from("systeme_composants")
+      .select("produit_id, systemes(nom, actif, recap_url, recap_label)")
+      .in("produit_id", ids);
+    for (const c of (comp || []) as { produit_id: string; systemes: { nom: string; actif: boolean; recap_url: string | null; recap_label: string | null } | null }[]) {
+      const s = c.systemes;
+      const url = s?.recap_url?.trim();
+      if (!s || !s.actif || !url) continue;
+      const liste = recaps.get(c.produit_id) || [];
+      if (!liste.some(l => l.url === url)) liste.push({ label: s.recap_label?.trim() || `Fiche récap - ${s.nom}`, url });
+      recaps.set(c.produit_id, liste);
+    }
+  }
+  const fichesDe = (p: { id: string; fiche_url: string | null; fiches_supplementaires: { url?: string }[] | null }) => {
+    const urls = [p.fiche_url, ...((p.fiches_supplementaires || []).map(f => f?.url))]
+      .map(u => (u || "").trim()).filter(u => /^https?:\/\//i.test(u));
+    const uniques = [...new Set(urls)];
+    return [
+      ...uniques.map((url, i) => ({ type: "fiche", label: uniques.length > 1 ? `Fiche technique ${i + 1}` : "Fiche technique", url })),
+      ...(recaps.get(p.id) || []).map(r => ({ type: "recap", ...r })),
+    ];
+  };
 
   const lignes = (produits || []).map(p => {
     const pub = Number(p.prix_ht) || 0;
@@ -232,6 +258,7 @@ async function tarif(req: Request, b: Record<string, unknown>) {
       prix: g ? g.prix : (pub || null),
       remise: g ? Math.round(g.remise * 1000) / 10 : 0,
       ficheUrl: p.fiche_url || null,
+      fiches: fichesDe(p),
     };
   });
 
