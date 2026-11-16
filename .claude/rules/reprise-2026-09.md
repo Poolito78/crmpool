@@ -784,8 +784,9 @@ Premier passage réussi le 11/11 (3 sessions).
 - ⚠️ Exige `claude auth login` dans un terminal (identifiants de `~/.claude`,
   pas ceux de l'application) ; refus de connexion et limite d'usage sont
   retentés au démarrage suivant.
-- Un crochet n'est lu qu'au démarrage d'une session. Pas encore vu se
-  déclencher seul : vérifier `journal.log` après l'ouverture d'une session.
+- Un crochet n'est lu qu'au démarrage d'une session. **Premier déclenchement
+  automatique confirmé le 16/11** : `journal.log` a enregistré le démarrage
+  à 18:56:43, session `7dd35961` traitée (4 messages, ~9 900 caractères).
 
 ## Pièges d'implémentation rencontrés
 
