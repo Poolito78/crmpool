@@ -5,7 +5,7 @@ import SocieteDocumentDialog from '@/components/SocieteDocumentDialog';
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type ReactNode } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
+import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type DevisOdooLie, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Building2, MoveHorizontal, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, BarChart3, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat, FilePlus } from 'lucide-react';
 import { demandeDepuisLigne, memoriserDemandeFiche, prendreLiaison, lierLigneAuProduit } from '@/lib/ficheDepuisLigne';
 import { genererScriptOdoo, promptOdooPartnerName, getOdooPartnerId, setOdooPartnerId, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, type OdooPayload } from '@/lib/odooSync';
@@ -712,6 +712,17 @@ export default function Devis() {
         contact: data?.rapport?.contact,
         chantier: data?.rapport?.chantier,
       });
+      /* Le devis du CRM retient son devis Odoo : le mail d'envoi cite
+         « DEV-… / AF… » et joint le PDF d'Odoo (`devisOdooEnvoi.ts`). */
+      if (data?.numero) {
+        const lien: DevisOdooLie = {
+          numero: String(data.numero),
+          ...(data.orderId ? { id: Number(data.orderId) } : {}),
+          ...(typeof data.montantHT === 'number' ? { montantHT: data.montantHT } : {}),
+          le: new Date().toISOString(),
+        };
+        updateDevis(prev => prev.map(d => d.numero === payload.numero ? { ...d, odoo: lien } : d));
+      }
       if (data?.url) window.open(data.url, '_blank', 'noopener');
     } catch (e) {
       let transport = '';
@@ -721,7 +732,7 @@ export default function Devis() {
         transport, message: (e as Error).message,
       });
     }
-  }, []);
+  }, [updateDevis]);
   const [moFiches, setMoFiches] = useState<MoFiche[]>([]);
   const [moFolderName, setMoFolderName] = useState<string | null>(null);
   const [moSearching, setMoSearching] = useState(false);
@@ -6893,6 +6904,12 @@ ${dosage.source}` : ''}`}>
         pdfContainerRef={pdfContainerRef}
         previewOptions={previewOptions}
         onPreviewOptionsChange={setPreviewOptions}
+        onOdooLie={(lien) => {
+          if (!emailDevis) return;
+          /* Le store seulement : `emailDevis` reste tel quel, sinon le dialogue
+             se réinitialiserait (objet, texte, PDF) sous les yeux. */
+          updateDevis(prev => prev.map(d => d.id === emailDevis.id ? { ...d, odoo: lien } : d));
+        }}
         onSent={(dateEnvoi) => {
           if (emailDevis) {
             updateDevis(prev => prev.map(d =>

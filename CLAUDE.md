@@ -171,7 +171,7 @@ explication.
 `memoireDocuments` (émetteur reconnu par SIREN / domaine → sens fournisseur ou client et fournisseur retenu ; une signature contradictoire est écartée) ·
 `comparaisonDevis` (devis réalisé ↔ chiffrage CRM : écarts ligne à ligne ou par référence, apprentissage) ·
 `correctionsDevis` (proposition de l'analyse figée dans le devis, `chiffrage_analyse`, mail joint aux fichiers ; à chaque enregistrement l'article corrigé est appris pour la demande, le reste se montre et se copie) ·
-`devisOdooPdf` (offre Odoo AF… en PDF lue sans IA → type `offre_prix`, comparée au CRM, jamais créée) ·
+`devisOdooEnvoi` (mail d'envoi : « DEV-… / AF… », PDF Odoo joint via `odoo-devis-pdf` (lien portail) ou pris dans Téléchargements, montants HT CRM / fiche / PDF comparés ; `devis.odoo_devis` retenu à la création) · `devisOdooPdf` (offre Odoo AF… en PDF lue sans IA → type `offre_prix`, comparée au CRM, jamais créée) ·
 `odooAchat` (devis fournisseur : article Odoo retrouvé par code, en LECTURE seule — rien n'est jamais écrit dans Odoo ; un article absent se crée dans MonCRM, code et intitulé saisis) ·
 `kitFournisseur` (devis reçu : ligne chiffrée + lignes sans prix = un kit, quantités ramenées à UN kit, code de tête générique, coût porté par la 1re ligne de composant) ·
 `nuancierFlowcrete` (teintes par tier et par gamme : Tier 1 disponible, Tier 2 10 à 15 j ouvrés) ·
@@ -196,7 +196,7 @@ s'exécutent dans un **terminal**, jamais dans l'éditeur SQL.
 **Edge Functions** (`supabase/functions/*`) : déployer avec
 `.\deploy-function.ps1 <nom>` (ou `-All`). Fonctions : `extract-client`,
 `extract-contact`, `analyze-email`, `ai-calculator`, `devis-assistant`,
-`send-devis-email`, `odoo-prix`, `gemini`, `agent-mail-depot`, `odoo-achat`, `odoo-devis-mails`, `odoo-ventes`.
+`send-devis-email`, `odoo-prix`, `gemini`, `agent-mail-depot`, `odoo-achat`, `odoo-devis-mails`, `odoo-devis-pdf`, `odoo-ventes`.
 
 **Diagnostic « ça ne persiste pas »** : les `updateXxx` écrivent en
 fire-and-forget. Un upsert qui envoie une colonne inexistante reçoit un 400 et

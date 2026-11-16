@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, AlertTriangle, Paperclip, File as FileIcon, FileImage, FileSpreadsheet, ExternalLink, Eye, Copy, Check, Image as ImageIcon, Globe, Layers, BellRing, Save, Trash2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { coutChantier } from '@/lib/odooSync';
-import { type Devis, type Client, type Produit, dbToProduitPublic, calculerTotalDevis, formatMontant, formatDate, formatDateISO, useDevisMessageTemplates } from '@/lib/store';
+import { type Devis, type DevisOdooLie, type Client, type Produit, dbToProduitPublic, calculerTotalDevis, formatMontant, formatDate, formatDateISO, useDevisMessageTemplates } from '@/lib/store';
 import {
   type ChampsRelance, type ModeleRelance, MODELES_RELANCE_BASE, LIBELLE_CHAMPS,
   champsRelance, modeleParDefaut, relanceProposee, remplirModele, versModele,
@@ -23,6 +23,10 @@ import { noteDelaisTeintes } from '@/lib/referenceTeinte';
 import { citationHtml, entetesReponse, mailOrigineDuDevis, objetReponse, type MailOrigine } from '@/lib/mailOrigine';
 import { useMailsTypes, avecEmplacementDelai, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteDuMail, estHtmlMail, placerDansHtml, placerDansTexte, type ImageMail } from '@/lib/mailsTypes';
 import EditeurMail from '@/components/EditeurMail';
+import {
+  avecNumeroOdoo, choisirPdfLocal, controlerMontants, lirePdfOdoo, nomPdfOdoo, normaliserNumeroOdoo,
+  octetsEnBase64, pagesDuPdf, recupererDevisOdoo,
+} from '@/lib/devisOdooEnvoi';
 
 /* Nom de la pastille « tout cocher » par destination. « Documents de la
    famille » : ceux attachés à la CATÉGORIE de l'article — homologation, fiche
@@ -393,6 +397,8 @@ interface Props {
    */
   relance?: boolean;
   onSent: (dateEnvoi: string, prochaineRelance?: string) => void;
+  /** Le devis Odoo retrouvé ou saisi dans ce dialogue, à retenir sur le devis. */
+  onOdooLie?: (lien: DevisOdooLie) => void;
   pdfContainerRef?: React.RefObject<HTMLDivElement | null>;
   previewOptions: PreviewOptions;
   onPreviewOptionsChange: (opts: PreviewOptions) => void;
@@ -469,7 +475,7 @@ function ChoixMailTypeRelance({ modeleId, corps, champs, onChoisir }: {
   );
 }
 
-export default function DevisEmailDialog({ open, onOpenChange, devis, client, produits = [], relance = false, onSent, pdfContainerRef, previewOptions, onPreviewOptionsChange }: Props) {
+export default function DevisEmailDialog({ open, onOpenChange, devis, client, produits = [], relance = false, onSent, onOdooLie, pdfContainerRef, previewOptions, onPreviewOptionsChange }: Props) {
   const identite = useIdentiteDocument(devis);
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
@@ -516,6 +522,111 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   const [includeMoPdf, setIncludeMoPdf] = useState(true);
   const moPdfName = devis ? `Mise_en_oeuvre_${devis.numero}.pdf` : 'Mise_en_oeuvre.pdf';
   const hasMoPj = pjFichiers.some(f => /mise.?en.?(o|œ)?euvre|mise_en_oeuvre/i.test(f.fichierNom));
+
+  /* ── Le devis Odoo : numéro cité dans le mail, PDF joint, montants comparés ──
+     (`devisOdooEnvoi.ts`). `odooNumero` = la saisie ; `odooConfirme` = le
+     numéro qu'Odoo (ou le PDF choisi) a confirmé, seul accolé à l'objet et
+     au texte. */
+  const [odooNumero, setOdooNumero] = useState('');
+  const [odooConfirme, setOdooConfirme] = useState('');
+  const [odooEtat, setOdooEtat] = useState<'aucun' | 'chargement' | 'ok' | 'introuvable' | 'erreur'>('aucun');
+  const [odooMessage, setOdooMessage] = useState('');
+  const [odooMontantFiche, setOdooMontantFiche] = useState<number | undefined>();
+  const [odooPdf, setOdooPdf] = useState<{ base64: string; nom: string; montant?: number; source: 'odoo' | 'fichier' } | null>(null);
+  const [includeOdooPdf, setIncludeOdooPdf] = useState(true);
+  /** Change à chaque objet / texte posé par le mail type : le numéro Odoo s'y réapplique. */
+  const [gabarit, setGabarit] = useState(0);
+  const odooAppel = useRef(0);
+  const montantCrmHT = devis ? calculerTotalDevis(devis.lignes, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20).totalHT : 0;
+  const controleOdoo = controlerMontants(montantCrmHT, odooMontantFiche, odooPdf?.montant);
+
+  /** Interroge Odoo (id, numéro AF… ou numéro du CRM) et rapatrie son PDF. */
+  async function chargerDevisOdoo(cle: { id?: number; numero?: string; origine?: string }, silencieux = false) {
+    if (!devis) return;
+    const appel = ++odooAppel.current;
+    setOdooEtat('chargement');
+    setOdooMessage('');
+    try {
+      const r = await recupererDevisOdoo(cle);
+      if (appel !== odooAppel.current) return;
+      if (!r) {
+        setOdooEtat(silencieux ? 'aucun' : 'introuvable');
+        if (!silencieux) setOdooMessage(`${cle.numero || 'Ce devis'} est introuvable dans Odoo.`);
+        return;
+      }
+      setOdooNumero(r.numero);
+      setOdooConfirme(r.numero);
+      setOdooMontantFiche(r.montantHT);
+      setOdooEtat('ok');
+      if (r.pdfBase64) {
+        let montant: number | undefined;
+        try { montant = lirePdfOdoo(await pagesDuPdf(r.pdfBase64)).totalHT; } catch { /* PDF illisible : la fiche reste comparée */ }
+        if (appel !== odooAppel.current) return;
+        setOdooPdf({ base64: r.pdfBase64, nom: nomPdfOdoo(r.numero, client?.societe || client?.nom), montant, source: 'odoo' });
+        setIncludeOdooPdf(true);
+      } else {
+        setOdooPdf(null);
+        setOdooMessage(`PDF non récupéré d'Odoo${r.erreurPdf ? ` (${r.erreurPdf})` : ''} — choisissez-le dans vos Téléchargements.`);
+      }
+      if (devis.odoo?.numero !== r.numero || devis.odoo?.montantHT !== r.montantHT) {
+        onOdooLie?.({ numero: r.numero, id: r.id, montantHT: r.montantHT, le: new Date().toISOString() });
+      }
+    } catch (e) {
+      if (appel !== odooAppel.current) return;
+      setOdooEtat(silencieux ? 'aucun' : 'erreur');
+      if (!silencieux) setOdooMessage(`Odoo n'a pas répondu (${(e as Error).message}). Choisissez le PDF dans vos Téléchargements.`);
+    }
+  }
+
+  /** Le PDF Odoo choisi à la main (Téléchargements) : numéro et montant relus. */
+  async function choisirPdfOdoo() {
+    const f = await choisirPdfLocal();
+    if (!f) return;
+    try {
+      const octets = new Uint8Array(await f.arrayBuffer());
+      const base64 = octetsEnBase64(octets);
+      const lu = lirePdfOdoo(await pagesDuPdf(base64));
+      const attendu = normaliserNumeroOdoo(odooNumero);
+      if (attendu && lu.numero && lu.numero !== attendu
+        && !window.confirm(`Ce PDF est le devis ${lu.numero}, pas ${attendu}. Le joindre quand même ?`)) return;
+      const numero = attendu || lu.numero || '';
+      if (numero) { setOdooNumero(numero); setOdooConfirme(numero); }
+      setOdooPdf({ base64, nom: numero ? nomPdfOdoo(numero, client?.societe || client?.nom) : f.name, montant: lu.totalHT, source: 'fichier' });
+      setIncludeOdooPdf(true);
+      setOdooMessage(lu.totalHT === undefined ? 'Montant HT illisible dans ce PDF : vérifiez-le à l’œil.' : '');
+      /* La fiche Odoo, sans son PDF, pour comparer aussi son montant. */
+      if (numero && odooEtat !== 'ok') {
+        recupererDevisOdoo({ numero, sansPdf: true }).then(r => {
+          if (!r) return;
+          setOdooMontantFiche(r.montantHT);
+          setOdooEtat('ok');
+          if (devis && devis.odoo?.numero !== r.numero) onOdooLie?.({ numero: r.numero, id: r.id, montantHT: r.montantHT, le: new Date().toISOString() });
+        }).catch(() => { /* Odoo muet : le montant du PDF suffit à comparer */ });
+      }
+    } catch (e) {
+      toast.error(`PDF illisible : ${(e as Error).message}`);
+    }
+  }
+
+  // À l'ouverture : le devis Odoo retenu, sinon celui dont l'origine est ce devis.
+  useEffect(() => {
+    odooAppel.current++;
+    setOdooPdf(null); setOdooMontantFiche(undefined); setOdooMessage('');
+    setOdooConfirme(''); setOdooEtat('aucun');
+    setOdooNumero(devis?.odoo?.numero || '');
+    if (!devis || !open) return;
+    if (devis.odoo?.numero) void chargerDevisOdoo(devis.odoo.id ? { id: devis.odoo.id } : { numero: devis.odoo.numero });
+    else void chargerDevisOdoo({ origine: devis.numero }, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [devis?.id, open]);
+
+  // Le numéro Odoo confirmé s'accole à celui du CRM dans l'objet et le texte.
+  useEffect(() => {
+    if (!devis || !odooConfirme) return;
+    setSubject(s => avecNumeroOdoo(s, devis.numero, odooConfirme));
+    setBody(b => avecNumeroOdoo(b, devis.numero, odooConfirme));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [odooConfirme, gabarit]);
 
   // Quand les options d'affichage changent → invalider le PDF et régénérer après rendu DOM
   function handleOptionChange(opts: PreviewOptions) {
@@ -615,6 +726,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     } else
     // Corps textarea : texte pur, sans section fiches (les liens sont injectés en HTML dans le .eml)
     setBody(remplirMail(avecEmplacementDelai(mailType.corps), valeursMail));
+    setGabarit(g => g + 1);
 
     if (pdfContainerRef?.current) {
       setPdfReady(false);
@@ -859,6 +971,18 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     // PDF Mise en œuvre généré à la volée (si pas déjà présent en pièce jointe)
     if (!hasMoPj && includeMoPdf && moPdfBase64Ref.current) {
       extraAttachments.push({ filename: moPdfName, content: moPdfBase64Ref.current });
+    }
+
+    // PDF du devis Odoo — montants HT contrôlés avant de partir
+    if (odooPdf && includeOdooPdf) {
+      if (!controleOdoo.ok && !window.confirm(
+        `Les montants HT ne sont pas vérifiés identiques :\n\nCRM : ${formatMontant(montantCrmHT)}\n`
+        + (controleOdoo.lignes.length
+          ? controleOdoo.lignes.map(l => `${l.source === 'odoo' ? 'Fiche Odoo' : 'PDF Odoo'} : ${formatMontant(l.montant)}`).join('\n')
+          : 'Odoo : montant inconnu')
+        + '\n\nJoindre quand même le PDF Odoo ?',
+      )) { setSending(false); return; }
+      extraAttachments.push({ filename: odooPdf.nom, content: odooPdf.base64, mime: 'application/pdf' });
     }
 
     // 3. Générer le .eml avec PDF + PJs et l'ouvrir dans Outlook
@@ -1121,6 +1245,71 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
               </div>
             </div>
           )}
+
+          {/* ── Devis Odoo : numéro cité, PDF joint, montants HT comparés ── */}
+          <div className="rounded-md border px-3 py-2 space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Label className="shrink-0">Devis Odoo</Label>
+              <Input
+                value={odooNumero}
+                onChange={e => setOdooNumero(e.target.value.toUpperCase())}
+                onKeyDown={e => {
+                  if (e.key !== 'Enter') return;
+                  e.preventDefault();
+                  const n = normaliserNumeroOdoo(odooNumero);
+                  if (n) void chargerDevisOdoo({ numero: n });
+                }}
+                placeholder="AF042095"
+                className="h-8 w-32 text-sm font-mono"
+              />
+              <Button type="button" size="sm" variant="outline" className="h-8"
+                disabled={!normaliserNumeroOdoo(odooNumero) || odooEtat === 'chargement'}
+                onClick={() => void chargerDevisOdoo({ numero: normaliserNumeroOdoo(odooNumero) })}>
+                {odooEtat === 'chargement' ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Globe className="w-3.5 h-3.5 mr-1.5" />}
+                Récupérer d'Odoo
+              </Button>
+              <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => void choisirPdfOdoo()}
+                title="Choisir le PDF du devis Odoo (dossier Téléchargements)">
+                <FolderOpen className="w-3.5 h-3.5 mr-1.5" /> PDF téléchargé…
+              </Button>
+              {odooConfirme && (
+                <span className="text-xs text-muted-foreground">Cité dans le mail : {devis?.numero} / {odooConfirme}</span>
+              )}
+            </div>
+            {odooPdf && (
+              <label className="flex items-center gap-2 cursor-pointer rounded-md px-2 py-1.5 hover:bg-muted/50 transition-colors">
+                <input type="checkbox" className="rounded" checked={includeOdooPdf} onChange={e => setIncludeOdooPdf(e.target.checked)} />
+                <FileText className="w-4 h-4 text-red-500 shrink-0" />
+                <span className="text-sm flex-1 truncate">{odooPdf.nom} <span className="text-xs text-muted-foreground">({odooPdf.source === 'odoo' ? 'PDF Odoo' : 'fichier choisi'})</span></span>
+                <button type="button" title="Aperçu" className="shrink-0 text-muted-foreground hover:text-primary"
+                  onClick={e => {
+                    e.preventDefault();
+                    const octets = Uint8Array.from(atob(odooPdf.base64), c => c.charCodeAt(0));
+                    const url = URL.createObjectURL(new Blob([octets], { type: 'application/pdf' }));
+                    window.open(url, '_blank', 'noopener');
+                    setTimeout(() => URL.revokeObjectURL(url), 60000);
+                  }}>
+                  <Eye className="w-4 h-4" />
+                </button>
+              </label>
+            )}
+            {(odooPdf || odooMontantFiche !== undefined) && (
+              <div className={`flex items-start gap-2 text-xs rounded px-2 py-1.5 ${controleOdoo.ok ? 'bg-green-50 text-green-800 dark:bg-green-900/20 dark:text-green-300' : 'bg-amber-50 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300'}`}>
+                {controleOdoo.ok ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                <span>
+                  Montant HT CRM {formatMontant(montantCrmHT)}
+                  {controleOdoo.lignes.map(l => (
+                    <span key={l.source}> · {l.source === 'odoo' ? 'fiche Odoo' : 'PDF Odoo'} {formatMontant(l.montant)}{Math.abs(l.ecart) > 0.01 ? ` (écart ${l.ecart > 0 ? '+' : ''}${formatMontant(l.ecart)})` : ''}</span>
+                  ))}
+                  {controleOdoo.ok ? ' — identiques.' : controleOdoo.lignes.length ? ' — ÉCART : vérifiez avant d’envoyer.' : ' — montant Odoo illisible : à vérifier.'}
+                </span>
+              </div>
+            )}
+            {odooMessage && <p className="text-xs text-amber-700 dark:text-amber-400">{odooMessage}</p>}
+            {!odooPdf && !odooMessage && odooEtat === 'aucun' && (
+              <p className="text-xs text-muted-foreground">Aucun devis Odoo rattaché : saisissez son numéro, ou choisissez son PDF téléchargé.</p>
+            )}
+          </div>
 
           {/* ── PDF Mise en œuvre généré (si présent dans le devis et pas déjà joint) ── */}
           {!hasMoPj && devis?.moContent?.trim() && (

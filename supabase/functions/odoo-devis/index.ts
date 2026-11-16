@@ -574,6 +574,7 @@ serve(async (req) => {
 
   try {
     const entree = await req.json();
+
     const payload = entree?.payload as Payload;
     const dryRun = !!entree?.dryRun;
     const partnerId = entree?.partnerId ? Number(entree.partnerId) : null;
@@ -956,6 +957,9 @@ serve(async (req) => {
     if (cid) vals.company_id = cid;
     if (payload.validity) vals.validity_date = payload.validity;
     if (refVersClient) vals.client_order_ref = refVersClient;
+    /* Le numéro du CRM en « Document d'origine » : le mail d'envoi retrouve
+       ainsi le devis Odoo même si le lien n'a pas été enregistré. */
+    if (payload.numero) vals.origin = payload.numero;
 
     const orderId = await o.kw("sale.order", "create", [vals], { context: ctx }) as number;
 

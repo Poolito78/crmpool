@@ -946,6 +946,18 @@ export interface RelanceDevis {
   note?: string;
 }
 
+/** Le devis Odoo rattaché à un devis du CRM. */
+export interface DevisOdooLie {
+  /** Nom Odoo : « AF042095 ». */
+  numero: string;
+  /** Identifiant `sale.order`, quand on le connaît. */
+  id?: number;
+  /** Montant HT lu chez Odoo au rattachement. */
+  montantHT?: number;
+  /** Date ISO du rattachement. */
+  le?: string;
+}
+
 export interface Devis {
   id: string;
   /** Société émettrice (multi-société, migration 20261017140000). Absent = ISOSIGN. */
@@ -1020,6 +1032,11 @@ export interface Devis {
    * apprend (`correctionsDevis.ts`). Absente = devis saisi à la main.
    */
   chiffrageAnalyse?: ChiffrageAnalyse;
+  /**
+   * Le devis Odoo créé depuis celui-ci (« AF042095 ») : le mail au client
+   * cite les deux numéros et joint le PDF d'Odoo (`devisOdooEnvoi.ts`).
+   */
+  odoo?: DevisOdooLie;
   // Champs archivage
   archiveDate?: string;
   archiveRaison?: RaisonArchive;
@@ -1473,6 +1490,7 @@ function dbToDevis(r: any): Devis {
     fraisPortTVA: r.frais_port_tva != null ? Number(r.frais_port_tva) : undefined,
     fraisPortLibelle: r.frais_port_libelle || undefined,
     chiffrageAnalyse: r.chiffrage_analyse && Array.isArray(r.chiffrage_analyse.lignes) ? r.chiffrage_analyse : undefined,
+    odoo: r.odoo_devis && typeof r.odoo_devis.numero === 'string' ? r.odoo_devis : undefined,
     portAchatManuel: r.port_achat_manuel != null ? Number(r.port_achat_manuel) : undefined,
     choixTransport: r.choix_transport && typeof r.choix_transport === 'object' && Object.keys(r.choix_transport).length
       ? r.choix_transport : undefined,
@@ -1523,6 +1541,7 @@ function devisToDb(d: Devis, userId: string) {
     frais_port_tva: d.fraisPortTVA ?? 20,
     ...(d.fraisPortLibelle !== undefined ? { frais_port_libelle: d.fraisPortLibelle || null } : {}),
     ...(d.chiffrageAnalyse !== undefined ? { chiffrage_analyse: d.chiffrageAnalyse } : {}),
+    ...(d.odoo !== undefined ? { odoo_devis: d.odoo } : {}),
     ...(d.portAchatManuel !== undefined ? { port_achat_manuel: d.portAchatManuel } : {}),
     ...(d.choixTransport !== undefined ? { choix_transport: Object.keys(d.choixTransport).length ? d.choixTransport : null } : {}),
     ...(d.fraisPortAuto !== undefined ? { frais_port_auto: d.fraisPortAuto } : {}),
