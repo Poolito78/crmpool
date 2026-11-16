@@ -40,6 +40,7 @@ import NoteEditable from '@/components/NoteEditable';
 import { noteEnHtml, noteEnTexte } from '@/lib/noteRiche';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
+import PastilleOdoo from '@/components/PastilleOdoo';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
 import RelanceDevisDialogs, { DateRelanceInput, type ModeRelanceOuvert } from '@/components/RelanceDevisDialogs';
 import { estRelance, etatRelance, prochaineRelance, devisARelancer, derniereRelance, ajouterJours, RELANCE_AVANT_REALISATION_JOURS } from '@/lib/relanceDevis';
@@ -582,6 +583,8 @@ export default function Devis() {
     message?: string;
     url?: string;
     numeroOdoo?: string;
+    /** Identifiant de la commande Odoo créée (`sale.order`). */
+    orderId?: number;
     montantHT?: number;
     lignes?: number;
     erreurs?: string[];
@@ -705,7 +708,7 @@ export default function Devis() {
 
       setOdooInfo({
         numero: payload.numero, etat: 'cree', payload, script: scriptSecours,
-        url: data?.url, numeroOdoo: data?.numero, montantHT: data?.montantHT,
+        url: data?.url, numeroOdoo: data?.numero, orderId: data?.orderId ? Number(data.orderId) : undefined, montantHT: data?.montantHT,
         lignes: data?.lignes, erreurs: data?.erreurs || [],
         negoce: data?.rapport?.negoce || [],
         aRattacher: data?.rapport?.aRattacher || [],
@@ -2995,6 +2998,40 @@ export default function Devis() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialogOpen, dialogTab, systeme]);
 
+  /**
+   * Ouvre le mail d'envoi du devis ouvert, tel qu'à l'écran (enregistré
+   * d'abord). `odoo` : le devis Odoo à citer et joindre — celui qu'on vient
+   * de créer, sinon celui déjà retenu sur le devis.
+   */
+  const ouvrirMailDuFormulaire = (odoo?: DevisOdooLie) => {
+    if (!editingId) return;
+    save(true);
+    const existing = devis.find(d => d.id === editingId);
+    const lien = odoo ?? existing?.odoo;
+    setEmailDevis({
+      id: editingId, numero: existing?.numero || editingId,
+      clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined,
+      dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier,
+      systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
+      surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined, uniteSurface,
+      ...(lien ? { odoo: lien } : {}),
+    });
+  };
+
+  /**
+   * LE DEVIS ODOO À PEINE CRÉÉ PART AU CLIENT D'UN CLIC : mail préparé avec
+   * « DEV-… / AF… », PDF Odoo joint, montants comparés (`DevisEmailDialog`).
+   * Devis ouvert : tel qu'à l'écran ; depuis la liste : tel qu'enregistré.
+   */
+  const envoyerApresOdoo = (numeroCrm: string, lien: DevisOdooLie) => {
+    setOdooInfo(null);
+    const ouvert = editingId ? devis.find(d => d.id === editingId) : undefined;
+    if (ouvert && ouvert.numero === numeroCrm) { ouvrirMailDuFormulaire(lien); return; }
+    const enregistre = devis.find(d => d.numero === numeroCrm);
+    if (!enregistre) { toast.error(`Devis ${numeroCrm} introuvable`); return; }
+    setEmailDevis({ ...enregistre, odoo: lien });
+  };
+
   // Auto-save en temps réel pour les devis en édition
   const autoSaveRef = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
@@ -3686,6 +3723,7 @@ export default function Devis() {
                         <td style={ws} className={`px-3 py-2.5${trunc}`}>
                           <div className="flex items-center gap-1.5 min-w-0">
                             <p className="font-semibold text-sm truncate">{d.statut === 'système' ? 'SYS - ' + (d.systeme || d.referenceAffaire || d.numero) : d.numero}</p>
+                            <PastilleOdoo devis={d} />
                             <DocumentsDevis fichiers={fichiersParDevis.get(d.id)} compact />
                           </div>
                         </td>
@@ -3860,6 +3898,7 @@ export default function Devis() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-heading font-semibold">{d.statut === 'système' ? 'SYS - ' + (d.systeme || d.referenceAffaire || d.numero) : d.numero}</p>
+                    <PastilleOdoo devis={d} />
                     {visDevisTableCols.has('refAffaire') && d.referenceAffaire && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-accent text-accent-foreground font-medium">
                         {d.referenceAffaire}
@@ -4148,18 +4187,7 @@ export default function Devis() {
                       <Eye className="w-4 h-4 mr-2 text-muted-foreground" /> Aperçu
                     </DropdownMenuItem>
                     {editingId && (
-                      <DropdownMenuItem onClick={() => {
-                        save(true);
-                        const existing = devis.find(d => d.id === editingId);
-                        const current: DevisType = {
-                          id: editingId, numero: existing?.numero || editingId,
-                          clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined,
-                          dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier,
-                          systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
-                          surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined, uniteSurface,
-                        };
-                        setEmailDevis(current);
-                      }}>
+                      <DropdownMenuItem onClick={() => ouvrirMailDuFormulaire()}>
                         <Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Envoyer par mail
                       </DropdownMenuItem>
                     )}
@@ -6547,11 +6575,38 @@ ${dosage.source}` : ''}`}>
                   <strong>{odooInfo.lignes}</strong> ligne(s) ·{' '}
                   <strong>{formatMontant(odooInfo.montantHT || 0)} HT</strong> · brouillon.
                 </p>
-                {odooInfo.url && (
-                  <a href={odooInfo.url} target="_blank" rel="noopener noreferrer"
-                     className="inline-flex items-center gap-1.5 text-primary hover:underline">
-                    <ExternalLink className="w-3.5 h-3.5" /> Ouvrir le devis dans Odoo
-                  </a>
+                {/* Le montant d'Odoo face à celui du CRM, dès la création. */}
+                {(() => {
+                  const d = devis.find(x => x.numero === odooInfo.numero);
+                  if (!d || odooInfo.montantHT === undefined) return null;
+                  const crm = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20).totalHT;
+                  const ecart = Math.round((odooInfo.montantHT - crm) * 100) / 100;
+                  return Math.abs(ecart) <= 0.01
+                    ? <p className="text-xs text-green-700 dark:text-green-400">Identique au devis {d.numero} ({formatMontant(crm)} HT).</p>
+                    : <p className="text-xs text-warning">Écart avec le devis {d.numero} : CRM {formatMontant(crm)} HT, Odoo {formatMontant(odooInfo.montantHT)} HT ({ecart > 0 ? '+' : ''}{formatMontant(ecart)}). Vérifiez dans Odoo avant d’envoyer.</p>;
+                })()}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {odooInfo.numeroOdoo && (
+                    <Button size="sm" onClick={() => envoyerApresOdoo(odooInfo.numero, {
+                      numero: odooInfo.numeroOdoo!,
+                      ...(odooInfo.orderId ? { id: odooInfo.orderId } : {}),
+                      ...(odooInfo.montantHT !== undefined ? { montantHT: odooInfo.montantHT } : {}),
+                      le: new Date().toISOString(),
+                    })}>
+                      <Mail className="w-4 h-4 mr-1.5" /> Envoyer au client
+                    </Button>
+                  )}
+                  {odooInfo.url && (
+                    <a href={odooInfo.url} target="_blank" rel="noopener noreferrer"
+                       className="inline-flex items-center gap-1.5 text-primary hover:underline">
+                      <ExternalLink className="w-3.5 h-3.5" /> Ouvrir le devis dans Odoo
+                    </a>
+                  )}
+                </div>
+                {odooInfo.numeroOdoo && (
+                  <p className="text-xs text-muted-foreground">
+                    Le mail cite « {odooInfo.numero} / {odooInfo.numeroOdoo} » et joint le PDF d'Odoo à côté de celui du CRM.
+                  </p>
                 )}
               </>
             )}
