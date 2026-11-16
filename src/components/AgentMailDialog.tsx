@@ -1203,7 +1203,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
                   ))}
                   {(m.source === 'outlook' || m.source === 'transfert' || m.duDossier) && (
                     <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={occupe} onClick={() => ranger(m)}
-                      title={m.source === 'outlook' ? 'Marquer comme lu dans Outlook' : m.source === 'transfert' ? 'Classer comme traité (sur tous les appareils)' : 'Ranger dans le sous-dossier « Traites »'}>
+                      title={m.source === 'outlook' ? 'Marquer comme lu dans Outlook' : m.source === 'transfert' ? 'Classer comme traité (sur tous les appareils)' : 'Ranger dans le sous-dossier « Traites » et archiver le mail dans Outlook'}>
                       {m.source === 'outlook' ? <><Check className="w-3.5 h-3.5 mr-1" />Marquer lu</> : <><Archive className="w-3.5 h-3.5 mr-1" />Ranger (traité)</>}
                     </Button>
                   )}
