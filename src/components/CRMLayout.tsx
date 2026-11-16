@@ -149,6 +149,7 @@ const NAV: NavEntry[] = [
   },
   { type: 'link',  label: 'Stock',            icon: BarChart3,       path: '/stock' },
   { type: 'link',  label: 'Calcul Transport', icon: Calculator,      path: '/calculateur-ups' },
+  { type: 'link',  label: 'Surface Pochoirs', icon: Ruler,           path: '/surface-pochoirs' },
   { type: 'link',  label: 'Tarif en ligne',   icon: Tag,             path: '/tarif' },
   {
     type: 'group', label: 'Paramètres', icon: Settings,

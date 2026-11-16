@@ -67,6 +67,7 @@ export const PAGES_VOCALES: PageVocale[] = [
   { path: '/factures-fournisseur', label: 'Factures Fourn.', noms: ['factures fournisseurs'] },
   { path: '/stock', label: 'Stock', noms: ['stock', 'stocks'] },
   { path: '/calculateur-ups', label: 'Calcul Transport', noms: ['transport', 'calcul transport', 'calculateur'] },
+  { path: '/surface-pochoirs', label: 'Surface Pochoirs', noms: ['pochoirs', 'surface pochoirs', 'calcul surface'] },
   { path: '/parametres', label: 'Paramètres', noms: ['parametres', 'reglages'] },
   { path: '/parametres?tab=mails', label: 'Paramètres · Mails', noms: ['mails types', 'parametres mails'] },
   { path: '/ged', label: 'Historique GED', noms: ['ged', 'historique ged'] },
