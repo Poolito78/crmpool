@@ -552,6 +552,12 @@ l'historique : écrit par un enregistrement silencieux (`save(true)`).
   barème du jour → 0 €) et l'enregistrement automatique l'écrivait — 178 €
   perdus sans rien toucher (remis en base le 22/10). Le calcul reprend dès
   que lignes, transporteur, express ou case « auto » changent.
+- ⚠️ **19 devis re-tarifés silencieusement** (16/11, DEV-2026-004 à 130) :
+  la synchro prix d'octobre avait réappliqué les tarifs sans entrée à
+  l'historique (`save(true)`). Restaurés au prix de leur dernier
+  enregistrement en base (seul le prix unitaire ; quantités, remises et
+  textes intacts). DEV-2026-135 non touché : sa ligne KIT FLOWFAST 319
+  ROAD est à 0 € (fiche article vidée depuis le 11/10 — à clarifier).
 
 ## Envoi Odoo : contact et chantier (15 oct.)
 
@@ -738,6 +744,10 @@ traiter`, index `entryids.txt` (ANSI) pour « Ouvrir dans Outlook ».
   + preuve chantier/réf./articles) → section repliée « Déjà réalisés dans
   Odoo » ; `possible` (sans preuve) → bandeau « C'est lui » / « Non ». Jamais
   classé sans preuve. Pas encore vu tourner sur données réelles.
+- **Numéros Odoo cliquables** (v2, déployée 16/11) : **AF + 6 chiffres**
+  (devis/commande client) et **P + 5 chiffres** (commande achat) reconnus
+  dans le sujet et le texte du mail ; chaque numéro devient un bouton qui
+  ouvre la fiche Odoo dans un nouvel onglet. « P50 »/« P25 » non reconnus.
 - Tri IA : no-reply hors modèle, plus récents d'abord, pause 15 min après 2
   échecs (quota Gemini gratuit = 20 requêtes, qui menace aussi l'analyse de
   documents). Tri gardé en localStorage. Repli par catégorie (bouton −/+ et
@@ -812,6 +822,209 @@ Premier passage réussi le 11/11 (3 sessions).
   `vercel.json` ne réécrit plus `/assets/*` (404 franc) et sert `index.html`
   et `sw.js` en `no-cache`.
 
+## Onglets de navigation (16 nov.)
+
+`onglets.ts`, `useOnglets.ts`, `PageOnglet.tsx`, `BarreOnglets.tsx` : barre
+d'onglets au-dessus du titre, comme Chrome. Ctrl+clic ou clic molette sur une
+entrée du menu ouvre un onglet. Clic simple : bascule sur l'onglet déjà ouvert,
+sinon change de page dans l'onglet courant. Max 10. Fermer : croix ou clic
+molette (confirmation si un dialogue est ouvert). Un onglet Devis s'intitule
+« Devis · DEV-2026-… ». Restaurés au rechargement (position non restaurée).
+⚠️ **Le bouton « Précédent » du navigateur ne connaît qu'un seul historique** pour
+tous les onglets. ⚠️ La barre est masquée sur mobile.
+
+## Fiche produit depuis une ligne libre de devis (11 nov.)
+
+`ficheDepuisLigne.ts` + bouton (icône 📄+) dans `Devis.tsx` + ouverture dans
+`Produits.tsx` : sur une ligne qui a une désignation mais pas d'article, le
+bouton ouvre « Nouveau produit » pré-rempli (désignation, unité, TVA, prix
+d'achat, référence Odoo proposée comme code). URL existante
+`/produits?highlight=…&returnDevis=…` + `?editDevis=` au retour. La ligne
+garde son prix ; une ligne à 0 € prend le prix de la fiche. Si l'on ferme la
+fiche sans l'enregistrer, rien n'est relié.
+
+## Import fournisseur depuis Odoo dans la fiche article (11 nov.)
+
+`fournisseurOdoo.ts` : module partagé par l'onglet Fournisseurs de la fiche
+article et l'analyse de documents. Bouton « Chercher dans Odoo » à côté du
+champ Société ; résultats avec CP, ville, courriel, téléphone. Clic : fournisseur
+créé s'il est absent (même courriel ou même raison sociale = réutilisé). Référence
+Odoo dans les notes (« partenaire #… »). La recherche passe par `odoo-prix`,
+déjà déployée. ⚠️ Un contact rattaché → la société mère est retenue.
+
+## Options avec variantes dans la fenêtre des options (16 nov.)
+
+`OptionsArticleDialog.tsx` : quand on coche une option dont l'article a des
+variantes (ex. PIGMENTKG / Teinte), un sélecteur apparaît. Sans teinte choisie :
+« à choisir » en orange. La teinte choisie va sur la ligne insérée et sur ses
+composants (`variantesCompo`) ; elle ne se redemande pas si la ligne en a déjà
+une. ⚠️ **RAL par défaut supprimé** : l'appli ne pose plus le RAL 1000 d'office
+à la saisie d'un PIGMENT.
+
+## Désignation de la ligne : variante et intitulé mémorisé (16 nov.)
+
+`Devis.tsx` / `intituleCompo` : la ligne mémorise son dernier intitulé posé
+automatiquement (`intituleRef`). Tant que la désignation n'a pas été retouchée
+à la main, elle suit la fiche y compris lors du renommage d'une variante.
+L'intitulé **exclut** les composants imprimés en sous-ligne avec leur RAL
+(pigments) ; s'ils sont masqués (œil fermé), leur mention revient. Nom de
+variante vide : la fenêtre de choix affiche ses composants à la place.
+⚠️ Une désignation saisie ou retouchée à la main n'est **jamais** modifiée.
+
+## Plans image — carnets de signalisation (16 nov.)
+
+`planImage.ts` : quand le cartouche annonce une surface totale mais qu'aucun
+panneau n'est lisible en texte (images collées), la page est convertie en image
+et Gemini lit les cotes. Deux contrôles sans IA : cote (largeur × hauteur =
+surface) et page (somme = surface totale du cartouche). Cote incohérente écartée ;
+page discordante signalée en orange. Lectures 2 par 2 (quota Gemini), 5 réessais,
+lien « Relire ces pages » si des pages restent non lues.
+
+Mâts bisection :
+| Mât Kadri | Mât neuf | Colliers |
+|---|---|---|
+| MD + coulisseau MC | MDREH | CO89 |
+| ME + coulisseau MC | MEREH | CO89 |
+| MF + coulisseau MC renf | MFREH | CO114 |
+| MG + coulisseau MD | MGREH | CO140 |
+| MC + coulisseau MB | MC.89 (mono) | CO89 |
+
+Ensembles dos à dos : « 0030 (avant) » + « 0030 (arrière) » = un seul ensemble,
+un mât, colliers double face (CO76DFP50). 3 rails à 600 de haut (GAR-59) =
+6 colliers CO60 (règle utilisateur). « TUB60 » → SG60 + CO60.
+
+Plan Kadri refait par ISOSIGN (version 9.6.5) :  « Nouvelles normes » au-dessus
+des panneaux comptés comme panneaux à fabriquer ; accents sur « MÂT ANCRÉ MD »
+ignorés ; cartouche avec ligne supplémentaire (numéro + nom d'ensemble).
+
+## Offre de prix Odoo comparée au CRM (16 nov.)
+
+Nouveau type de document « Offre de prix (à comparer au CRM) ». Devis Odoo en
+PDF lu sans IA : références, quantités, montants (vérifiés à la somme). Détecté
+avant un plan Kadri joint au même mail. Vue **« Par référence »** (par défaut
+au-delà de 40 lignes) : quantités et montants cumulés par article, triés par
+écart de montant. Rapport copiable. Bouton « Corriger le type » si l'IA s'est
+trompée.
+
+## Apprentissage des prix de l'offre (16 nov.)
+
+Table `memoire_prix` (RLS) : « Apprendre de ce devis » retient, **pour ce
+client**, les références substituées, les prix pratiqués et le taux PAL de
+l'offre. Priorité : prix appris > contrat Odoo > liste de prix. L'écran annonce
+« prix appris de AF… » sous la ligne. 2 centimes d'écart résiduels = arrondis
+normaux.
+
+## Paramètres → onglet Mails (16 nov.)
+
+`mailsTypes.ts` + table `mails_types` (RLS, un utilisateur = ses propres mails) :
+4 types (envoi devis, commande fournisseur, facture client, AR de commande).
+Champs `{…}` insérables au curseur, `[[ ]]` disparaît si l'un de ses champs
+est vide. Aperçu rempli.
+- **Mise en forme** : gras, italique, souligné, police (Calibri, Aptos, Arial,
+  Verdana, Tahoma, Segoe UI, Georgia, Times New Roman, Courier New), taille
+  8-24 pt, couleur 10 teintes + libre, gomme.
+- **Images** : PNG/JPEG ≤ 400 Ko, réduites à 600 px, intégrées dans le mail.
+  « Reprendre » pour réutiliser l'image d'un autre mail type.
+- **`{fiches}`** : champ qui place les liens des fiches produit à l'endroit
+  voulu (avant la signature). Mail type de devis de l'utilisateur déjà mis
+  à jour avec `{fiches}` avant la signature.
+⚠️ Sans réglage, les textes d'origine sont ceux qu'utilisait l'application.
+⚠️ Les mails types de **relance** restent dans le dialogue de relance.
+
+## Sous-totaux par groupe (16 nov.)
+
+Le sous-total de chaque groupe s'affiche sur sa ligne de titre (à droite), dans
+l'éditeur et dans le PDF. L'ancienne « ligne de sous-total » à la fin du groupe
+devient un repère de fermeture sans montant. Sur les devis de signalisation
+verticale (lignes sans m² ni ml) : seul le sous-total s'affiche, pas de coût
+chantier. La liste récapitulative des montants par ensemble en bas du devis n'est
+plus imprimée.
+
+## Coût chantier : m² ou ml (16 nov.)
+
+Boutons **m² | ml** dans l'aperçu à côté du champ Surface. Au passage en ml :
+question « Consos déjà en kg/ml ? » — « Oui, garder les valeurs » ou « Non,
+conso des fiches ». Réglage enregistré sur le devis. L'unité s'affiche sur toutes
+les lignes de coût (€/m² ou €/ml, groupes, sous-totaux).
+
+## Re-tarif depuis modèle (16 nov.)
+
+Bug corrigé : une ligne d'article reprise d'un modèle système (via « + lignes »
+ou duplication) gardait le prix public du modèle, ignorant la remise de gamme.
+Désormais toutes les lignes d'article d'un modèle passent par le calcul de tarif
+client. Défaut corrigé : en dupliquant pour un autre client, les remises du client
+ouvert étaient appliquées. Lien **« ↻ Re-tarifer les lignes »** sous « Niveau de
+tarif » (un prix modifié à la main est remplacé).
+
+## Articles supprimés — liste noire (16 nov.)
+
+Table `produits_supprimes` (migration appliquée) : suppression d'un article dans
+Produits → sa référence Odoo (ou CRM si absent) est inscrite. L'analyse de
+documents écarte ces articles de la recherche Odoo et ne peut pas les recréer.
+Un article recréé à la main avec la même référence sort de la liste.
+⚠️ Les autres recherches Odoo (devis concurrent, etc.) ne filtrent pas encore.
+
+## Synchronisation des prix entre articles jumeaux Odoo (16 nov.)
+
+Migration `20261008140000_produits_jumeaux_odoo_prix.sql` **appliquée** le 16/11 :
+deux articles à même `reference_odoo` se synchronisent les prix d'achat et de
+vente (le plus récent l'emporte). Garde-fou : écart > ×2 bloque la synchro
+(DENT466 / DENT6 : même code, conditionnements différents). Déclencheur permanent.
+Paires synchronisées : FLOWFAST319/FLOWFAST31920, FLOWFAST107/FLOWFASTPRIMER107.20,
+GRANITEGRIS58/GRANITGRIS5-8.
+
+## RAL complets sur tous les pigments (16 nov.)
+
+PIGMENTKG, PIGMENT015, PIGMENT02, PIGMENT04, PIGMENT05, PIGMENT2KG, PIGMENT10KG,
+PIGMENT25KG → 220 teintes (215 RAL Classic + teintes Quartz), posées directement
+en base. PIGMENTBLEUEAC, PIGMENTJAUNEEAC, PIGMENTVERTEAC non touchés (couleur fixe).
+
+## Contact du devis pris pour l'envoi du mail (16 nov.)
+
+`DevisEmailDialog` : destinataire, « Bonjour » et adresse e-mail suivent le
+**contact du devis**, non le contact principal de la fiche. Repli sur la fiche
+si le contact n'a pas d'adresse.
+⚠️ Le contact est lu sur le devis **enregistré** : enregistrer avant d'ouvrir
+« Envoyer ».
+
+## Timeout sur la page Produits — correctif provisoire (16 nov.)
+
+La page Produits relance sa lecture jusqu'à 3 fois (attente croissante) avant de
+renoncer. Un timeout passager ne vide plus la liste. La vraie cause (lecture
+complète du catalogue en tâche de fond au démarrage) n'est pas supprimée : si
+le bandeau orange revient, consulter la console (F12, lignes `[catalogue]`).
+
+## Prix de composant saisi à la main (16 nov.)
+
+Sur la fiche d'un article composé, le coût de chaque composant est devenu un
+champ modifiable (`prixAchatManuel`). Saisir 0 est possible. Le ✕ revient au
+calcul prix × quantité. ⚠️ La valeur est le coût total de la ligne composant,
+pas un prix unitaire : elle ne change pas si la quantité du composant change.
+
+## RAL en pastilles sur les sous-lignes (16 nov.)
+
+Le RAL d'un composant imprimé en sous-ligne (pigment) apparaît en **pastille de
+couleur** sur sa propre sous-ligne (devis et PDF). Le RAL ne se répète plus sur
+la ligne principale si ses composants l'ont déjà. Si le détail est masqué (œil
+de ligne fermé) : bandeau gris « Tout ce détail est masqué », et le RAL revient
+sur la ligne principale.
+⚠️ **Rouvrir l'œil d'un composant rouvre aussi l'œil de la ligne** : un composant
+ne peut pas s'imprimer si sa ligne est masquée.
+
+## Plusieurs systèmes proposés à l'analyse (16 nov.)
+
+`rapprochementSysteme.ts` / `nomsCandidats` : quand plusieurs systèmes répondent
+à une demande, un encadré « N systèmes possibles » s'affiche sous la ligne. Un
+clic retient le choix. Sans clic, le système le plus précis reste le défaut.
+
+## Proposition des systèmes CRM à la saisie du champ Système (16 nov.)
+
+Le champ « Système » du devis propose les systèmes (devis au statut « modèle »)
+pendant la frappe. Tab ou → accepte la suggestion. La liste sous le champ montre
+jusqu'à 6 résultats : clic sur le nom = nom seul ; clic sur **« + N lignes »** =
+nom + ajout des lignes du modèle au devis (quantités et prix recalculés à la
+surface du devis et au tarif de son client).
+
 ## Ce qui reste ouvert
 
 1. **La RÉFÉRENCE de la bride** reste à trancher. La section est désormais
@@ -839,3 +1052,6 @@ Premier passage réussi le 11/11 (3 sessions).
    (`ATTENTE_MODELE_MS`, 90 s), un budget de chaîne (`BUDGET_MS`, 170 s) et la
    durée de chaque tentative dans les journaux comme dans `essais`.
    **À déployer** : `.\deploy-function.ps1 devis-assistant`.
+5. **DEV-2026-135** : ligne « KIT FLOWFAST 319 ROAD (45,8 kg) » à 0 €. La fiche
+   FLOWFAST319R est à 0 € depuis le 11/10 (prix passé de 458,49 → 379 → 0 €).
+   À clarifier : kit chiffré par ses composants (voulu), ou prix perdu sur la fiche.
