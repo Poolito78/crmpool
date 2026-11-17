@@ -33,8 +33,9 @@ describe('Calculateur Flowfast → devis', () => {
     const r = lignesDepuisCalculateur(ROAD, CATALOGUE, null, id);
     const q = Object.fromEntries(r.lignes.filter(l => l.produitId).map(l => [l.produitId, l.quantite]));
     expect(q).toEqual({ FLOWFAST319: 9, PIGMENT2KG: 18, CATALYST2: 2, SNLR11: 18 });
-    expect(r.lignes[0].type).toBe('texte');
-    expect(r.lignes[0].description).toContain('18 sachets SNLR11');
+    // une seule ligne de texte : le détail d'un kit
+    expect(r.lignes.filter(l => l.type === 'texte').length).toBe(1);
+    expect(r.lignes[0].description.startsWith("Détail d'un kit :")).toBe(true);
     expect(r.aVerifier).toEqual([]);
     // sans client : prix public de la fiche
     expect(r.lignes.find(l => l.produitId === 'SNLR11')!.prixUnitaireHT).toBe(44.29);
@@ -46,12 +47,11 @@ describe('Calculateur Flowfast → devis', () => {
       .toEqual([['FLOWFAST319', 2]]);
   });
 
-  it('note récap : nombre de kits et détail d\'un kit (un seau de 20 kg)', () => {
+  it('note du devis : seulement le détail d\'un kit (un seau de 20 kg)', () => {
     const r = lignesDepuisCalculateur(ROAD, CATALOGUE, null, id);
-    const note = r.lignes[1];
+    const note = r.lignes[0];
     expect(note.type).toBe('texte');
     expect(note.description.split('\n')).toEqual([
-      'Récapitulatif : 9 kits — 1 kit = 1 seau de résine de 20 kg (180 kg de résine nécessaires).',
       "Détail d'un kit :",
       '• Résine 319 Flexible Seal : 20 kg (1 seau)',
       '• Pigment jaune 20 % : 4 kg à rajouter par seau (2 sachets de 2 kg)',
@@ -59,9 +59,6 @@ describe('Calculateur Flowfast → devis', () => {
       '• Charge SNLR : 23,3 kg (2 sachets SNLR11)',
       "Mélange d'un kit : 47,6 kg, soit 47,6 m² à 1 kg/m² (476 ml en bande de 10 cm).",
     ]);
-    // 178 kg de résine : le 9e seau n'est pas entier
-    const r2 = lignesDepuisCalculateur({ ...ROAD, prep: { ...ROAD.prep!, resine: 178 } }, CATALOGUE, null, id);
-    expect(r2.lignes[1].description).toContain("Le dernier seau n'est utilisé qu'à 18 kg.");
   });
 
   it('un article absent du catalogue part à vérifier, jamais deviné', () => {

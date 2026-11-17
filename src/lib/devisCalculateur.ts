@@ -159,11 +159,9 @@ export function noteRecap(
   kits: { code: string; kg: number; n: number }[],
 ): string | null {
   if (!(resine > 0)) return null;
-  const seaux = Math.max(1, Math.ceil(resine / SEAU_RESINE_KG - 1e-9));
   const parKg = (x: number) => (x > 0 ? (x / resine) * SEAU_RESINE_KG : 0);
   const pg = parKg(pigment), ct = parKg(catalyseur), ch = parKg(charge);
-  const lignes = [`Récapitulatif : ${seaux} kit${seaux > 1 ? 's' : ''} — 1 kit = 1 seau de résine de ${SEAU_RESINE_KG} kg (${kg(resine)} de résine nécessaires).`];
-  lignes.push(`Détail d'un kit :`);
+  const lignes = [`Détail d'un kit :`];
   lignes.push(`• Résine ${e.nomResine} : ${SEAU_RESINE_KG} kg (1 seau)`);
   if (pg > 0) {
     const sachets = e.talc ? null : sachetsExacts(pg);
@@ -186,8 +184,6 @@ export function noteRecap(
   const melange = SEAU_RESINE_KG + pg + ct + ch;
   lignes.push(`Mélange d'un kit : ${kg(melange)}, soit ${nf(melange / e.rate)} m² à ${nf(e.rate)} kg/m²`
     + (e.um && e.larg > 0 ? ` (${nf(melange / e.rate / (e.larg / 100))} ml en bande de ${nf(e.larg)} cm)` : '') + '.');
-  const dernier = resine - (seaux - 1) * SEAU_RESINE_KG;
-  if (seaux > 1 && dernier < SEAU_RESINE_KG - 0.01) lignes.push(`Le dernier seau n'est utilisé qu'à ${kg(dernier)}.`);
   return lignes.join('\n');
 }
 
@@ -222,22 +218,13 @@ export function lignesDepuisCalculateur(
     lignes.push({ id: genererId(), description: `${description} — à vérifier`, quantite: 1, unite: 'u', prixUnitaireHT: 0, tva: 20, remise: 0 });
   };
 
-  /* En-tête : ce que le calculateur a chiffré. */
-  const surface = e.um && e.longueur
-    ? `${nf(e.longueur)} ml en bande de ${nf(e.larg)} cm (${nf(e.area)} m²)`
-    : `${nf(e.area)} m²`;
   const systeme = `Flowfast ${e.resine}${e.charge ? ` ${e.chargeTag || e.charge}` : ''}`.trim();
-  lignes.push({
-    id: genererId(), type: 'texte', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0,
-    description: `Calculateur Flowfast — ${e.nomResine}${e.charge ? `, charge ${e.charge}` : ''} : ${surface}, `
-      + `${nf(e.rate)} kg/m², ${nf(e.temp, 0)} °C`
-      + (prep ? `. Préconisation : ${kits.map(k => `${k.n} sachet${k.n > 1 ? 's' : ''} ${k.code}`).join(' + ')}` : '')
-      + `. Mélange ${kg(prep ? prep.total : e.total)} (résine ${kg(resine)}${pigment > 0 ? `, pigment ${kg(pigment)}` : ''}, catalyseur ${kg(catalyseur)}${e.fk > 0 ? `, charge ${kg(prep ? prep.charge : e.fk)}` : ''}).`,
-  });
 
-  /* Note récap : le chantier se prépare seau par seau. Un KIT = un seau de
-     résine de 20 kg et ce qu'on lui ajoute — pigment (4 kg pour le jaune à
-     20 %), catalyseur, charge — règle du 17/11. */
+  /* Seule note du devis : le détail d'UN kit (un seau de résine de 20 kg et
+     ce qu'on lui ajoute — pigment, 4 kg pour le jaune à 20 %, catalyseur,
+     charge). L'en-tête « Calculateur Flowfast — … » et le récapitulatif du
+     nombre de kits ont été retirés (règle du 17/11) : les quantités sont
+     sur les lignes. */
   const recap = noteRecap(e, resine, pigment, catalyseur, prep ? prep.charge : e.fk, kits);
   if (recap) lignes.push({ id: genererId(), type: 'texte', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0, description: recap });
 
