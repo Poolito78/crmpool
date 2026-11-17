@@ -224,7 +224,14 @@ export function noteKits(
     const r = k.kg / cpr, pg = r * ppr, ct = r * kpr, melange = r + pg + ct + k.kg;
     const l = [`${k.n} kit${k.n > 1 ? 's' : ''} ${k.code} — détail par kit :`];
     l.push(`• Résine ${e.nomResine} : ${kg(r)}`);
-    if (pg > 0) l.push(`• ${e.talc ? 'Fintalc M15' : `Pigment${e.pigNom ? ` ${e.pigNom}` : ''}`} ${nf(e.pig)} % : ${kg(pg)} à rajouter par kit`);
+    if (pg > 0) {
+      /* Et par seau de résine : « soit 2 sachets de 2 kg par seau de résine
+         (20 kg) » pour le jaune à 20 % (règle du 17/11). */
+      const parSeau = ppr * SEAU_RESINE_KG;
+      const sachets = e.talc ? null : sachetsExacts(parSeau);
+      l.push(`• ${e.talc ? 'Fintalc M15' : `Pigment${e.pigNom ? ` ${e.pigNom}` : ''}`} ${nf(e.pig)} % : ${kg(pg)}/kit à rajouter, `
+        + `soit ${sachets ?? kg(parSeau)} par seau de résine (${SEAU_RESINE_KG} kg)`);
+    }
     if (ct > 0) l.push(`• Catalyst C2 : ${kg(ct)} par kit à ${nf(e.temp, 0)} °C`);
     l.push(`• Charge ${k.code} (${nf(k.kg, 3)} kg) : 1 sachet`);
     const m2 = melange / e.rate;

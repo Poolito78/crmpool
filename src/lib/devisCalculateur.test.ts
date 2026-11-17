@@ -54,7 +54,7 @@ describe('Calculateur Flowfast → devis', () => {
     expect(note.description.split('\n')).toEqual([
       '18 kits SNLR11 — détail par kit :',
       '• Résine 319 Flexible Seal : 10 kg',
-      '• Pigment jaune 20 % : 2 kg à rajouter par kit',
+      '• Pigment jaune 20 % : 2 kg/kit à rajouter, soit 2 sachets de 2 kg par seau de résine (20 kg)',
       '• Catalyst C2 : 150 g par kit à 20 °C',
       '• Charge SNLR11 (11,65 kg) : 1 sachet',
       "Mélange d'un kit : 23,8 kg, soit 238 ml en bande de 10 cm (23,8 m²) à 1 kg/m².",
