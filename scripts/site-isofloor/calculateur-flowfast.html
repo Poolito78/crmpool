@@ -178,6 +178,11 @@
     </div>
     <div class="sec nosep">Poids du mélange</div>
     <table style="margin-top:6px"><tbody id="compb"></tbody></table>
+    <div id="prepwrap" style="display:none">
+      <div class="sec" id="prept">Préconisation par kits</div>
+      <div class="note" id="prepn" style="margin-top:4px"></div>
+      <table style="margin-top:6px"><tbody id="prepb"></tbody></table>
+    </div>
     <div class="sec" id="areat">Surface couverte</div>
     <div class="res" style="margin-top:10px">
       <div class="big" id="area">–</div>
@@ -402,6 +407,7 @@ function render(){
   show('clrinfo', isClr && rateClr > 0.5);
   $('rclrv').textContent = fmtPct(rateClr);
   $('clrinfo').textContent = 'Au-delà de 0,5 kg/m² : appliquer en deux couches (environ '+fmt(rateClr/2,2)+' kg/m² par couche).';
+  if (!(useF && (isC || isR))) { show('prepwrap', false); }
   if (useF || noF || isRng){
     var enr = useF && cur==='208' && sup208==='enr';
     var rate = is107 ? rate107 : isClr ? rateClr : noF ? C.nofillRate : (enr ? THICK208ENR[thickE] : (C.perMm ? C.perMm*mmv : (C.thick ? C.thick[thick] : (cur === '319' && fill === 'r' ? rateR : cur === '319' && fill === 'c' ? rateC : F.rate))));
@@ -420,7 +426,7 @@ function render(){
     if (useF) cr += crow('Charge '+F.name, fmtKg(fk), 'k3');
     cr += '<tr class="tot"><td>Total mélange</td><td>'+fmtKg(total)+'</td></tr>';
     $('compb').innerHTML = cr;
-    window.__ratio = (q>0 && isFinite(area)) ? area/q : 0; if (window.__lock>0 && window.__ratio>0 && !window.__rec) { var tq=Math.round(window.__lock/window.__ratio*100)/100; if (Math.abs(tq-q)>0.005) { window.__rec=1; $('qty').value=tq; try { render(); } finally { window.__rec=0; } return; } } var sf=$('surf'); if (sf && document.activeElement!==sf && !window.__lock) sf.value = (area>0 && isFinite(area)) ? (Math.round(toU(area)*100)/100) : ''; if (window.__paint) window.__paint(); window.__kits && window.__kits(fk, isC, isR, area); $('area').innerHTML = fmt(toU(area),2)+'<span class="unit"> '+uL()+'</span>';
+    window.__ratio = (q>0 && isFinite(area)) ? area/q : 0; if (window.__lock>0 && window.__ratio>0 && !window.__rec) { var tq=Math.round(window.__lock/window.__ratio*100)/100; if (Math.abs(tq-q)>0.005) { window.__rec=1; $('qty').value=tq; try { render(); } finally { window.__rec=0; } return; } } var sf=$('surf'); if (sf && document.activeElement!==sf && !window.__lock) sf.value = (area>0 && isFinite(area)) ? (Math.round(toU(area)*100)/100) : ''; if (window.__paint) window.__paint(); window.__kits && window.__kits(fk, isC, isR, area); window.__prep && window.__prep({ q:q, fk:fk, pk:pk, ck:ck, pig:pig, usePig:usePig && !C.talc, pigNom:(pigOpt && pigOpt.n ? ' '+pigOpt.n : ''), isC:isC, isR:isR, area:area }); $('area').innerHTML = fmt(toU(area),2)+'<span class="unit"> '+uL()+'</span>';
     $('areat').textContent = UM ? 'Longueur couverte' : 'Surface couverte';
     $('areas').textContent = 'sur le poids total du mélange' + (UM ? ', soit '+fmt(area,2)+' m² en bande de '+fmtPct(LARG)+' cm' : '');
     $('rate').textContent = (noF ? '≈ ' : '')+(UM ? (rate*wM()).toLocaleString('fr-FR',{maximumFractionDigits:3})+' kg/ml' : rate.toLocaleString('fr-FR',{maximumFractionDigits:2})+' kg/m²');
@@ -543,6 +549,51 @@ $('surf').addEventListener('input',function(){ var v=fromU(parseFloat(String(thi
     rows+=crow('Reste après mélange', fmtKg(Math.max(0,r.total-pk)), 'k2');
     $('sactb').innerHTML=rows;
     $('sacsum').textContent=r.parts.map(function(p){return fw(p[0].w)+' × '+p[1]}).join(' + ')+' · '+fmtKg(r.total);
+  };
+  /* Kits retenus (combinaison ou format choisi) pour une charge donnée. */
+  function kitsRetenus(fk,isC,isR){
+    var key=isR?'r':(isC?'c':null); if(!key||!(fk>0)) return null;
+    var list=KITS[key];
+    return kitSel==='auto' ? combo(list,fk) : seul(list.filter(function(y){return y.n===kitSel})[0],fk);
+  }
+  /* La préconisation suit les KITS à réaliser : chaque kit de charge reçoit
+     sa résine (charge du kit ÷ charge par kg de résine), son pigment et son
+     catalyseur. Le pigment (et ses sachets) passe à la quantité des kits. */
+  window.__prep=function(c){
+    var res=kitsRetenus(c.fk,c.isC,c.isR);
+    if(!res||!res.parts.length||!(c.q>0)){ show('prepwrap',false); return; }
+    var cpr=c.fk/c.q, ppr=c.pk/c.q, kpr=c.ck/c.q; // par kg de résine
+    var apk=(c.fk>0 && c.area>0 && isFinite(c.area))?c.area/c.fk:0;
+    var f2=function(n){return n.toLocaleString('fr-FR',{maximumFractionDigits:2})}, u=' '+uL();
+    var nom=c.isR?'SNLR':'SNLC', nbKits=0, rows='';
+    var tot={r:0,p:0,k:0,f:0};
+    res.parts.forEach(function(pt){
+      var x=pt[0], n=pt[1], r=x.w/cpr, pg=r*ppr, ct=r*kpr, un=r+pg+ct+x.w; nbKits+=n;
+      tot.r+=n*r; tot.p+=n*pg; tot.k+=n*ct; tot.f+=n*x.w;
+      rows+='<tr class="hl"><td>'+x.n+' × '+n+'</td><td>par kit</td></tr>';
+      rows+=crow('Résine', fmtKg(r), 'ink');
+      if(c.usePig) rows+=crow('Pigment'+c.pigNom+' ('+fmtPct(c.pig)+' %)', fmtKg(pg), 'k2');
+      rows+=crow('Catalyst C2', fmtKg(ct), 'k1');
+      rows+=crow('Charge '+x.n+' ('+f3(x.w)+' kg)', fmtKg(x.w), 'k3');
+      rows+='<tr class="tot"><td>Mélange d’un kit · '+f2(toU(x.w*apk))+u+'</td><td>'+fmtKg(un)+'</td></tr>';
+    });
+    var tt=tot.r+tot.p+tot.k+tot.f;
+    rows+='<tr class="hl"><td>Total à préparer ('+nbKits+' kit'+(nbKits>1?'s':'')+')</td><td></td></tr>';
+    rows+=crow('Résine', fmtKg(tot.r), 'ink');
+    if(c.usePig) rows+=crow('Pigment'+c.pigNom+' ('+fmtPct(c.pig)+' %)', fmtKg(tot.p), 'k2');
+    rows+=crow('Catalyst C2', fmtKg(tot.k), 'k1');
+    rows+=crow('Charge '+nom, fmtKg(tot.f), 'k3');
+    rows+='<tr class="tot"><td>Total mélange · '+f2(toU(tot.f*apk))+u+'</td><td>'+fmtKg(tt)+'</td></tr>';
+    $('prepb').innerHTML=rows;
+    $('prept').textContent='Préconisation : '+res.parts.map(function(pt){return pt[1]+' × '+pt[0].n}).join(' + ');
+    $('prepn').textContent='Quantités pour des kits '+nom+' complets (choix « Kits '+nom+' disponibles » en 3) : la résine, le pigment et le catalyseur suivent la charge de chaque kit.';
+    show('prepwrap',true);
+    /* Le pigment du 1 suit les kits. */
+    if(c.usePig){
+      $('pq').textContent=fmtKg(tot.p);
+      $('pl').textContent='pigment'+c.pigNom+' ('+fmtPct(c.pig)+' % du poids de résine) pour '+nbKits+' kit'+(nbKits>1?'s':'')+' '+nom+' · besoin '+fmtKg(c.pk);
+      window.__sacs && window.__sacs(tot.p);
+    }
   };
   window.__kits=function(fk,isC,isR,area){
     var apk=(fk>0 && area>0 && isFinite(area))?area/fk:0; var f2=function(n){return n.toLocaleString('fr-FR',{maximumFractionDigits:2})};
