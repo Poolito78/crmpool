@@ -540,6 +540,8 @@ $('surf').addEventListener('input',function(){ var v=fromU(parseFloat(String(thi
     return {parts:parts,total:best.tot};
   }
   function seul(x, need){ var n=Math.max(0,Math.ceil(need/x.w-1e-9)); return {parts:n>0?[[x,n]]:[], total:n*x.w}; }
+  /* Résine : seaux de 20 kg, seul conditionnement actuel (règle du 17/11). */
+  var SEAU_RESINE=20;
   var fw=function(w){ return w<1 ? fmt(w*1000,0)+' g' : f3(w)+' kg'; };
   $('sacw').addEventListener('input',function(){ render(); });
   /* Pigment en sachets : combinaison des conditionnements, un seul format,
@@ -589,11 +591,23 @@ $('surf').addEventListener('input',function(){ var v=fromU(parseFloat(String(thi
       rows+='<tr class="tot"><td>Mélange d’un kit · '+f2(toU(x.w*apk))+u+'</td><td>'+fmtKg(un)+'</td></tr>';
     });
     var tt=tot.r+tot.p+tot.k+tot.f;
+    /* Conditionnements à commander, entre parenthèses (règle du 17/11) :
+       résine en seaux de 20 kg (seul format actuellement), pigment en
+       sachets (le 1), Catalyst au conditionnement choisi, kits de charge. */
+    if(c.usePig && window.__sacs) window.__sacs(tot.p);
+    var pl_=function(n,un,uns){ return n+' '+(n>1?uns:un); };
+    var nSeaux=Math.max(1,Math.ceil(tot.r/SEAU_RESINE-1e-9));
+    var cw=(window.__etatCalc && window.__etatCalc.catW)||2000, nCat=Math.max(1,Math.ceil(tot.k*1000/cw-1e-9));
+    var condR=' ('+pl_(nSeaux,'seau','seaux')+' de '+SEAU_RESINE+' kg)';
+    var sp=(window.__sacsParts||[]).filter(function(x){return x.n>0});
+    var condP=sp.length?' ('+sp.map(function(x){return pl_(x.n,'sachet','sachets')+' de '+fw(x.kg)}).join(' + ')+')':'';
+    var condK=' ('+(cw>=1000?pl_(nCat,'pot','pots')+' de '+fmtPct(cw/1000)+' kg':pl_(nCat,'sachet','sachets')+' de '+fmt(cw,0)+' g')+')';
+    var condF=' ('+res.parts.map(function(pt){return pt[1]+' × '+pt[0].n}).join(' + ')+')';
     rows+='<tr class="hl"><td>Total à préparer ('+nbKits+' kit'+(nbKits>1?'s':'')+')</td><td></td></tr>';
-    rows+=crow('Résine', fmtKg(tot.r), 'ink');
-    if(c.usePig) rows+=crow('Pigment'+c.pigNom+' ('+fmtPct(c.pig)+' %)', fmtKg(tot.p), 'k2');
-    rows+=crow('Catalyst C2', fmtKg(tot.k), 'k1');
-    rows+=crow('Charge '+nom, fmtKg(tot.f), 'k3');
+    rows+=crow('Résine'+condR, fmtKg(tot.r), 'ink');
+    if(c.usePig) rows+=crow('Pigment'+c.pigNom+' ('+fmtPct(c.pig)+' %)'+condP, fmtKg(tot.p), 'k2');
+    rows+=crow('Catalyst C2'+condK, fmtKg(tot.k), 'k1');
+    rows+=crow('Charge '+nom+condF, fmtKg(tot.f), 'k3');
     rows+='<tr class="tot"><td>Total mélange · '+f2(toU(tot.f*apk))+u+'</td><td>'+fmtKg(tt)+'</td></tr>';
     $('prepb').innerHTML=rows;
     $('prept').textContent='Préconisation : '+res.parts.map(function(pt){return pt[1]+' × '+pt[0].n}).join(' + ');
@@ -604,7 +618,6 @@ $('surf').addEventListener('input',function(){ var v=fromU(parseFloat(String(thi
     if(c.usePig){
       $('pq').textContent=fmtKg(tot.p);
       $('pl').textContent='pigment'+c.pigNom+' ('+fmtPct(c.pig)+' % du poids de résine) pour '+nbKits+' kit'+(nbKits>1?'s':'')+' '+nom+' · besoin '+fmtKg(c.pk);
-      window.__sacs && window.__sacs(tot.p);
     }
   };
   window.__kits=function(fk,isC,isR,area){

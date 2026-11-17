@@ -54,12 +54,13 @@ export interface EtatCalculateur {
   prep: { resine: number; pigment: number; catalyseur: number; charge: number; total: number; kits: number } | null;
 }
 
-/** Seaux de résine, du plus grand au plus petit (références du catalogue). */
+/** Seaux de résine (références du catalogue). Seul le seau de 20 kg est
+ *  proposé actuellement (règle du 17/11) : le 10 kg de 319 n'est pas retenu. */
 const RESINES: Record<string, { refs: string[]; kg: number }[]> = {
   '107': [{ refs: ['FLOWFAST107', 'FLOWFASTPRIMER107.20'], kg: 20 }],
   '208': [{ refs: ['FLOWFAST208'], kg: 20 }],
   '215': [{ refs: ['FLOWFAST215'], kg: 20 }],
-  '319u': [{ refs: ['FLOWFAST319', 'FLOWFAST31920'], kg: 20 }, { refs: ['FLOWFAST31910'], kg: 10 }],
+  '319u': [{ refs: ['FLOWFAST319', 'FLOWFAST31920'], kg: 20 }],
   '319c': [{ refs: ['FLOWFAST319C', 'FLOWFAST31920.CLEAR'], kg: 20 }],
 };
 

@@ -40,6 +40,12 @@ describe('Calculateur Flowfast → devis', () => {
     expect(r.lignes.find(l => l.produitId === 'SNLR11')!.prixUnitaireHT).toBe(44.29);
   });
 
+  it('résine 319 en seaux de 20 kg seulement, même si le 10 kg est au catalogue', () => {
+    const r = lignesDepuisCalculateur({ ...ROAD, prep: { ...ROAD.prep!, resine: 25 } }, CATALOGUE, null, id);
+    expect(r.lignes.filter(l => /^FLOWFAST319/.test(l.produitId || '')).map(l => [l.produitId, l.quantite]))
+      .toEqual([['FLOWFAST319', 2]]);
+  });
+
   it('un article absent du catalogue part à vérifier, jamais deviné', () => {
     const r = lignesDepuisCalculateur({ ...ROAD, kits: [{ code: 'SNLR2', kg: 2.91, n: 3 }] }, CATALOGUE, null, id);
     expect(r.aVerifier).toEqual(['Kit SNLR2 (2,91 kg) × 3']);
