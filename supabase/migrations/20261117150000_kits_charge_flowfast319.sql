@@ -15,6 +15,8 @@
 -- prolonge la droite des kits existants (choix de l'utilisateur, 17/11) —
 -- SNLR1 1,455 kg → 2,07 €, SNLR2 2,91 kg → 3,50 € ; SNLC1 1,26 kg → 1,90 €,
 -- SNLC2 2,52 kg → 2,80 €. Modifiable sur chaque fiche.
+-- ⚠️ REMPLACÉ par 20261117160000_kits_charge_mo_qrm.sql : la main d'œuvre
+-- suit le tarif du fabricant QRM, à confirmer par QRM.
 --
 -- Idempotente : un kit déjà présent n'est pas touché.
 
