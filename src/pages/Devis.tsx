@@ -1389,7 +1389,12 @@ export default function Devis() {
       return { ...l, quantite, prixUnitaireHT: prix, ...(suitLeChantier ? { surfaceM2: surf } : {}) };
     };
     const article = (id: string | undefined) => produitParId(produits, id);
-    let duModele = copierLignes(sysDevis.lignes, generateId).map(applySurface);
+    /* La remise du MODÈLE tombe sur une ligne re-tarifée : le prix du client est déjà
+       net (voir `insererLignesSysteme`). Une remise dictée, elle, reste. */
+    let duModele = copierLignes(sysDevis.lignes, generateId).map(l => {
+      const r = applySurface(l);
+      return r !== l ? { ...r, remise: 0 } : r;
+    });
     /* « Qté chantier » : les couches d'un même article s'arrondissent une fois
        au conditionnement (0,4 + 0,6 kg/m² de SF41 Blank = 46 kits, pas 19 + 28). */
     const chantier = unite === 'm2' ? quantitesChantier(duModele, surf, id => article(id)?.poids) : new Map<string, number>();
@@ -1453,16 +1458,21 @@ export default function Devis() {
     const surf = surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : (sys.surfaceGlobaleM2 || 0);
     // La surface du devis garde son unité ; reprise du modèle, elle prend la sienne.
     const unite: UniteSurface = surfaceGlobaleM2 > 0 ? uniteSurface : (sys.uniteSurface ?? 'm2');
+    let auPrixClient = 0;
     const nouvelles = copierLignes(sys.lignes, generateId).map(l => {
       if (l.type && l.type !== 'ligne') return l;
       const prod = l.produitId ? produitParId(produits, l.produitId) : null;
       if (!prod) return l;
       /* Toute ligne d'article prend le tarif du client du devis, pas le prix (public) du
-         modèle : seules les lignes chiffrées à la surface étaient re-tarifées. */
+         modèle : seules les lignes chiffrées à la surface étaient re-tarifées. Le prix
+         spécifique du client (fiche client → Tarifs) passe avant tout (`prixDeBase`).
+         ⚠️ La REMISE du modèle tombe : le prix du client est déjà net, la garder
+         l'appliquait deux fois (SYS Flowfast 215 2mm Quartz collor, 4 lignes remisées). */
       const quantite = surf > 0 && uniteDeLigne(l, sys.uniteSurface) === unite && consoPourSurface(prod, consoDeLigne(l, unite), unite) != null
         ? calcQuantiteSurface(prod, surf, consoDeLigne(l, unite), undefined, unite)
         : l.quantite;
-      return { ...l, quantite, prixUnitaireHT: getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) };
+      if (clientId && prixClientDeProduit(clientId, prod)) auPrixClient++;
+      return { ...l, quantite, remise: 0, prixUnitaireHT: getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) };
     });
     saveSnapshot();
     if (surf > 0 && !(surfaceGlobaleM2 > 0)) { setSurfaceGlobaleM2(surf); prevUniteSurfaceRef.current = unite; setUniteSurface(unite); setModeCalcul('surface'); }
@@ -1470,7 +1480,7 @@ export default function Devis() {
       ...prev.filter(l => !((!l.type || l.type === 'ligne') && !l.produitId && !(l.description || '').trim())),
       ...nouvelles,
     ]);
-    toast.success(`${nouvelles.length} ligne(s) du système « ${sys.systeme || sys.numero} » ajoutée(s)${surf > 0 ? ` — recalculées pour ${surf} ${libelleSurface(unite)}` : ''}.`);
+    toast.success(`${nouvelles.length} ligne(s) du système « ${sys.systeme || sys.numero} » ajoutée(s)${surf > 0 ? ` — recalculées pour ${surf} ${libelleSurface(unite)}` : ''}${auPrixClient ? `, dont ${auPrixClient} au prix spécifique du client` : ''}.`);
   }
 
   const [newLigneId, setNewLigneId] = useState<string | null>(null);

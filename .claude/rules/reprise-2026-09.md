@@ -1081,3 +1081,8 @@ dans `prixDeBase` AVANT niveau, gamme et palier (`prixClientDeProduit`),
 sauf sur un modèle système ; repère « PC » à côté du Net HT. Les lignes
 figées d'un devis enregistré gardent leur prix. ⚠️ Les 2 prix appris
 existants s'appliquent désormais aussi dans l'éditeur de devis.
+Lignes d'un modèle système insérées (« + N lignes », `insererLignesSysteme`)
+ou dupliquées pour un client (`duplicateSystemeEtRemplir`) : prix du client
+(prix spécifique d'abord) et **remise du modèle remise à 0** — elle
+s'ajoutait au prix net du client (SYS Flowfast 215 2mm Quartz collor :
+4 lignes remisées). Une remise dictée reste.
