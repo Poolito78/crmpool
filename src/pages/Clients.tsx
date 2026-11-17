@@ -24,6 +24,7 @@ import { useCurrentUser } from '@/hooks/useAuth';
 import { useCommercials } from '@/hooks/useCommercials';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
 import AccesTarifClient from '@/components/AccesTarifClient';
+import PrixSpecifiquesClient from '@/components/PrixSpecifiquesClient';
 import AnalyseCroisee from '@/components/AnalyseCroisee';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput from '@/components/FilterChoiceInput';
@@ -122,7 +123,7 @@ const emptyAdresse: Omit<AdresseLivraison, 'id'> = {
 
 export default function Clients() {
   const { clients, updateClients, produits, devis, commandesClient } = useCRM();
-  const { isAdmin, userId } = useCurrentUser();
+  const { isAdmin, userId, canAchat } = useCurrentUser();
   const { commercials, nameOf } = useCommercials();
   const [filterCommercial, setFilterCommercial] = useState('');
 
@@ -185,7 +186,7 @@ export default function Clients() {
   const [siretLoading, setSiretLoading] = useState(false);
   const [sortCol, setSortCol] = useState<'societe' | 'ville' | 'adresses' | 'devis' | 'encours' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [clientDialogTab, setClientDialogTab] = useState<'infos' | 'crm' | 'comptabilite' | 'tarifs' | 'ventes'>('infos');
+  const [clientDialogTab, setClientDialogTab] = useState<'infos' | 'crm' | 'comptabilite' | 'tarifs' | 'web' | 'ventes'>('infos');
   const [tarifsOdooEnCours, setTarifsOdooEnCours] = useState(false);
   const { actions: crmActions, addAction: addCrmAction } = useCrmActions();
   const [crmActionDialogOpen, setCrmActionDialogOpen] = useState(false);
@@ -968,6 +969,7 @@ export default function Clients() {
             <button type="button" onClick={() => setClientDialogTab('infos')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'infos' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Infos</button>
             <button type="button" onClick={() => setClientDialogTab('comptabilite')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'comptabilite' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comptabilité</button>
             <button type="button" onClick={() => setClientDialogTab('tarifs')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'tarifs' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Tarifs</button>
+            <button type="button" onClick={() => setClientDialogTab('web')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'web' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>WEB</button>
             {editingClient && <button type="button" onClick={() => setClientDialogTab('crm')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>}
             {editingClient && <button type="button" onClick={() => setClientDialogTab('ventes')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'ventes' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Ventes</button>}
           </div>
@@ -1285,8 +1287,20 @@ export default function Clients() {
               )}
             </div>
 
+            <PrixSpecifiquesClient
+              clientId={editingClient?.id}
+              produits={produits}
+              estRevendeur={form.estRevendeur}
+              voirAchat={canAchat}
+            />
+
+          </div>
+
+          {/* ── Onglet WEB : accès du client aux pages en ligne (tarif). Masqué
+               plutôt que démonté, comme Tarifs : la case reste dans `form`. */}
+          <div className={clientDialogTab !== 'web' ? 'hidden' : 'space-y-5 py-2'}>
             {!isAdmin && editingClient?.id && (
-              <div className="border-t border-border pt-4 text-sm flex flex-wrap items-center gap-3">
+              <div className="text-sm flex flex-wrap items-center gap-3">
                 <span className="font-semibold">Tarif en ligne :</span>
                 {form.accesTarif ? (
                   <>
@@ -1684,7 +1698,7 @@ export default function Clients() {
           </div>{/* end infos tab wrapper */}
           <div className="sticky bottom-0 bg-background flex justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-            {(clientDialogTab === 'infos' || clientDialogTab === 'comptabilite' || clientDialogTab === 'tarifs') && (
+            {(clientDialogTab === 'infos' || clientDialogTab === 'comptabilite' || clientDialogTab === 'tarifs' || clientDialogTab === 'web') && (
               returnDevisId ? (
                 <Button onClick={() => { if (save(true)) { setDialogOpen(false); navigate(`/devis?editDevis=${returnDevisId}`); } }}>
                   <ArrowLeft className="w-4 h-4 mr-2" /> Enregistrer & retour au devis

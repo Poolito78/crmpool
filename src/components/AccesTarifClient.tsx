@@ -39,13 +39,13 @@ export default function AccesTarifClient({ clientId, email, nomContact, checked,
   };
 
   return (
-    <div className="border-t border-border pt-4">
+    <div>
       <div className="flex items-center gap-3 mb-2">
         <Checkbox id="accesTarif" checked={checked} onCheckedChange={v => onChange(v === true)} />
         <Label htmlFor="accesTarif" className="text-base font-semibold cursor-pointer">Accès à son tarif en ligne</Label>
       </div>
       <p className="text-xs text-muted-foreground mb-3">
-        Le client consulte les articles du catalogue ISOFLOOR à SES prix (remises ci-dessus) et les télécharge en PDF.
+        Le client consulte les articles du catalogue ISOFLOOR à SES prix (remises de l'onglet Tarifs) et les télécharge en PDF.
       </p>
       {checked && (
         <div className="bg-muted/30 rounded-lg border border-border p-3 space-y-3">
