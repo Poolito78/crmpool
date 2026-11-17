@@ -58,7 +58,7 @@ const TYPES_DEPOSABLES: readonly TypeDocument[] = ['demande_devis', 'commande_cl
 // Un <Link> react-router sur une URL absolue produirait /https:/… — il faut un
 // vrai <a>, et l'entrée ne peut jamais être « active ».
 // `action` : l'entrée lance quelque chose au lieu d'ouvrir une page (`path` n'est alors qu'une clé).
-type NavLink = { type: 'link'; label: string; icon: any; path: string; shortLabel?: string; external?: boolean; action?: () => void };
+type NavLink = { type: 'link'; label: string; icon: any; path: string; shortLabel?: string; external?: boolean; action?: () => void; arret?: { url: string; titre: string } };
 type NavGroup = { type: 'group'; label: string; icon: any; items: NavLink[] };
 type NavEntry = NavLink | NavGroup;
 
@@ -136,8 +136,11 @@ const NAV: NavEntry[] = [
       { type: 'link', label: 'Clients',           icon: Users,       path: '/clients' },
       { type: 'link', label: 'Produits',           icon: Package,     path: '/produits' },
       { type: 'link', label: 'Devis',              icon: FileText,    path: '/devis' },
-      { type: 'link', label: 'Chiffrage ISOSIGN',  icon: Ruler,       path: CHIFFRAGE_PROTOCOLE, external: true, action: lancerChiffrage },
-      { type: 'link', label: 'Arrêter Chiffrage',  icon: Power,       path: CHIFFRAGE_ARRET_URL, external: true },
+      /* Ouverture et arrêt sur la même ligne : le logo « éteindre » à droite
+         ouvre la page d'arrêt du serveur local (l'ancienne entrée « Arrêter
+         Chiffrage », retirée le 17/11). */
+      { type: 'link', label: 'Chiffrage ISOSIGN',  icon: Ruler,       path: CHIFFRAGE_PROTOCOLE, external: true, action: lancerChiffrage,
+        arret: { url: CHIFFRAGE_ARRET_URL, titre: 'Arrêter le Chiffrage ISOSIGN (serveur local et fenêtre noire)' } },
       { type: 'link', label: 'Commandes Client',   icon: ClipboardList, path: '/commandes-client' },
       { type: 'link', label: 'Factures Client',    icon: Receipt,     path: '/factures-client' },
       { type: 'link', label: 'CA ODOO',            icon: TrendingUp,  path: CA_ODOO_URL, external: true },
@@ -199,6 +202,27 @@ function BoutonFenetre({ path, actif }: { path: string; actif: boolean }) {
     >
       <ExternalLink className="w-3.5 h-3.5" />
     </button>
+  );
+}
+
+/* Logo « éteindre » au bout d'une ligne du menu (Chiffrage ISOSIGN) : seul le
+   logo arrête, le reste de la ligne ouvre. Toujours visible, sœur du lien
+   comme `BoutonFenetre`. */
+function BoutonArret({ arret, actif }: { arret: { url: string; titre: string }; actif: boolean }) {
+  return (
+    <a
+      href={arret.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={arret.titre}
+      draggable={false}
+      className={cn(
+        'absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded-md transition-colors',
+        actif ? 'text-sidebar-primary-foreground/80 hover:bg-white/15' : 'text-sidebar-foreground/60 hover:bg-destructive/15 hover:text-destructive',
+      )}
+    >
+      <Power className="w-4 h-4" />
+    </a>
   );
 }
 
@@ -520,6 +544,7 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
             onClick={onLinkClick}
             className={cn(
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+              entry.arret && 'pr-10',
               active
                 ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
                 : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
@@ -529,6 +554,7 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
             {entry.label}
           </NavItem>
           {!entry.external && <BoutonFenetre path={entry.path} actif={active} />}
+          {entry.arret && <BoutonArret arret={entry.arret} actif={active} />}
           </div>
         );
       }
@@ -574,6 +600,7 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
                     onClick={onLinkClick}
                     className={cn(
                       'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+                      item.arret && 'pr-9',
                       active
                         ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
                         : 'text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
@@ -583,6 +610,7 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
                     <span className={cn('min-w-0 truncate', item.label.length > 16 && 'text-[13px]')}>{item.label}</span>
                   </NavItem>
                   {!item.external && <BoutonFenetre path={item.path} actif={active} />}
+                  {item.arret && <BoutonArret arret={item.arret} actif={active} />}
                   </div>
                 );
               })}
