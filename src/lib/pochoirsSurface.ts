@@ -3,11 +3,14 @@
  * Les données brutes sont dans `pochoirsCatalogue.ts`.
  *
  * Surface à peindre = surface de la plaque (l × h) × `taux`, la part ajourée
- * du dessin mesurée sur la vignette du pochoir : précision de quelques %.
+ * du dessin mesurée sur la vignette du pochoir, poignées exclues (elles ne se
+ * peignent pas) : précision de quelques %. `pochoirsTaux.ts` (généré avec les
+ * images) l'emporte sur le taux du catalogue.
  * À remplacer par la surface vectorielle exacte si l'on obtient les fichiers
  * de découpe.
  */
 import { CATALOGUE_POCHOIRS } from './pochoirsCatalogue';
+import { TAUX_MESURES } from './pochoirsTaux';
 
 export type CategoriePochoir = 'Piétons & personnes' | 'Vélo & mobilités douces' | 'Véhicules' | 'PMR & accessibilité' | 'Services & divers';
 
@@ -19,7 +22,7 @@ export interface PochoirSurface {
   id: string;
   nom: string;
   categorie: CategoriePochoir;
-  /** Vignette, hébergée chez Virages. */
+  /** Vignette retouchée (poignées retirées, noir) : public/pochoirs/<id>.png, générée par scripts/pochoirs-images.mjs. */
   image: string;
   /** Fiche produit chez Virages. */
   url: string;
@@ -55,16 +58,16 @@ const SYNONYMES: [RegExp, string][] = [
   [/chariot/, 'chariot caddie supermarche courses'],
 ];
 
-export const POCHOIRS_SURFACE: PochoirSurface[] = CATALOGUE_POCHOIRS.map(([slug, nom, fichier, tailles, taux, note]) => {
+export const POCHOIRS_SURFACE: PochoirSurface[] = CATALOGUE_POCHOIRS.map(([slug, nom, , tailles, taux, note]) => {
   const n = sansAccent(nom);
   const syn = SYNONYMES.filter(([re]) => re.test(n)).map(([, s]) => s).join(' ');
   return {
     id: slug,
     nom: `Pochoir ${nom}`,
     categorie: categorieDe(nom),
-    image: `${VIRAGES}/Images/Categorie_B6/${fichier}`,
+    image: `/pochoirs/${slug}.png`,
     url: `${VIRAGES}/Pochoirs/${slug}`,
-    taux,
+    taux: TAUX_MESURES[slug] ?? taux,
     tailles,
     note,
     recherche: sansAccent(`pochoir ${nom} ${syn}`),
