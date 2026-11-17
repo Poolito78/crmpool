@@ -70,7 +70,7 @@ describe('Calculateur Flowfast → devis', () => {
       "Détail d'un kit :",
       '• Résine 319 Flexible Seal : 20 kg (1 seau)',
       '• Pigment jaune 20 % : 4 kg à rajouter par seau (2 sachets de 2 kg)',
-      '• Catalyst C2 : 300 g par seau à 20 °C (à prélever sur un seau de 2 kg)',
+      '• Catalyst C2 : 300 g par seau à 20 °C (à prélever sur un sachet de 2 kg)',
       '• Charge SNLR : 23,3 kg',
       "Mélange d'un kit : 47,6 kg, soit 47,6 m² à 1 kg/m² (476 ml en bande de 10 cm).",
     ]);
