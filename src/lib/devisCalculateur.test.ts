@@ -46,6 +46,24 @@ describe('Calculateur Flowfast → devis', () => {
       .toEqual([['FLOWFAST319', 2]]);
   });
 
+  it('note récap : nombre de kits et détail d\'un kit (un seau de 20 kg)', () => {
+    const r = lignesDepuisCalculateur(ROAD, CATALOGUE, null, id);
+    const note = r.lignes[1];
+    expect(note.type).toBe('texte');
+    expect(note.description.split('\n')).toEqual([
+      'Récapitulatif : 9 kits — 1 kit = 1 seau de résine de 20 kg (180 kg de résine nécessaires).',
+      "Détail d'un kit :",
+      '• Résine 319 Flexible Seal : 20 kg (1 seau)',
+      '• Pigment jaune 20 % : 4 kg à rajouter par seau (2 sachets de 2 kg)',
+      '• Catalyst C2 : 300 g par seau à 20 °C (à prélever sur un pot de 2 kg)',
+      '• Charge SNLR : 23,3 kg (2 × SNLR11)',
+      "Mélange d'un kit : 47,6 kg, soit 47,6 m² à 1 kg/m² (476 ml en bande de 10 cm).",
+    ]);
+    // 178 kg de résine : le 9e seau n'est pas entier
+    const r2 = lignesDepuisCalculateur({ ...ROAD, prep: { ...ROAD.prep!, resine: 178 } }, CATALOGUE, null, id);
+    expect(r2.lignes[1].description).toContain("Le dernier seau n'est utilisé qu'à 18 kg.");
+  });
+
   it('un article absent du catalogue part à vérifier, jamais deviné', () => {
     const r = lignesDepuisCalculateur({ ...ROAD, kits: [{ code: 'SNLR2', kg: 2.91, n: 3 }] }, CATALOGUE, null, id);
     expect(r.aVerifier).toEqual(['Kit SNLR2 (2,91 kg) × 3']);

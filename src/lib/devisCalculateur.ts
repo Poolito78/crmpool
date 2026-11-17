@@ -134,6 +134,63 @@ export interface ResultatCalculateur {
   systeme: string;
 }
 
+/** Seau de résine : seul format retenu actuellement (règle du 17/11). */
+export const SEAU_RESINE_KG = 20;
+
+/** Une masse de pigment en sachets entiers (2 kg d'abord), si elle tombe juste. */
+function sachetsExacts(masse: number): string | null {
+  let reste = Math.round(masse * 1000);
+  const parts: string[] = [];
+  for (const g of [2000, 1000, 500, 400, 200]) {
+    const n = Math.floor(reste / g);
+    if (n > 0) { parts.push(`${n} sachet${n > 1 ? 's' : ''} de ${g >= 1000 ? `${g / 1000} kg` : `${g} g`}`); reste -= n * g; }
+  }
+  return reste === 0 && parts.length ? parts.join(' + ') : null;
+}
+
+/**
+ * Note récap du devis : nombre de kits et détail d'UN kit (un seau de 20 kg).
+ * Les dosages par kg de résine sont ceux de la préconisation (kits retenus,
+ * sinon besoin) ; la charge se dit aussi en kits SNLR / SNLC quand elle tombe
+ * juste.
+ */
+export function noteRecap(
+  e: EtatCalculateur, resine: number, pigment: number, catalyseur: number, charge: number,
+  kits: { code: string; kg: number; n: number }[],
+): string | null {
+  if (!(resine > 0)) return null;
+  const seaux = Math.max(1, Math.ceil(resine / SEAU_RESINE_KG - 1e-9));
+  const parKg = (x: number) => (x > 0 ? (x / resine) * SEAU_RESINE_KG : 0);
+  const pg = parKg(pigment), ct = parKg(catalyseur), ch = parKg(charge);
+  const lignes = [`Récapitulatif : ${seaux} kit${seaux > 1 ? 's' : ''} — 1 kit = 1 seau de résine de ${SEAU_RESINE_KG} kg (${kg(resine)} de résine nécessaires).`];
+  lignes.push(`Détail d'un kit :`);
+  lignes.push(`• Résine ${e.nomResine} : ${SEAU_RESINE_KG} kg (1 seau)`);
+  if (pg > 0) {
+    const sachets = e.talc ? null : sachetsExacts(pg);
+    lignes.push(`• ${e.talc ? 'Fintalc M15' : `Pigment${e.pigNom ? ` ${e.pigNom}` : ''}`} ${nf(e.pig)} % : ${kg(pg)} à rajouter par seau${sachets ? ` (${sachets})` : ''}`);
+  }
+  if (ct > 0) {
+    const g = e.catW && e.catW > 0 ? e.catW : 2000;
+    const n = ct * 1000 / g;
+    const format = g >= 1000
+      ? `à prélever sur un pot de ${nf(g / 1000)} kg`
+      : `${Math.abs(n - Math.round(n)) < 0.01 ? Math.round(n) : nf(n)} sachet${n > 1 ? 's' : ''} de ${nf(g, 0)} g`;
+    lignes.push(`• Catalyst C2 : ${kg(ct)} par seau à ${nf(e.temp, 0)} °C (${format})`);
+  }
+  if (ch > 0) {
+    const k = kits.length === 1 ? kits[0] : undefined;
+    const nk = k ? ch / k.kg : 0;
+    const enKits = k && Math.abs(nk - Math.round(nk)) < 0.01 ? ` (${Math.round(nk)} × ${k.code})` : '';
+    lignes.push(`• Charge ${e.charge || ''} : ${kg(ch)}${enKits}`);
+  }
+  const melange = SEAU_RESINE_KG + pg + ct + ch;
+  lignes.push(`Mélange d'un kit : ${kg(melange)}, soit ${nf(melange / e.rate)} m² à ${nf(e.rate)} kg/m²`
+    + (e.um && e.larg > 0 ? ` (${nf(melange / e.rate / (e.larg / 100))} ml en bande de ${nf(e.larg)} cm)` : '') + '.');
+  const dernier = resine - (seaux - 1) * SEAU_RESINE_KG;
+  if (seaux > 1 && dernier < SEAU_RESINE_KG - 0.01) lignes.push(`Le dernier seau n'est utilisé qu'à ${kg(dernier)}.`);
+  return lignes.join('\n');
+}
+
 /** Les lignes de devis de la préconisation du calculateur. */
 export function lignesDepuisCalculateur(
   e: EtatCalculateur,
@@ -177,6 +234,12 @@ export function lignesDepuisCalculateur(
       + (prep ? `. Préconisation : ${kits.map(k => `${k.n} × ${k.code}`).join(' + ')}` : '')
       + `. Mélange ${kg(prep ? prep.total : e.total)} (résine ${kg(resine)}${pigment > 0 ? `, pigment ${kg(pigment)}` : ''}, catalyseur ${kg(catalyseur)}${e.fk > 0 ? `, charge ${kg(prep ? prep.charge : e.fk)}` : ''}).`,
   });
+
+  /* Note récap : le chantier se prépare seau par seau. Un KIT = un seau de
+     résine de 20 kg et ce qu'on lui ajoute — pigment (4 kg pour le jaune à
+     20 %), catalyseur, charge — règle du 17/11. */
+  const recap = noteRecap(e, resine, pigment, catalyseur, prep ? prep.charge : e.fk, kits);
+  if (recap) lignes.push({ id: genererId(), type: 'texte', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0, description: recap });
 
   /* Résine, en seaux. */
   const cle = e.resine === '319' ? `319${e.mode === 'c' ? 'c' : 'u'}` : e.resine;
