@@ -16,6 +16,15 @@ import { supabase } from '@/integrations/supabase/client';
  * le contrat — et l'écran le dit (« prix appris de AF039468 »). Un prix saisi
  * à la main reste prioritaire. Table `memoire_prix`, une ligne par
  * (client, référence) : la dernière offre fait foi.
+ *
+ * **Prix spécifique saisi dans la fiche client** (onglet Tarifs, 17/11) :
+ * même table, même clé, `numero_offre` vide — c'est ce qui le distingue d'un
+ * prix appris. Corriger un prix appris dans la fiche en fait un prix saisi.
+ * Le devis (`prixDeBase`, `Devis.tsx`) applique l'un comme l'autre AVANT le
+ * niveau de tarif, la remise de gamme et le palier : c'est un prix convenu
+ * avec ce client pour cet article, il ne se recalcule pas. La clé est la
+ * référence Odoo de l'article, à défaut sa référence MonCRM
+ * (`referencePrixClient`) — celle que l'analyse de documents interroge.
  */
 
 export interface PrixAppris {
@@ -71,6 +80,32 @@ function abonner(f: () => void) {
 export function prixAppris(clientId?: string | null, reference?: string | null): PrixAppris | undefined {
   if (!clientId || !reference) return undefined;
   return index.get(cle(clientId, reference));
+}
+
+/** La clé d'un article dans la table : référence Odoo, sinon MonCRM. */
+export function referencePrixClient(p: { reference?: string | null; referenceOdoo?: string | null }): string {
+  return String(p.referenceOdoo || p.reference || '').trim().toUpperCase();
+}
+
+/**
+ * Le prix convenu avec ce client pour cet article (saisi ou appris), cherché
+ * sous la référence Odoo puis sous la référence MonCRM.
+ */
+export function prixClientDeProduit(
+  clientId: string | null | undefined,
+  p: { reference?: string | null; referenceOdoo?: string | null } | undefined,
+): PrixAppris | undefined {
+  if (!clientId || !p) return undefined;
+  return prixAppris(clientId, referencePrixClient(p))
+    ?? (p.referenceOdoo && p.reference ? prixAppris(clientId, p.reference) : undefined);
+}
+
+/** Tous les prix d'un client, référence par ordre alphabétique. */
+export function prixDuClient(clientId: string | null | undefined): PrixAppris[] {
+  if (!clientId) return [];
+  return [...index.values()]
+    .filter(p => p.clientId === clientId)
+    .sort((a, b) => a.reference.localeCompare(b.reference));
 }
 
 /** Retient les prix d'une offre pour un client. Rend l'erreur, ou `null`. */

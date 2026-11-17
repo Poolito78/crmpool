@@ -1069,3 +1069,15 @@ Deux changements poussés sur main le 17/11, en ligne au prochain déploiement V
 5. **DEV-2026-135** : ligne « KIT FLOWFAST 319 ROAD (45,8 kg) » à 0 €. La fiche
    FLOWFAST319R est à 0 € depuis le 11/10 (prix passé de 458,49 → 379 → 0 €).
    À clarifier : kit chiffré par ses composants (voulu), ou prix perdu sur la fiche.
+
+## Prix spécifiques dans la fiche client (17 nov.)
+
+Fiche client → Tarifs → **Prix spécifiques** (`PrixSpecifiquesClient.tsx`) :
+un article + un prix HT convenu avec ce client. Même table que les prix
+appris des offres (`memoire_prix`, clé = référence Odoo, sinon MonCRM —
+`referencePrixClient`) ; `numero_offre` vide = prix saisi. Écrit aussitôt
+(fiche déjà enregistrée), « Annuler » ne le défait pas. Le devis l'applique
+dans `prixDeBase` AVANT niveau, gamme et palier (`prixClientDeProduit`),
+sauf sur un modèle système ; repère « PC » à côté du Net HT. Les lignes
+figées d'un devis enregistré gardent leur prix. ⚠️ Les 2 prix appris
+existants s'appliquent désormais aussi dans l'éditeur de devis.

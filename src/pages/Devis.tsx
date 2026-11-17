@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { NIVEAUX_TARIF, LIBELLE_NIVEAU, estNiveauTarif, prixAuNiveau, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
 import { prixGamme } from '@/lib/remiseGammes';
+import { prixClientDeProduit, useMemoirePrix } from '@/lib/memoirePrix';
 import { chargerFichiersDevis, type FichierDevis } from '@/lib/piecesJointesDevis';
 import DocumentsDevis from '@/components/DocumentsDevis';
 import { chargerGrille } from '@/lib/grilleTarif.charger';
@@ -228,6 +229,9 @@ export default function Devis() {
   /* Les mots du client déjà retenus sur un article — pour ne pas réapprendre
      ce qu'on sait déjà, et pour que la recherche d'article les voie. */
   const { tagsDe } = useProduitTags();
+  /* Prix spécifiques des clients (`memoirePrix.ts`) : chargés dès l'ouverture
+     de la page, pour qu'un article choisi trouve celui de son client. */
+  useMemoirePrix();
 
   /* Ces deux listes dérivent du catalogue, pas de la saisie. Sans mémoire,
      elles étaient reconstruites — 22 634 objets pour la première — à chaque
@@ -1135,7 +1139,7 @@ export default function Devis() {
       const niveau = dOuvert.niveauTarif || null;
       if (p && dOuvert.lignes.some(l => l.id === liaison.ligneId)) {
         d = { ...dOuvert, lignes: dOuvert.lignes.map(l => l.id !== liaison.ligneId ? l : lierLigneAuProduit(
-          l, p, prixDeBase(p, l.quantite, client?.estRevendeur, niveau, niveau ? grilles[niveau] : undefined, grilles.R4, client?.remisesParCategorie),
+          l, p, prixDeBase(p, l.quantite, client?.estRevendeur, niveau, niveau ? grilles[niveau] : undefined, grilles.R4, client?.remisesParCategorie, dOuvert.clientId),
         )) };
         toast.success(`Ligne reliée à l'article ${p.reference}`);
       } else {
@@ -1378,7 +1382,7 @@ export default function Devis() {
       const quantite = surf > 0 && uniteDeLigne(l, sysDevis.uniteSurface) === unite && consoPourSurface(prod, consoDeLigne(l, unite), unite) != null
         ? calcQuantiteSurface(prod, surf, consoDeLigne(l, unite), undefined, unite)
         : l.quantite;
-      const prix = getPrixLigne(prod, quantite, l.variantesChoisies, opts.client?.estRevendeur, opts.client?.niveauTarif ?? null, opts.client?.remisesParCategorie);
+      const prix = getPrixLigne(prod, quantite, l.variantesChoisies, opts.client?.estRevendeur, opts.client?.niveauTarif ?? null, opts.client?.remisesParCategorie, opts.client?.id ?? null);
       /* Une ligne qui portait la surface du MODÈLE (215 m²) porte celle du chantier :
          sinon elle affiche 215 m² en face d'une quantité calculée pour 637. */
       const suitLeChantier = surf > 0 && l.surfaceM2 != null && l.surfaceM2 === sysDevis.surfaceGlobaleM2;
@@ -1394,7 +1398,7 @@ export default function Devis() {
         const q = chantier.get(l.id);
         const prod = article(l.produitId);
         if (q == null || !prod) return l;
-        return { ...l, quantite: q, ...(q > 0 ? { prixUnitaireHT: getPrixLigne(prod, q, l.variantesChoisies, opts.client?.estRevendeur, opts.client?.niveauTarif ?? null, opts.client?.remisesParCategorie) } : {}) };
+        return { ...l, quantite: q, ...(q > 0 ? { prixUnitaireHT: getPrixLigne(prod, q, l.variantesChoisies, opts.client?.estRevendeur, opts.client?.niveauTarif ?? null, opts.client?.remisesParCategorie, opts.client?.id ?? null) } : {}) };
       });
     }
     /* Demande par teinte : le pigment unique du modèle laisse la place à un pigment par teinte. */
@@ -2473,12 +2477,12 @@ export default function Devis() {
     };
   }
 
-  function getPrixLigne(produit: typeof produits[0], quantite: number, variantesChoisies?: Record<string, string>, isRevendeur?: boolean, niveau: NiveauTarif | '' | null = niveauTarif, remises?: Record<string, number>): number {
+  function getPrixLigne(produit: typeof produits[0], quantite: number, variantesChoisies?: Record<string, string>, isRevendeur?: boolean, niveau: NiveauTarif | '' | null = niveauTarif, remises?: Record<string, number>, idClient: string | null = clientId || null): number {
     // Une variante composée fixe le prix : somme de ses composants.
     const compo = varianteDeLigne(produit, variantesChoisies);
     // Sous-variantes ET prix forcés dans le détail (`__prix/…` de variantesChoisies).
     if (compo) return prixLigneCompo(compo, resoudrePrixComposant(isRevendeur, niveau), id => produitParId(produits, id), variantesChoisies);
-    const base = prixDeBase(produit, quantite, isRevendeur, niveau || null, undefined, undefined, remises);
+    const base = prixDeBase(produit, quantite, isRevendeur, niveau || null, undefined, undefined, remises, idClient);
     const diff = getVarianteDiff(produit, variantesChoisies);
     return Math.round((base + diff) * 100) / 100;
   }
@@ -2489,6 +2493,7 @@ export default function Devis() {
    * Le NIVEAU DE TARIF du devis passe d'abord (grille Odoo pour la
    * signalisation ISOSIGN, barème STI pour le plastique) ; ce qu'il ne tarife
    * pas garde le prix de la fiche article, palier et revendeur compris.
+   * Le prix spécifique du client passe avant tout le reste.
    * Seul point de vérité : chaque recalcul de prix du devis passe ici.
    */
   function prixDeBase(
@@ -2500,7 +2505,17 @@ export default function Devis() {
     grilleR4: GrilleTarif | undefined = grilles.R4,
     /** Remises par famille du client — celui du devis ouvert par défaut. */
     remises: Record<string, number> | undefined = clients.find(c => c.id === clientId)?.remisesParCategorie,
+    /** Client dont on cherche le prix spécifique — celui du devis ouvert par défaut. */
+    idClient: string | null = clientId || null,
   ): number {
+    /* PRIX SPÉCIFIQUE DU CLIENT (fiche client → Tarifs, ou appris d'une offre
+       Odoo) : convenu pour cet article, il passe avant le niveau, la gamme et
+       le palier. Pas sur un modèle système, qui n'a pas de client. Voir
+       `memoirePrix.ts`. */
+    if (statut !== 'système') {
+      const specifique = prixClientDeProduit(idClient, produit);
+      if (specifique) return specifique.prix;
+    }
     if (niveau) {
       const r = prixAuNiveau(produit, niveau, grille, grilleR4);
       if (r) return r.prix;
@@ -5329,6 +5344,16 @@ export default function Devis() {
                                         </button>
                                       );
                                     })()}
+                                    {prod && statut !== 'système' && (() => {
+                                      const specifique = prixClientDeProduit(clientId, prod);
+                                      if (!specifique) return null;
+                                      return (
+                                        <span className="h-8 shrink-0 flex items-center text-[10px] font-semibold text-primary cursor-help"
+                                          title={`Prix spécifique de ce client : ${formatMontant(specifique.prix)} HT (${specifique.numeroOffre ? `appris de ${specifique.numeroOffre}` : 'fiche client → Tarifs'}).`}>
+                                          PC
+                                        </span>
+                                      );
+                                    })()}
                                   </div>
                                 ),
                                 marge: (
@@ -7204,7 +7229,7 @@ ${dosage.source}` : ''}`}>
               quantite: s.quantite || 1,
               unite: s.unite || prod?.unite || 'U',
               prixUnitaireHT: s.prixUnitaireHT != null && s.prixUnitaireHT > 0 ? s.prixUnitaireHT
-                : prod ? prixDeBase(prod, s.quantite || 1, matchedClient?.estRevendeur, matchedClient?.niveauTarif || null, undefined, undefined, matchedClient?.remisesParCategorie) : 0,
+                : prod ? prixDeBase(prod, s.quantite || 1, matchedClient?.estRevendeur, matchedClient?.niveauTarif || null, undefined, undefined, matchedClient?.remisesParCategorie, matchedClient?.id ?? null) : 0,
               tva: prod?.tva ?? 20,
               remise: s.remise || 0,
               note: s.note || undefined,
@@ -7222,7 +7247,7 @@ ${dosage.source}` : ''}`}>
               description: designationProduit(prod),
               quantite: t.quantite,
               unite: prod.unite || 'U',
-              prixUnitaireHT: getPrixLigne(prod, t.quantite, t.variantesChoisies, matchedClient?.estRevendeur, matchedClient?.niveauTarif || null, matchedClient?.remisesParCategorie),
+              prixUnitaireHT: getPrixLigne(prod, t.quantite, t.variantesChoisies, matchedClient?.estRevendeur, matchedClient?.niveauTarif || null, matchedClient?.remisesParCategorie, matchedClient?.id ?? null),
               tva: prod.tva ?? 20,
               remise: 0,
               surfaceM2: t.surfaceM2,
@@ -7259,7 +7284,7 @@ ${dosage.source}` : ''}`}>
             const prod = l.produitId ? produitParId(produits, l.produitId) : null;
             if (prod && consoPourSurface(prod, consoDeLigne(l, uniteSurface), uniteSurface) != null) {
               const quantite = calcQuantiteSurface(prod, surf, consoDeLigne(l, uniteSurface));
-              const prix = getPrixLigne(prod, quantite, l.variantesChoisies, matchedClient?.estRevendeur, matchedClient?.niveauTarif || null, matchedClient?.remisesParCategorie);
+              const prix = getPrixLigne(prod, quantite, l.variantesChoisies, matchedClient?.estRevendeur, matchedClient?.niveauTarif || null, matchedClient?.remisesParCategorie, matchedClient?.id ?? null);
               return { ...l, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
             }
             return l;
