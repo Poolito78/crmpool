@@ -43,7 +43,7 @@ export default function CalculateurFlowfast() {
       return;
     }
     const client = clients.find(c => c.id === clientId) ?? null;
-    const { lignes, aVerifier, systeme } = lignesDepuisCalculateur(etat, produits, client, generateId);
+    const { lignes, aVerifier, systeme, surface } = lignesDepuisCalculateur(etat, produits, client, generateId);
     const aujourdhui = new Date();
     const validite = new Date(aujourdhui);
     validite.setDate(validite.getDate() + 30);
@@ -57,6 +57,12 @@ export default function CalculateurFlowfast() {
       statut: 'brouillon',
       lignes,
       systeme,
+      /* Coût chantier au m², au ml pour une bande : la surface du calculateur. */
+      ...(surface ? {
+        modeCalcul: 'surface' as const,
+        surfaceGlobaleM2: surface.valeur,
+        ...(surface.unite === 'ml' ? { uniteSurface: 'ml' as const } : {}),
+      } : {}),
     };
     updateDevis(prev => [nouveau, ...prev]);
     toast.success(`Devis ${numero} créé depuis le calculateur`,

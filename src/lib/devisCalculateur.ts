@@ -69,7 +69,24 @@ const SACHETS: Record<string, string> = { '0.2': 'PIGMENT02', '0.4': 'PIGMENT04'
 
 /* Catalyst par conditionnement (g) → fiche. Seul le sachet de 2 kg a un article :
    les sachets de 80 g et 150 g partent « à vérifier » (17/11). */
-const CATALYSEURS: Record<number, string[]> = { 2000: ['CATALYST2'] };
+const CATALYSEURS: Record<number, string[]> = {
+  2000: ['CATALYST2'],
+  /* Même matière (peroxyde de benzoyle 50 %, « Catalyst C2 ») — `catalyseur.ts`. */
+  150: ['DUR50FT150'],
+};
+
+/** Teinte posée d'office selon le pigment choisi au calculateur (règle du 17/11). */
+const RAL_PAR_PIGMENT: Record<string, string> = { jaune: '1023' };
+
+/** L'option de teinte d'un pigment pour ce RAL (« 319 (RAL 1023, Traffic Yellow) »). */
+function teinteRal(p: Produit, ral: string): { dimId: string; label: string; prixDiff: number } | null {
+  const re = new RegExp(`RAL\\s*${ral}(?!\\d)`, 'i');
+  for (const d of p.variantes || []) {
+    const o = d.options.find(x => re.test(x.label));
+    if (o) return { dimId: d.id, label: o.label, prixDiff: o.prixDiff || 0 };
+  }
+  return null;
+}
 const SNL_FILLER = { refs: ['SNLFILLER'], kg: 25 };
 
 const nf = (n: number, d = 2) => n.toLocaleString('fr-FR', { maximumFractionDigits: d });
@@ -132,6 +149,8 @@ export interface ResultatCalculateur {
   aVerifier: string[];
   /** Libellé court pour le champ Système du devis. */
   systeme: string;
+  /** Surface (m²) ou longueur (ml) du chantier : le coût chantier s'en lit. */
+  surface: { valeur: number; unite: 'm2' | 'ml' } | null;
 }
 
 /** Seau de résine : seul format retenu actuellement (règle du 17/11). */
@@ -250,6 +269,19 @@ export function lignesDepuisCalculateur(
 
   const systeme = `Flowfast ${e.resine}${e.charge ? ` ${e.chargeTag || e.charge}` : ''}`.trim();
 
+  /* COÛT CHANTIER AU m², MIEUX AU ml (règle du 17/11) : le devis prend la
+     surface du calculateur (ml en bande, sinon m²) et chaque ligne la
+     consommation de ce qu'elle apporte, rapportée à cette surface — résine
+     et pigment préparés, charge des sachets. Le Catalyst n'en porte pas : son
+     coût se lit sur la résine (`coutCatalyseConsommee`). */
+  const surfVal = e.um && e.longueur ? e.longueur : e.area;
+  const surface = surfVal > 0 ? { valeur: Math.round(surfVal * 100) / 100, unite: (e.um && e.longueur ? 'ml' : 'm2') as 'm2' | 'ml' } : null;
+  const conso = (masse: number): Partial<LigneDevis> => {
+    if (!surface || !(masse > 0)) return {};
+    const c = Math.round(masse / surface.valeur * 10000) / 10000;
+    return surface.unite === 'ml' ? { consommationMl: c } : { consommation: c };
+  };
+
   /* Seule note du devis : le détail d'UN kit (un seau de résine de 20 kg et
      ce qu'on lui ajoute — pigment, 4 kg pour le jaune à 20 %, catalyseur,
      charge). L'en-tête « Calculateur Flowfast — … » et le récapitulatif du
@@ -270,7 +302,7 @@ export function lignesDepuisCalculateur(
   else {
     for (const s of seauxPour(resine, dispo.map(f => f.kg))) {
       const f = dispo.find(x => x.kg === s.kg)!;
-      lignes.push(article(f.p!, s.n, `Résine nécessaire : ${kg(resine)}`));
+      lignes.push({ ...article(f.p!, s.n, `Résine nécessaire : ${kg(resine)}`), ...conso(resine * s.n * s.kg / seauxPour(resine, dispo.map(x => x.kg)).reduce((a, x) => a + x.n * x.kg, 0)) });
     }
   }
 
@@ -278,11 +310,20 @@ export function lignesDepuisCalculateur(
   if (pigment > 0) {
     if (e.talc) libre(`Fintalc M15 (${nf(e.pig)} %) : ${kg(pigment)}`);
     else {
-      for (const s of e.sachets.filter(x => x.n > 0)) {
+      const sachets = e.sachets.filter(x => x.n > 0);
+      const totalSachets = sachets.reduce((a, x) => a + x.n * x.kg, 0);
+      const ral = RAL_PAR_PIGMENT[(e.pigNom || '').toLowerCase()];
+      for (const s of sachets) {
         const ref = s.libre ? undefined : SACHETS[String(s.kg)];
         const p = ref ? trouver(produits, [ref]) : undefined;
-        if (p) lignes.push(article(p, s.n, `Pigment${e.pigNom ? ` ${e.pigNom}` : ''} ${nf(e.pig)} % : ${kg(pigment)} — teinte à choisir`));
-        else libre(`Pigment en sachets de ${kg(s.kg)} × ${s.n}`);
+        if (!p) { libre(`Pigment en sachets de ${kg(s.kg)} × ${s.n}`); continue; }
+        const t = ral ? teinteRal(p, ral) : null;
+        const l = article(p, s.n, `Pigment${e.pigNom ? ` ${e.pigNom}` : ''} ${nf(e.pig)} % : ${kg(pigment)} — ${t ? `RAL ${ral}` : 'teinte à choisir'}`);
+        if (t) {
+          l.variantesChoisies = { [t.dimId]: t.label };
+          l.prixUnitaireHT = Math.round((l.prixUnitaireHT + t.prixDiff) * 100) / 100;
+        }
+        lignes.push({ ...l, ...conso(totalSachets > 0 ? pigment * s.n * s.kg / totalSachets : 0) });
       }
       if (!e.sachets.some(x => x.n > 0)) libre(`Pigment ${nf(e.pig)} % : ${kg(pigment)}`);
     }
@@ -295,7 +336,9 @@ export function lignesDepuisCalculateur(
     const refs = e.catLibre ? undefined : CATALYSEURS[g];
     const p = refs ? trouver(produits, refs) : undefined;
     const format = g >= 1000 ? `sachet de ${nf(g / 1000)} kg` : `sachet de ${nf(g, 0)} g`;
-    if (p) lignes.push(article(p, n, `Catalyst C2 nécessaire : ${kg(catalyseur)}`));
+    /* La température du calculateur suit la ligne : le devis recalcule le
+       Catalyst à cette température (règle du 17/11). */
+    if (p) lignes.push({ ...article(p, n, `Catalyst C2 nécessaire : ${kg(catalyseur)} à ${nf(e.temp, 0)} °C`), temperatureCatalyse: Math.round(e.temp) });
     else libre(`Catalyst C2 en ${format} × ${n} (${kg(catalyseur)})`);
   }
 
@@ -303,14 +346,14 @@ export function lignesDepuisCalculateur(
   if (kits.length) {
     for (const k of kits) {
       const p = trouver(produits, [k.code]);
-      if (p) lignes.push(article(p, k.n));
+      if (p) lignes.push({ ...article(p, k.n), ...conso(k.n * k.kg) });
       else libre(`${k.n} sachet${k.n > 1 ? 's' : ''} ${k.code} (${nf(k.kg, 3)} kg)`);
     }
   } else if (e.fk > 0 && e.charge) {
     const p = /SNL Filler/i.test(e.charge) ? trouver(produits, SNL_FILLER.refs) : undefined;
-    if (p) lignes.push(article(p, Math.max(1, Math.ceil(e.fk / SNL_FILLER.kg - 1e-9)), `Charge nécessaire : ${kg(e.fk)}`));
+    if (p) lignes.push({ ...article(p, Math.max(1, Math.ceil(e.fk / SNL_FILLER.kg - 1e-9)), `Charge nécessaire : ${kg(e.fk)}`), ...conso(e.fk) });
     else libre(`Charge ${e.charge} : ${kg(e.fk)}`);
   }
 
-  return { lignes, aVerifier, systeme };
+  return { lignes, aVerifier, systeme, surface };
 }

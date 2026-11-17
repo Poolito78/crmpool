@@ -76,6 +76,24 @@ describe('Calculateur Flowfast → devis', () => {
     ]);
   });
 
+  it('jaune : RAL 1023 d\'office, température du calculateur, surface au ml et consos', () => {
+    const pig = { ...art('PIGMENT2KG', 102.86, 2), variantes: [{ id: 'teinte', nom: 'Teinte', options: [
+      { id: 'a', label: '310 (RAL 1003, Signal Yellow)' }, { id: 'b', label: '319 (RAL 1023, Traffic Yellow)' }] }] } as unknown as Produit;
+    const cat = [...CATALOGUE.filter(p => p.id !== 'PIGMENT2KG'), pig];
+    const r = lignesDepuisCalculateur({ ...ROAD, temp: 10, longueur: 4260, area: 426 }, cat, null, id);
+    const lp = r.lignes.find(l => l.produitId === 'PIGMENT2KG')!;
+    expect(lp.variantesChoisies).toEqual({ teinte: '319 (RAL 1023, Traffic Yellow)' });
+    expect(r.lignes.find(l => l.produitId === 'CATALYST2')!.temperatureCatalyse).toBe(10);
+    expect(r.surface).toEqual({ valeur: 4260, unite: 'ml' });
+    // consos en kg/ml : 180 kg de résine, 36 kg de pigment, 209,7 kg de charge sur 4 260 ml
+    expect(r.lignes.find(l => l.produitId === 'FLOWFAST319')!.consommationMl).toBeCloseTo(180 / 4260, 4);
+    expect(lp.consommationMl).toBeCloseTo(36 / 4260, 4);
+    expect(r.lignes.find(l => l.produitId === 'SNLR11')!.consommationMl).toBeCloseTo(209.7 / 4260, 4);
+    // une autre teinte : rien d'office
+    const rouge = lignesDepuisCalculateur({ ...ROAD, pigNom: 'standard' }, cat, null, id);
+    expect(rouge.lignes.find(l => l.produitId === 'PIGMENT2KG')!.variantesChoisies).toBeUndefined();
+  });
+
   it('un article absent du catalogue part à vérifier, jamais deviné', () => {
     const r = lignesDepuisCalculateur({ ...ROAD, kits: [{ code: 'SNLR2', kg: 2.91, n: 3 }] }, CATALOGUE, null, id);
     expect(r.aVerifier).toEqual(['3 sachets SNLR2 (2,91 kg)']);
