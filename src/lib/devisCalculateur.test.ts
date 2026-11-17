@@ -35,7 +35,7 @@ describe('Calculateur Flowfast → devis', () => {
     expect(q).toEqual({ FLOWFAST319: 9, PIGMENT2KG: 18, CATALYST2: 2, SNLR11: 18 });
     // une seule ligne de texte : le détail d'un kit
     expect(r.lignes.filter(l => l.type === 'texte').length).toBe(1);
-    expect(r.lignes[0].description.startsWith("Détail d'un kit :")).toBe(true);
+    expect(r.lignes[0].description.startsWith('18 kits SNLR11 — détail par kit :')).toBe(true);
     expect(r.aVerifier).toEqual([]);
     // sans client : prix public de la fiche
     expect(r.lignes.find(l => l.produitId === 'SNLR11')!.prixUnitaireHT).toBe(44.29);
@@ -47,16 +47,31 @@ describe('Calculateur Flowfast → devis', () => {
       .toEqual([['FLOWFAST319', 2]]);
   });
 
-  it('note du devis : seulement le détail d\'un kit (un seau de 20 kg)', () => {
+  it('note du devis : nombre de kits SNLR et détail par kit, comme le calculateur', () => {
     const r = lignesDepuisCalculateur(ROAD, CATALOGUE, null, id);
     const note = r.lignes[0];
     expect(note.type).toBe('texte');
     expect(note.description.split('\n')).toEqual([
+      '18 kits SNLR11 — détail par kit :',
+      '• Résine 319 Flexible Seal : 10 kg',
+      '• Pigment jaune 20 % : 2 kg à rajouter par kit',
+      '• Catalyst C2 : 150 g par kit à 20 °C',
+      '• Charge SNLR11 (11,65 kg) : 1 sachet',
+      "Mélange d'un kit : 23,8 kg, soit 238 ml en bande de 10 cm (23,8 m²) à 1 kg/m².",
+    ]);
+    // plusieurs formats : le total, puis un bloc par format
+    const deux = lignesDepuisCalculateur({ ...ROAD, kits: [{ code: 'SNLR11', kg: 11.65, n: 17 }, { code: 'SNLR5', kg: 5.825, n: 2 }] }, CATALOGUE, null, id);
+    expect(deux.lignes[0].description.split('\n')[0]).toBe('19 kits : 17 × SNLR11 + 2 × SNLR5.');
+  });
+
+  it('sans kit de charge : le détail d\'un seau de 20 kg', () => {
+    const r = lignesDepuisCalculateur({ ...ROAD, kits: [], prep: null, pk: 36, ck: 2.7, q: 180, fk: 209.7 }, CATALOGUE, null, id);
+    expect(r.lignes[0].description.split('\n')).toEqual([
       "Détail d'un kit :",
       '• Résine 319 Flexible Seal : 20 kg (1 seau)',
       '• Pigment jaune 20 % : 4 kg à rajouter par seau (2 sachets de 2 kg)',
       '• Catalyst C2 : 300 g par seau à 20 °C (à prélever sur un seau de 2 kg)',
-      '• Charge SNLR : 23,3 kg (2 sachets SNLR11)',
+      '• Charge SNLR : 23,3 kg',
       "Mélange d'un kit : 47,6 kg, soit 47,6 m² à 1 kg/m² (476 ml en bande de 10 cm).",
     ]);
   });

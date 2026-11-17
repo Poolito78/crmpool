@@ -187,6 +187,36 @@ export function noteRecap(
   return lignes.join('\n');
 }
 
+/**
+ * Note du devis quand des kits de charge sont retenus : nombre de kits et
+ * détail d'un kit, format par format — résine, pigment et catalyseur suivent
+ * la charge du kit, comme dans « Préconisation » du calculateur.
+ */
+export function noteKits(
+  e: EtatCalculateur, kits: { code: string; kg: number; n: number }[],
+  resine: number, pigment: number, catalyseur: number, charge: number,
+): string | null {
+  if (!(resine > 0) || !(charge > 0) || !kits.length) return null;
+  const cpr = charge / resine, ppr = pigment / resine, kpr = catalyseur / resine;
+  const total = kits.reduce((a, k) => a + k.n, 0);
+  const blocs: string[] = [];
+  if (kits.length > 1) blocs.push(`${total} kits : ${kits.map(k => `${k.n} × ${k.code}`).join(' + ')}.`);
+  for (const k of kits) {
+    const r = k.kg / cpr, pg = r * ppr, ct = r * kpr, melange = r + pg + ct + k.kg;
+    const l = [`${k.n} kit${k.n > 1 ? 's' : ''} ${k.code} — détail par kit :`];
+    l.push(`• Résine ${e.nomResine} : ${kg(r)}`);
+    if (pg > 0) l.push(`• ${e.talc ? 'Fintalc M15' : `Pigment${e.pigNom ? ` ${e.pigNom}` : ''}`} ${nf(e.pig)} % : ${kg(pg)} à rajouter par kit`);
+    if (ct > 0) l.push(`• Catalyst C2 : ${kg(ct)} par kit à ${nf(e.temp, 0)} °C`);
+    l.push(`• Charge ${k.code} (${nf(k.kg, 3)} kg) : 1 sachet`);
+    const m2 = melange / e.rate;
+    l.push(`Mélange d'un kit : ${kg(melange)}, soit `
+      + (e.um && e.larg > 0 ? `${nf(m2 / (e.larg / 100))} ml en bande de ${nf(e.larg)} cm (${nf(m2)} m²)` : `${nf(m2)} m²`)
+      + ` à ${nf(e.rate)} kg/m².`);
+    blocs.push(l.join('\n'));
+  }
+  return blocs.join('\n\n');
+}
+
 /** Les lignes de devis de la préconisation du calculateur. */
 export function lignesDepuisCalculateur(
   e: EtatCalculateur,
@@ -225,7 +255,11 @@ export function lignesDepuisCalculateur(
      charge). L'en-tête « Calculateur Flowfast — … » et le récapitulatif du
      nombre de kits ont été retirés (règle du 17/11) : les quantités sont
      sur les lignes. */
-  const recap = noteRecap(e, resine, pigment, catalyseur, prep ? prep.charge : e.fk, kits);
+  /* Kits SNLR / SNLC retenus : leur nombre et le détail PAR KIT, comme la
+     préconisation du calculateur (règle du 17/11). Sans kit : un seau. */
+  const recap = kits.length
+    ? noteKits(e, kits, resine, pigment, catalyseur, prep ? prep.charge : e.fk)
+    : noteRecap(e, resine, pigment, catalyseur, e.fk, kits);
   if (recap) lignes.push({ id: genererId(), type: 'texte', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0, description: recap });
 
   /* Résine, en seaux. */
