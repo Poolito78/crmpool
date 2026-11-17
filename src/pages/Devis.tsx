@@ -6,7 +6,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type React
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type DevisOdooLie, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Building2, MoveHorizontal, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, BarChart3, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat, FilePlus } from 'lucide-react';
+import { Building2, MoveHorizontal, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, BarChart3, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, RefreshCw, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat, FilePlus } from 'lucide-react';
 import { demandeDepuisLigne, memoriserDemandeFiche, prendreLiaison, lierLigneAuProduit } from '@/lib/ficheDepuisLigne';
 import { genererScriptOdoo, promptOdooPartnerName, getOdooPartnerId, setOdooPartnerId, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, type OdooPayload } from '@/lib/odooSync';
 import { dimensionTeinte, teinteDeReference } from '@/lib/referenceTeinte';
@@ -2279,6 +2279,24 @@ export default function Devis() {
       return updated;
       });
     });
+  }
+
+  /**
+   * ↻ à côté du Net HT : la ligne reprend le prix du jour (palier de sa
+   * quantité, variantes, niveau et remises du client) et SE DÉFIGE — ses
+   * changements de quantité suivront désormais les paliers, comme une ligne
+   * ajoutée aujourd'hui. Les autres lignes du devis gardent leur prix.
+   */
+  function rafraichirPrixLigne(id: string) {
+    const l = lignes.find(x => x.id === id);
+    const p = l?.produitId ? produitParId(produits, l.produitId) : undefined;
+    if (!l || !p) return;
+    saveSnapshot();
+    lignesFigeesRef.current.delete(id);
+    const estRev = clients.find(c => c.id === clientId)?.estRevendeur;
+    const prix = getPrixLigne(p, l.quantite || 1, l.variantesChoisies, estRev);
+    setLignes(prev => prev.map(x => x.id === id ? { ...x, prixUnitaireHT: prix } : x));
+    toast.success(`Prix mis à jour : ${formatMontant(prix)} (ligne défigée)`);
   }
 
   function removeLigne(id: string) {
@@ -5294,7 +5312,25 @@ export default function Devis() {
                                   </div>
                                 ),
                                 remise: <Input type="number" value={l.remise || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />,
-                                netht: <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onFocus={e => e.target.select()} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className={classePrixVente} placeholder="0,00" title={margeBasse ? 'Marge inférieure à 30 % (coefficient < 1,43)' : undefined} />,
+                                netht: (
+                                  <div className="flex items-center gap-0.5">
+                                    <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onFocus={e => e.target.select()} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className={classePrixVente} placeholder="0,00" title={margeBasse ? 'Marge inférieure à 30 % (coefficient < 1,43)' : undefined} />
+                                    {prod && (() => {
+                                      const figee = lignesFigeesRef.current.has(l.id);
+                                      const prixJour = figee ? getPrixLigne(prod, l.quantite || 1, l.variantesChoisies, clients.find(c => c.id === clientId)?.estRevendeur) : l.prixUnitaireHT;
+                                      const ecart = Math.abs(prixJour - l.prixUnitaireHT) >= 0.005;
+                                      return (
+                                        <button type="button" onClick={() => rafraichirPrixLigne(l.id)}
+                                          title={figee
+                                            ? `Prix figé à l'enregistrement${ecart ? ` — prix du jour : ${formatMontant(prixJour)}` : ' (identique au prix du jour)'}.\nCliquer : prendre le prix du jour et défiger la ligne.`
+                                            : 'Ligne non figée : son prix suit la quantité. Cliquer pour recalculer le prix du jour.'}
+                                          className={`h-8 w-5 shrink-0 rounded flex items-center justify-center hover:bg-muted ${figee && ecart ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                                          <RefreshCw className="w-3.5 h-3.5" />
+                                        </button>
+                                      );
+                                    })()}
+                                  </div>
+                                ),
                                 marge: (
                                   <div className="h-8 flex flex-col justify-center text-right leading-tight">
                                     <span className={`text-xs font-medium ${coeffLigne == null ? 'text-muted-foreground' : coeffLigne >= 1.6 ? 'text-emerald-600 dark:text-emerald-400' : coeffLigne >= 1.43 ? 'text-orange-500' : 'text-destructive'}`}>{formatMontant(margeLigne)}</span>
