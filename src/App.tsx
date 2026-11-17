@@ -96,6 +96,7 @@ const CommandesClient = lazy(() => import("@/pages/CommandesClient"));
 const Devis = lazy(() => import("@/pages/Devis"));
 const CalculateurUPS = lazy(() => import("@/pages/CalculateurUPS"));
 const CalculSurfacePochoirs = lazy(() => import("@/pages/CalculSurfacePochoirs"));
+const CalculateurFlowfast = lazy(() => import("@/pages/CalculateurFlowfast"));
 const GED = lazy(() => import("@/pages/GED"));
 const FacturesClient = lazy(() => import("@/pages/FacturesClient"));
 const FacturesFournisseur = lazy(() => import("@/pages/FacturesFournisseur"));
@@ -229,6 +230,7 @@ function AppRoutes() {
             <Route path="/commandes-client" element={<CommandesClient />} />
             <Route path="/calculateur-ups" element={<CalculateurUPS />} />
             <Route path="/surface-pochoirs" element={<CalculSurfacePochoirs />} />
+            <Route path="/calculateur-flowfast" element={<CalculateurFlowfast />} />
             <Route path="/ged" element={<GED />} />
             <Route path="/factures-client" element={<FacturesClient />} />
             <Route path="/factures-fournisseur" element={canAchat ? <FacturesFournisseur /> : <Navigate to="/" replace />} />

@@ -299,6 +299,7 @@ function buildSeg(id, items, current, onpick){
 }
 
 function render(){
+  window.__etatCalc = null; window.__prepTot = null;
   var r = RES[cur];
   var C = cfg();
   var hasP = !!r.sets.c;
@@ -426,7 +427,7 @@ function render(){
     if (useF) cr += crow('Charge '+F.name, fmtKg(fk), 'k3');
     cr += '<tr class="tot"><td>Total mélange</td><td>'+fmtKg(total)+'</td></tr>';
     $('compb').innerHTML = cr;
-    window.__ratio = (q>0 && isFinite(area)) ? area/q : 0; if (window.__lock>0 && window.__ratio>0 && !window.__rec) { var tq=Math.round(window.__lock/window.__ratio*100)/100; if (Math.abs(tq-q)>0.005) { window.__rec=1; $('qty').value=tq; try { render(); } finally { window.__rec=0; } return; } } var sf=$('surf'); if (sf && document.activeElement!==sf && !window.__lock) sf.value = (area>0 && isFinite(area)) ? (Math.round(toU(area)*100)/100) : ''; if (window.__paint) window.__paint(); window.__kits && window.__kits(fk, isC, isR, area); window.__prep && window.__prep({ q:q, fk:fk, pk:pk, ck:ck, pig:pig, usePig:usePig && !C.talc, pigNom:(pigOpt && pigOpt.n ? ' '+pigOpt.n : ''), isC:isC, isR:isR, area:area }); $('area').innerHTML = fmt(toU(area),2)+'<span class="unit"> '+uL()+'</span>';
+    window.__ratio = (q>0 && isFinite(area)) ? area/q : 0; if (window.__lock>0 && window.__ratio>0 && !window.__rec) { var tq=Math.round(window.__lock/window.__ratio*100)/100; if (Math.abs(tq-q)>0.005) { window.__rec=1; $('qty').value=tq; try { render(); } finally { window.__rec=0; } return; } } var sf=$('surf'); if (sf && document.activeElement!==sf && !window.__lock) sf.value = (area>0 && isFinite(area)) ? (Math.round(toU(area)*100)/100) : ''; if (window.__paint) window.__paint(); window.__etatCalc = { resine: cur, mode: mode, nomResine: r.name, q: q, pig: usePig ? pig : 0, pigNom: (pigOpt && pigOpt.n) || '', talc: !!C.talc, pk: pk, ck: ck, charge: useF ? F.name : null, chargeTag: useF ? (F.tag || '') : '', isC: !!isC, isR: !!isR, fk: fk, total: total, area: area, um: UM, larg: LARG, rate: rate, temp: t }; window.__kits && window.__kits(fk, isC, isR, area); window.__prep && window.__prep({ q:q, fk:fk, pk:pk, ck:ck, pig:pig, usePig:usePig && !C.talc, pigNom:(pigOpt && pigOpt.n ? ' '+pigOpt.n : ''), isC:isC, isR:isR, area:area }); $('area').innerHTML = fmt(toU(area),2)+'<span class="unit"> '+uL()+'</span>';
     $('areat').textContent = UM ? 'Longueur couverte' : 'Surface couverte';
     $('areas').textContent = 'sur le poids total du mélange' + (UM ? ', soit '+fmt(area,2)+' m² en bande de '+fmtPct(LARG)+' cm' : '');
     $('rate').textContent = (noF ? '≈ ' : '')+(UM ? (rate*wM()).toLocaleString('fr-FR',{maximumFractionDigits:3})+' kg/ml' : rate.toLocaleString('fr-FR',{maximumFractionDigits:2})+' kg/m²');
@@ -538,6 +539,7 @@ $('surf').addEventListener('input',function(){ var v=fromU(parseFloat(String(thi
      ou un poids de sachet saisi (qui remplace le choix). */
   window.__sacs=function(pk){
     var wrap=$('sacwrap'); if(!wrap) return;
+    window.__sacsParts=[];
     wrap.style.display=pk>0?'block':'none'; if(!(pk>0)) return;
     var libre=num('sacw')/1000;
     var opts=[{k:'auto',label:'Combinaison'}].concat(SACS.map(function(x){return {k:x.n,label:fw(x.w)}}));
@@ -549,6 +551,7 @@ $('surf').addEventListener('input',function(){ var v=fromU(parseFloat(String(thi
     rows+='<tr class="tot"><td>Total des sachets</td><td>'+fmtKg(r.total)+'</td></tr>';
     rows+=crow('Reste après mélange', fmtKg(Math.max(0,r.total-pk)), 'k2');
     $('sactb').innerHTML=rows;
+    window.__sacsParts=r.parts.map(function(p){return {kg:p[0].w, n:p[1], libre:libre>0}});
     $('sacsum').textContent=r.parts.map(function(p){return fw(p[0].w)+' × '+p[1]}).join(' + ')+' · '+fmtKg(r.total);
   };
   /* Kits retenus (combinaison ou format choisi) pour une charge donnée. */
@@ -589,6 +592,7 @@ $('surf').addEventListener('input',function(){ var v=fromU(parseFloat(String(thi
     $('prept').textContent='Préconisation : '+res.parts.map(function(pt){return pt[1]+' × '+pt[0].n}).join(' + ');
     $('prepn').textContent='Quantités pour des kits '+nom+' complets (choix « Kits '+nom+' disponibles » en 3) : la résine, le pigment et le catalyseur suivent la charge de chaque kit.';
     show('prepwrap',true);
+    window.__prepTot={resine:tot.r, pigment:tot.p, catalyseur:tot.k, charge:tot.f, total:tt, kits:nbKits};
     /* Le pigment du 1 suit les kits. */
     if(c.usePig){
       $('pq').textContent=fmtKg(tot.p);
@@ -600,6 +604,7 @@ $('surf').addEventListener('input',function(){ var v=fromU(parseFloat(String(thi
     var apk=(fk>0 && area>0 && isFinite(area))?area/fk:0; var f2=function(n){return n.toLocaleString('fr-FR',{maximumFractionDigits:2})};
     var wrap=$('kitwrap'); if(!wrap) return;
     var key=isR?'r':(isC?'c':null), list=key?KITS[key]:[];
+    window.__kitsParts=[];
     wrap.style.display=list.length?'block':'none'; if(!list.length) return;
     $('kitt').textContent='Kits '+(isR?'SNLR':'SNLC')+' disponibles';
     var opts=[{k:'auto',label:'Combinaison'}].concat(list.map(function(x){return {k:x.n,label:x.n+' · '+f3(x.w)+' kg'}}));
@@ -614,6 +619,7 @@ $('surf').addEventListener('input',function(){ var v=fromU(parseFloat(String(thi
     rows+='<tr class="tot"><td>Total des kits</td><td>'+f3(total)+' kg</td></tr>'; rows+=crow((UM ? 'Longueur' : 'Surface')+' appliquée avec les kits', f2(toU(total*apk))+u, 'k1');
     rows+=crow('Reste après application', f3(Math.max(0,total-fk))+' kg', 'k3');
     $('kittb').innerHTML=rows;
+    window.__kitsParts=parts.map(function(p){return {code:p[0].n, kg:p[0].w, n:p[1]}});
     $('kitsum').textContent=parts.map(function(p){return p[0].n+' × '+p[1]}).join(' + ')+' · '+f3(total)+' kg · '+f2(toU(total*apk))+u;
     $('kitbox').style.display=kitOpen?'block':'none';
   };
@@ -664,6 +670,17 @@ $('in-rr').addEventListener('input',function(){ var x = parseFloat(this.value);
 $('in-rclr').addEventListener('input',function(){ var x = parseFloat(this.value); rateClr = isNaN(x) ? 0.5 : Math.min(1, Math.max(0.3, x)); render(); });
 $('in-r107').addEventListener('input',function(){ var x = parseFloat(this.value); rate107 = isNaN(x) ? 0.5 : Math.min(0.5, Math.max(0.4, x)); render(); });
 $('detbtn').addEventListener('click',function(){ detOpen = !detOpen; render(); });
+/* Préconisation lue par MonCRM (bouton « Créer devis ») : la page du CRM
+   affiche ce calculateur et en reprend les quantités. Sans effet sur le site. */
+window.__devisCalc = function(){
+  var e = window.__etatCalc; if (!e) return null;
+  var o = {}; for (var k in e) o[k] = e[k];
+  o.longueur = e.um ? e.area / wM() : null;
+  o.kits = (e.isC || e.isR) ? (window.__kitsParts || []) : [];
+  o.sachets = window.__sacsParts || [];
+  o.prep = window.__prepTot || null;
+  return o;
+};
 /* Surface ou bande. Changer d'unité garde la surface ; changer de largeur
    garde la longueur saisie (la résine suit). */
 function paintW(){

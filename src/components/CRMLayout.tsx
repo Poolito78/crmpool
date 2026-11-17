@@ -1,5 +1,5 @@
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { Tag, LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic, MailSearch, Ruler, Power, Globe, Link2, Plus } from 'lucide-react';
+import { Tag, LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic, MailSearch, Ruler, Power, Globe, Link2, Plus, FlaskConical } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef, useCallback, useContext, createContext, lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -168,6 +168,8 @@ const NAV: NavEntry[] = [
     items: [
       { type: 'link', label: 'Tarif en ligne', icon: Tag,   path: '/tarif', external: true },
       { type: 'link', label: 'ISOFLOOR.FR',    icon: Globe, path: ISOFLOOR_URL, external: true },
+      /* Le calculateur du site, dans MonCRM : « Créer devis » en reprend la préconisation. */
+      { type: 'link', label: 'Calculateur Flowfast', icon: FlaskConical, path: '/calculateur-flowfast' },
     ],
   },
   {
