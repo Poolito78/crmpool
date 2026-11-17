@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<!-- Calculateur Flowfast d'isofloor.fr : le détail des charges SNLR / SNLC n'apparaît
+     qu'aux clients dont la fiche MonCRM porte « Accès au détail des formules » (onglet WEB)
+     et à l'administrateur. Généré par MonCRM le 17/11/2026 — à coller dans le bloc HTML
+     de la page Odoo /calculateur-flowfast, à la place de l'ancien code. -->
+
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculateur Flowfast – Aide applicateur ISOFLOOR</title>
+<style>
+  html{overflow:hidden}
+  #qty{font-weight:700}
+  :root{--bg:#f6f6f4;--card:#fff;--ink:#1a1a1a;--mut:#6b6b6b;--acc:#FF2E17;--line:#e3e3df;--hl:#ffeae7;
+        --k1:#FF2E17;--k2:#7B1FA2;--k3:#B26A00;--k4:#1565C0}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
+  .wrap{max-width:600px;margin:0 auto}
+  .brand{display:flex;align-items:baseline;gap:10px;margin:2px 0 8px}
+  .brand b{font-size:22px;letter-spacing:.04em;color:var(--acc);font-weight:800}
+  .brand span{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
+  h1{font-size:20px;margin:4px 0 2px}
+  h2{font-size:15px;margin:0 0 8px}
+  .sub{color:var(--mut);font-size:13px;margin-bottom:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+  .rc{border-left:6px solid var(--c)}
+  .hd{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;margin-bottom:12px;color:var(--c)}
+  .num{background:var(--c);color:var(--card);border-radius:50%;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+  .sec{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mut);margin:14px 0 0;padding-top:12px;border-top:1px dashed var(--line)}
+  .nosep{border-top:0;padding-top:0;margin-top:0}
+  label{display:block;font-size:13px;color:var(--mut);margin:0 0 4px}
+  .row{display:flex;gap:12px}
+  .row>div{flex:1}
+  input[type=number]{width:100%;font-size:20px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+  input[type=range]{width:100%;accent-color:var(--acc);margin:10px 0 0}
+  select{width:100%;font-size:18px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+  .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:10px}
+  .seg button{flex:1;padding:10px 4px;border:0;background:var(--bg);color:var(--ink);font-size:14px;cursor:pointer}
+  .seg button.on{background:var(--c,var(--acc));color:var(--card);font-weight:600}
+  .rdesc{font-size:13px;color:var(--mut);margin-top:8px}
+  .res{text-align:center}
+  .big{font-size:40px;font-weight:700;color:var(--c,var(--acc));line-height:1.1}
+  .unit{font-size:16px;color:var(--mut);font-weight:400}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .box{background:var(--bg);border-radius:10px;padding:10px;text-align:center}
+  .box b{display:block;font-size:22px;color:var(--c,var(--ink))}
+  .box span{font-size:12px;color:var(--mut)}
+  table{width:100%;border-collapse:collapse;font-size:15px}
+  th,td{padding:6px 6px;text-align:right;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  th{font-size:12px;color:var(--mut);font-weight:600}
+  tr.hl td{background:var(--hl);font-weight:700}
+  tr.int td{color:var(--mut)}
+  tr.hl.int td{color:var(--ink)}
+  tr.ref td:first-child::after{content:" •";color:var(--acc)}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px;vertical-align:baseline}
+  tr.tot td{font-weight:700;border-top:2px solid var(--line)}
+  .warn{background:#fff3cd;color:#664d03;border-radius:10px;padding:10px;font-size:13px;margin-top:10px;display:none;text-align:left}
+  .note{font-size:12px;color:var(--mut);margin-top:8px}
+  .info{background:var(--bg);border-radius:10px;padding:10px;font-size:13px;margin-top:10px;text-align:left;color:var(--mut)}
+  .recap td,.recap th{font-size:13px;padding:6px 4px}
+  .recap td small{color:var(--mut);display:block;font-size:11px}
+  a{color:var(--acc);font-weight:600;text-decoration:none}
+  .annex{display:none}
+  .annex.on{display:block}
+  body.ann .wrap>*:not(.annex){display:none !important}
+.sliders{margin-top:6px}.sl{margin-top:10px}.sll{font-size:13px;font-weight:600;color:var(--mut)}.slr{display:flex;align-items:center;gap:8px}.slr input[type=range]{margin:0;flex:1}.slb{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;width:38px;height:34px;cursor:pointer;font-size:14px;padding:0}.slb:active{background:var(--line)}.sln{font-size:12px;color:var(--mut);margin:2px 0 0 46px}</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand" style="flex-direction:column;align-items:flex-start;gap:4px"><span style="text-transform:none;letter-spacing:.02em;font-size:12px">Sols techniques &amp; résines · Aide applicateur</span></div>
+  <h1>Calculateur Flowfast</h1>
+  <div class="sub">Pigment, catalyseur C2, charge et consommation selon la résine, la quantité et la température.</div>
+
+  <div class="card" style="--c:var(--k1)">
+    <div class="seg" id="rseg" style="margin-top:0">
+      <button data-r="107">107</button>
+      <button data-r="208">208</button>
+      <button data-r="215">215</button>
+      <button data-r="319" class="on">319</button>
+    </div>
+    <div class="rdesc" id="rdesc"></div>
+    <div class="seg" id="seg">
+      <button data-m="c">Clear</button>
+      <button data-m="u" class="on">Unpigmented</button>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      <div><label for="qty">Résine (kg)</label><input id="qty" type="number" inputmode="decimal" min="0" step="0.1" value="10"></div>
+      <div><label for="temp">Température (°C)</label><input id="temp" type="number" inputmode="decimal" min="-6" max="35" step="1" value="20"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <div><label for="surf">Surface à appliquer (m²)</label><input id="surf" type="number" inputmode="decimal" min="0" step="0.5" placeholder="m²"></div>
+      <div style="align-self:end;color:var(--mut);font-size:13px;padding-bottom:10px">Saisir la surface : la quantité de résine est calculée.</div>
+    </div>
+    <div class="sliders"><div class="sl"><div class="sll" id="cur-t">Curseur</div><div class="slr"><button type="button" class="slb" id="cur-dn" aria-label="Précédent">◀</button><input id="cur" type="range" min="0" max="40" step="0.1" value="10" aria-label="Curseur"><button type="button" class="slb" id="cur-up" aria-label="Suivant">▶</button></div><div class="sln" id="cur-n"></div></div><input id="rng" type="hidden" value="20"></div>
+    <div class="row" style="margin-top:12px">
+      <div><label for="sach">Poids d'un sachet de Catalyst (g)</label><input id="sach" type="number" inputmode="decimal" min="1" value="150"></div>
+    </div>
+  </div>
+
+  <div class="card rc" id="c2p" style="--c:var(--k2)">
+    <div class="hd"><span class="num">1</span><span id="pigt">Pigment</span></div>
+    <div class="seg" id="pseg" style="margin-top:0"></div>
+    <div class="grid" id="pbox">
+      <div class="box" style="grid-column:1/-1"><b id="pq">–</b><span id="pl">pigment</span></div>
+    </div>
+    <div class="info" id="pigi">Le pigment se dose sur le poids de résine seule.</div>
+  </div>
+
+  <div class="card rc res" style="--c:var(--k1)">
+    <div class="hd"><span class="num">2</span>Catalyst C2</div>
+    <div class="big" id="g">–<span class="unit"> g</span></div>
+    <div style="color:var(--mut);font-size:14px">de catalyseur à ajouter à <span id="qk">4</span> kg de résine</div>
+    <div class="grid">
+      <div class="box"><b id="pct">–</b><span>% du poids de résine</span></div>
+      <div class="box"><b id="sachets">–</b><span>sachets de Catalyst de <span id="sw">150</span> g</span></div>
+    </div>
+    <div class="warn" id="warn"></div>
+  </div>
+
+  <div class="card rc" id="c2f" style="--c:var(--k3)">
+    <div class="hd"><span class="num">3</span>Charge</div>
+    <div class="seg" id="fseg" style="margin-top:0"></div>
+    <div id="xbox" style="display:none">
+      <div class="seg" id="ctseg"></div>
+      <div style="margin-top:12px"><label for="in-gran">Granulométrie (mm)</label><select id="in-gran"></select></div>
+      <div style="margin-top:12px"><label for="in-rat">Ratio résine : charge (1 : x), de 1 à 3</label><input id="in-rat" type="number" inputmode="decimal" min="1" max="3" step="0.05" value="1.25"></div>
+      <input id="in-ratr" type="range" min="1" max="3" step="0.05" value="1.25" aria-label="Ratio résine charge">
+      <div class="note">1 : 1,25 conseillé pour pavé et BAO Mortar.</div>
+    </div>
+    <div class="grid" id="fbox">
+      <div class="box" style="grid-column:1/-1"><b id="fq">–</b><span id="fl">charge</span></div>
+    </div>
+    <div id="detwrap" style="display:none;margin-top:10px"><button id="detbtn" type="button" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--k3);font-weight:600;font-size:14px;cursor:pointer">Voir détails de la charge SNLC ▾</button><div id="detlogin" style="display:none"><button id="detlbtn" type="button" style="width:100%;padding:10px;border:1px dashed var(--line);border-radius:10px;background:var(--bg);color:var(--mut);font-size:13px;cursor:pointer">Détail de la charge : espace client ISOFLOOR — se connecter ▾</button><form id="detlform" style="display:none;margin-top:10px"><div class="row"><div><label for="detlid">E-mail</label><input id="detlid" type="email" autocomplete="username" required style="width:100%;font-size:16px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)"></div><div><label for="detlmdp">Mot de passe</label><input id="detlmdp" type="password" autocomplete="current-password" required style="width:100%;font-size:16px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)"></div></div><div id="detlerr" class="note" style="color:#b42318"></div><button id="detlgo" type="submit" style="width:100%;margin-top:8px;padding:10px;border:0;border-radius:10px;background:var(--k3);color:#fff;font-weight:600;font-size:14px;cursor:pointer">Se connecter</button><div class="note">Identifiants de votre tarif en ligne ISOFLOOR. Accès ouvert sur demande.</div></form></div><div id="detbox" style="display:none;margin-top:10px"><table><tbody id="dettb"></tbody></table><label style="margin-top:12px">HDK N20 (% du poids de résine)</label><div class="seg" id="n20seg" style="margin-top:4px"></div><div class="note" id="detnote"></div></div><div id="kitwrap" style="display:none;margin-top:12px"><div class="sll" id="kitt"></div><div id="kitsum" style="font-size:14px;margin-top:4px"></div><button type="button" id="kitbtn" class="" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--k3);font-weight:600;font-size:14px;cursor:pointer;margin-top:8px">Voir détails des kits ▾</button><div id="kitbox" style="display:none"><div class="seg" id="kitseg" style="margin-top:8px;flex-wrap:wrap"></div><table style="margin-top:8px"><tbody id="kittb"></tbody></table></div></div></div>
+    <div class="info">Ratio résine : charge, calculé sur le poids de résine seule.</div>
+  </div>
+
+  <div class="card rc" id="c3" style="--c:var(--k4)">
+    <div class="hd"><span class="num">4</span>Consommation</div>
+    <div class="row" id="r107row" style="display:none;margin-bottom:12px">
+      <div><label for="in-r107">Consommation du primaire (kg/m²), de 0,4 à 0,5</label><input id="in-r107" type="number" inputmode="decimal" min="0.4" max="0.5" step="0.05" value="0.5"></div>
+    </div>
+    <div class="row" id="rclrrow" style="display:none;margin-bottom:12px">
+      <div><label for="in-rclr">Consommation du Clear : <b id="rclrv">0,5</b> kg/m² (de 0,3 à 1)</label><input id="in-rclr" type="range" min="0.3" max="1" step="0.05" value="0.5"></div>
+    </div>
+    <div class="row" id="rrrow" style="display:none;margin-bottom:12px"><div><label for="in-rr">Consommation du mélange : <b id="rrv">1</b> kg/m² (de 0,7 à 1,2)</label><input id="in-rr" type="range" min="0.7" max="1.2" step="0.05" value="1"></div></div>
+    <div class="info" id="clrinfo" style="display:none;margin:-4px 0 12px"></div>
+    <div class="seg" id="sseg" style="margin-top:0;margin-bottom:12px;display:none"></div>
+    <div class="seg" id="tseg" style="margin-top:0;margin-bottom:12px"></div>
+    <div class="row" id="mmrow" style="display:none;margin-bottom:12px">
+      <div><label for="in-mm">Épaisseur du mortier (mm)</label><input id="in-mm" type="number" inputmode="decimal" min="0.5" step="0.5" value="2"></div>
+    </div>
+    <div class="sec nosep">Poids du mélange</div>
+    <table style="margin-top:6px"><tbody id="compb"></tbody></table>
+    <div class="sec">Surface couverte</div>
+    <div class="res" style="margin-top:10px">
+      <div class="big" id="area">–</div>
+      <div style="color:var(--mut);font-size:14px">sur le poids total du mélange</div>
+    </div>
+    <div class="grid">
+      <div class="box" id="ratebox"><b id="rate">–</b><span id="ratel">consommation</span></div>
+      <div class="box" id="primbox"><b id="prim">–</b><span id="priml">primaire Flowfast 107</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Annexes</h2>
+    <p style="margin:8px 0"><a href="#annexe-1">Annexe 1 – Catalyseur : tableau tous les degrés →</a></p>
+    <p style="margin:8px 0"><a href="#annexe-2">Annexe 2 – Récapitulatif des résines →</a></p>
+  </div>
+
+  <div class="note" style="margin:4px 4px 16px">Valeurs données à titre indicatif, d'après les fiches techniques des fabricants et nos préconisations. Les dosages et les consommations varient selon le support, la température et la mise en œuvre : réaliser un essai préalable. Les fiches techniques en vigueur font foi.</div>
+
+  <div class="card annex" id="annexe-1">
+    <p style="margin:0 0 12px"><a href="#calcul">← Retour au calcul</a></p>
+    <h2>Annexe 1 – Flowfast <span id="tn">319</span> – catalyseur pour <span id="tq">4</span> kg, tous les degrés</h2>
+    <table>
+      <thead><tr><th>Temp.</th><th>%</th><th>Catalyseur</th><th>Sachets</th></tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+    <div class="note"><span style="color:var(--acc)">•</span> = valeur de la fiche technique ; les autres degrés sont interpolés linéairement (en gris).</div>
+  </div>
+
+  <div class="card annex" id="annexe-2">
+    <p style="margin:0 0 12px"><a href="#calcul">← Retour au calcul</a></p>
+    <h2>Annexe 2 – Récapitulatif des résines (fiches techniques)</h2>
+    <table class="recap">
+      <thead><tr><th>Résine</th><th>0 °C</th><th>10 °C</th><th>20 °C</th><th>30 °C</th></tr></thead>
+      <tbody id="recap"></tbody>
+    </table>
+    <div class="note">% en poids de résine, et grammes de C2 pour un seau de 20 kg. Sous 0 °C, ajouter d'abord du Flowfast 404 Accelerator, puis le catalyseur. Optimum d'utilisation : 15–20 °C. Le catalyseur se mélange lentement, sans incorporer d'air.<br>319 Unpigmented : 319c sur béton, charge SNLC 1 : 0,504, 0,8 kg/m² (après primaire 107 à 0,5 kg/m²) ; 319r sur enrobé, charge 1 : 1,165, 1 kg/m².<br>215 autolissant : charge SNL Filler 1 : 2 (béton) ou 1 : 2,5 (enrobé) ; pigment 5 % (jaune 10 %) ; consommation du mélange 2,5 kg/m² à 1 mm, 3,2 kg/m² à 2 mm, 4,5 kg/m² à 3 mm ; sans charge environ 0,75 kg/m².<br>208 mortier : charge quartz ou granit, ratio 1 : 1 à 1 : 3 (1 : 1,25 conseillé pour pavé et BAO Mortar), 2,12 kg/m² par mm d'épaisseur (sur enrobé : 2,8 kg/m² à 1 mm, 4,5 kg/m² à 2 mm), pigment 0,5 %.<br>107 : consommation 0,4 à 0,5 kg/m² (0,5 par défaut).<br>319 Clear : consommation 0,3 à 1 kg/m² (0,5 par défaut), au-delà de 0,5 appliquer en deux couches.</div>
+  </div>
+</div>
+
+<script>
+var RES = {
+  '107': {name:'107 Ceramic/Metal Primer', desc:'Primaire céramique / métal.',
+          sets:{u:{pts:[[0,6],[10,4],[20,2],[30,1]],lt0:6}}},
+  '215': {name:'215 Flexible Binder', desc:'Liant flexible (acrylique modifié + uréthane). Autolissant en mélange avec le SNL Filler.',
+          sets:{u:{pts:[[0,6],[10,4],[20,2],[30,1]],lt0:6}}},
+  '319': {name:'319 Flexible Seal', desc:'Finition flexible MMA résistante aux UV.',
+          sets:{c:{pts:[[0,3],[10,2],[20,1],[30,0.9]],lt0:4}, u:{pts:[[0,4],[10,3],[20,1.5],[30,1]],lt0:5}}},
+  '208': {name:'208 Cove Mix', desc:'Résine gélifiée pour plinthes et gorges ; mélangée à du quartz (1 kg de résine pour 3 kg de quartz). Le dosage est sur le poids de résine seule.',
+          sets:{u:{pts:[[0,4],[10,3],[20,1.5],[30,1]],lt0:5}}}
+};
+var PIG319 = [{v:10,n:'standard',btn:'Couleur standard 10 %'},{v:20,n:'jaune',btn:'Jaune 20 %'},{v:0,n:'',btn:'Sans pigment'}];
+var PIG215 = [{v:5, n:'standard',btn:'Couleur standard 5 %'}, {v:10,n:'jaune',btn:'Jaune 10 %'},{v:0,n:'',btn:'Sans pigment'}];
+var PIG208 = [{v:0.5,n:'',btn:'Pigment 0,5 %'},{v:0,n:'',btn:'Sans pigment'}];
+var PIGCLEAR = [{v:0,n:'',btn:'Catalyseur seul'},{v:10,n:'',btn:'Fintalc M15 10 %'}];
+var FILL319 = {
+  c:{ratio:0.5,   rate:0.8, primer:0.5, name:'SNLC', tag:'319 Concrete (319c béton)', btn:'319 Concrete · 319c béton (1:0,5)'},
+  r:{ratio:1.165, rate:1,               name:'SNLR', tag:'319 Road (319r enrobé)', btn:'319 Road · 319r enrobé (1:1,165)'}
+};
+var FILL215 = {
+  a:{ratio:2,   name:'SNL Filler', tag:'215 béton',  btn:'1 : 2 (béton)'},
+  b:{ratio:2.5, name:'SNL Filler', tag:'215 enrobé', btn:'1 : 2,5 (enrobé)'}
+};
+var THICK215 = {1:2.5, 2:3.2, 3:4.5};
+var FILL208 = {m:{ratio:3, name:'quartz', tag:'208 mortier', btn:'Mortier (résine + charge)'}};
+var PERMM208 = 2.12;
+var THICK208ENR = {1:2.8, 2:4.5};
+var GRANS = [['0,1–0,3','0,1–0,3'],['0,3–0,8','0,3–0,8'],['0,5–1','0,5–1 (moyen)'],['0,7–1,3','0,7–1,3'],['1–2,5','1–2,5']];
+var n20 = 4, detOpen = false;
+var ctype = 'quartz', gran = '0,5–1', ratio208 = 1.25, mmv = 2, sup208 = 'std', thickE = 2, rate107 = 0.5, rateClr = 0.5, rateR = 1;
+
+var cur = '319', mode = 'u', fill = null, pig = null, thick = 2;
+var DEFQ = {'107':5, '208':4, '215':10, '319':10};
+var $ = function(id){return document.getElementById(id)};
+function show(id, on, disp){ $(id).style.display = on ? (disp||'block') : 'none'; }
+function set(){ var r = RES[cur]; return r.sets[mode] || r.sets.u; }
+function cfg(){
+  if (cur==='319') return {pig:(mode==='u' ? PIG319 : PIGCLEAR), talc:(mode==='c'), fills:(mode==='u' ? FILL319 : null), thick:null};
+  if (cur==='215') return {pig:PIG215, fills:FILL215, thick:THICK215, nofillRate:0.75};
+  if (cur==='208') return {pig:PIG208, fills:FILL208, thick:null, perMm:PERMM208};
+  return {pig:null, fills:null, thick:null};
+}
+function pctAt(t, s){
+  s = s || set();
+  if (t < 0) return s.lt0;
+  var p = s.pts;
+  if (t >= p[p.length-1][0]) return p[p.length-1][1];
+  for (var i=0;i<p.length-1;i++){
+    if (t>=p[i][0] && t<=p[i+1][0]) return p[i][1] + (p[i+1][1]-p[i][1])*(t-p[i][0])/(p[i+1][0]-p[i][0]);
+  }
+}
+function fmt(n,d){return n.toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d})}
+function fmtPct(p){return p.toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:2})}
+function fmtG(g){return fmt(g,g<100?1:0)}
+function fmtKg(k){return k < 1 ? fmt(k*1000,0)+' g' : fmt(k,2)+' kg'}
+function crow(label, val, k){ return '<tr><td><span class="dot" style="background:var(--'+k+')"></span>'+label+'</td><td>'+val+'</td></tr>'; }
+function buildSeg(id, items, current, onpick){
+  var el = $(id); el.innerHTML = '';
+  items.forEach(function(it){
+    var b = document.createElement('button');
+    b.textContent = it.label;
+    if (String(it.k) === String(current)) b.className = 'on';
+    b.addEventListener('click', function(){ onpick(it.k); render(); });
+    el.appendChild(b);
+  });
+}
+
+function render(){
+  var r = RES[cur];
+  var C = cfg();
+  var hasP = !!r.sets.c;
+  if (!hasP) mode = 'u';
+  C = cfg();
+  show('seg', hasP, 'flex');
+  $('rdesc').textContent = r.desc + (hasP ? (mode==='c' ? ' Clear : version transparente ; Fintalc M15 à 10 % pour la rendre teintable, sinon uniquement le catalyseur.' : ' Unpigmented : ajouter 10 % en poids de pigment approprié.') : '');
+  $('tn').textContent = cur + (hasP ? (mode==='c' ? ' Clear' : ' Unpigmented') : '');
+
+  if (C.pig && !C.pig.some(function(o){return o.v===pig})) pig = C.pig[0].v;
+  if (C.fills && fill !== 'n' && !C.fills[fill]) fill = Object.keys(C.fills)[0];
+  if (C.thick && !C.thick[thick]) thick = 2;
+
+  var q = parseFloat($('qty').value)||0;
+  var t = parseFloat($('temp').value); if (isNaN(t)) t = 20;
+  var sw = parseFloat($('sach').value)||150;
+  var s = set();
+
+  var pigOpt = C.pig ? C.pig.filter(function(o){return o.v===pig})[0] : null;
+  show('c2p', !!C.pig);
+  $('pigt').textContent = C.talc ? 'Fintalc M15' : 'Pigment';
+  $('pigi').textContent = C.talc ? 'Rend le Clear teintable. Se dose sur le poids de résine seule ; sans Fintalc, uniquement le catalyseur.' : 'Le pigment se dose sur le poids de résine seule.';
+  var usePig = !!C.pig && pig > 0;
+  var pk = usePig ? q*pig/100 : 0;
+  if (C.pig) buildSeg('pseg', C.pig.map(function(o){return {k:o.v,label:o.btn}}), pig, function(k){ pig = parseFloat(k); });
+  show('pbox', usePig, 'grid');
+  if (usePig){
+    $('pq').textContent = fmtKg(pk);
+    $('pl').textContent = (C.talc ? 'Fintalc M15' : 'pigment'+(pigOpt.n ? ' '+pigOpt.n : ''))+' ('+fmtPct(pig)+' % du poids de résine)';
+  }
+
+  var p = pctAt(t,s), g = q*1000*p/100;
+  $('g').innerHTML = fmtG(g)+'<span class="unit"> g</span>';
+  $('qk').textContent = fmt(q,q%1?1:0);
+  $('pct').textContent = fmtPct(p)+' %';
+  $('sachets').textContent = fmt(g/sw,2);
+  $('sw').textContent = fmt(sw,0);
+  $('tq').textContent = fmt(q,q%1?1:0);
+  var msg='';
+  if (t < 0) msg = 'Sous 0 °C : dosage « < 0 °C » de la fiche, et ajouter d\'abord du Flowfast 404 Accelerator avant le catalyseur.';
+  else if (t > 30) msg = 'Au-dessus de 30 °C : dosage non prévu par la fiche, contacter le service technique (dosage de 30 °C affiché).';
+  show('warn', !!msg); $('warn').textContent = msg;
+
+  show('c2f', !!C.fills);
+  var useF = !!C.fills && fill !== 'n';
+  var fk = 0, F = null;
+  if (C.fills){
+    var items = Object.keys(C.fills).map(function(k){return {k:k,label:C.fills[k].btn}}).concat([{k:'n',label:'Sans charge'}]);
+    buildSeg('fseg', items, fill, function(k){ fill = k; });
+  }
+  show('fbox', useF, 'grid'); show('detwrap', false);
+  show('xbox', useF && cur==='208');
+  if (useF && cur==='208') buildSeg('ctseg', [{k:'quartz',label:'Quartz'},{k:'granit',label:'Granit'}], ctype, function(k){ ctype = k; });
+  if (useF){
+    F = C.fills[fill];
+    if (cur==='208') F = {ratio:ratio208, name:ctype+' '+gran+' mm', tag:'208 mortier'};
+    var isC = (cur==='319' && fill==='c'); var isR = (cur === '319' && fill === 'r'); var isD = isC || isR; var dn = isC ? 'SNLC' : F.name;
+    /* Composition des charges SNLR / SNLC : reçue de MonCRM (fonction
+       tarif-catalogue) pour un client autorisé ou l'administrateur, jamais
+       écrite dans cette page. Sans elle, seul le ratio total s'affiche. */
+    var FO = isD && FORMULES ? FORMULES[dn] : null, comps = null;
+    if (FO){
+      comps = FO.composants.map(function(c){
+        var hdk = isC && /HDK/i.test(c.nom);
+        return { nom: c.nom, ratio: hdk ? fmtPct(n20/10)+' % du poids de résine ('+fmt(n20,0)+' g/kg)' : c.ratio, kg: q*(hdk ? n20/1000 : c.kgParKg) };
+      });
+      fk = comps.reduce(function(a,c){ return a + c.kg; }, 0);
+    } else fk = q*(isC ? 0.504 : F.ratio); // SNLC : 504 g de charge par kg de résine, HDK compris
+    show('detwrap', isD);
+    if (isD){
+      show('detlogin', !FO); show('detbtn', !!FO); show('detbox', !!FO && detOpen);
+      if (FO){
+        $('detbtn').textContent = detOpen ? 'Masquer détails de la charge '+dn+' ▴' : 'Voir détails de la charge '+dn+' ▾';
+        $('dettb').innerHTML = comps.map(function(c){ return crow(c.nom+' ('+c.ratio+')', fmtKg(c.kg), 'k3'); }).join('')
+          + '<tr class="tot"><td>Charge '+dn+' totale</td><td>'+fmtKg(fk)+'</td></tr>';
+        $('detnote').textContent = FO.note || '';
+        var sg = $('n20seg');
+        if (isC) buildSeg('n20seg', [{k:4,label:'0,4 % (4 g/kg)'},{k:3,label:'0,3 % (3 g/kg)'}], n20, function(k){ n20 = parseFloat(k); });
+        sg.style.display = isC ? '' : 'none';
+        if (sg.previousElementSibling) sg.previousElementSibling.style.display = isC ? '' : 'none';
+      }
+    }
+    $('fq').textContent = fmt(fk,2)+' kg';
+    $('fl').textContent = 'charge '+F.name+' ('+F.tag+', 1 : '+F.ratio.toLocaleString('fr-FR',{maximumFractionDigits:3})+')';
+  }
+
+  var noF = !!C.fills && fill==='n' && !!C.nofillRate;
+  var is107 = cur==='107';
+  var isClr = cur==='319' && mode==='c';
+  var isRng = is107 || isClr;
+  show('c3', useF || noF || isRng);
+  show('r107row', is107, 'flex');
+  show('rclrrow', isClr, 'flex');
+  show('rrrow', cur === '319' && fill === 'r', 'flex');
+  $('rrv').textContent = fmt(rateR,2);
+  show('clrinfo', isClr && rateClr > 0.5);
+  $('rclrv').textContent = fmtPct(rateClr);
+  $('clrinfo').textContent = 'Au-delà de 0,5 kg/m² : appliquer en deux couches (environ '+fmt(rateClr/2,2)+' kg/m² par couche).';
+  if (useF || noF || isRng){
+    var enr = useF && cur==='208' && sup208==='enr';
+    var rate = is107 ? rate107 : isClr ? rateClr : noF ? C.nofillRate : (enr ? THICK208ENR[thickE] : (C.perMm ? C.perMm*mmv : (C.thick ? C.thick[thick] : (cur === '319' && fill === 'r' ? rateR : F.rate))));
+    var ck = g/1000;
+    var total = q + ck + pk + fk;
+    var area = total / rate;
+    show('sseg', useF && cur==='208', 'flex');
+    if (useF && cur==='208') buildSeg('sseg', [{k:'std',label:'Standard (2,12 kg/m²/mm)'},{k:'enr',label:'Sur enrobé'}], sup208, function(k){ sup208 = k; });
+    show('tseg', (useF && !!C.thick) || enr, 'flex');
+    show('mmrow', useF && !!C.perMm && !enr, 'flex');
+    if (enr) buildSeg('tseg', [{k:1,label:'1 mm'},{k:2,label:'2 mm'}], thickE, function(k){ thickE = parseInt(k,10); });
+    if (useF && C.thick) buildSeg('tseg', Object.keys(C.thick).map(function(k){return {k:k,label:k+' mm'}}), thick, function(k){ thick = parseInt(k,10); });
+    var cr = crow('Résine', fmtKg(q), 'ink');
+    if (usePig) cr += crow((C.talc ? 'Fintalc M15' : 'Pigment'+(pigOpt.n ? ' '+pigOpt.n : ''))+' ('+fmtPct(pig)+' %)', fmtKg(pk), 'k2');
+    cr += crow('Catalyst C2', fmtKg(ck), 'k1');
+    if (useF) cr += crow('Charge '+F.name, fmtKg(fk), 'k3');
+    cr += '<tr class="tot"><td>Total mélange</td><td>'+fmtKg(total)+'</td></tr>';
+    $('compb').innerHTML = cr;
+    window.__ratio = (q>0 && isFinite(area)) ? area/q : 0; if (window.__lock>0 && window.__ratio>0 && !window.__rec) { var tq=Math.round(window.__lock/window.__ratio*100)/100; if (Math.abs(tq-q)>0.005) { window.__rec=1; $('qty').value=tq; try { render(); } finally { window.__rec=0; } return; } } var sf=$('surf'); if (sf && document.activeElement!==sf && !window.__lock) sf.value = (area>0 && isFinite(area)) ? (Math.round(area*100)/100) : ''; if (window.__paint) window.__paint(); window.__kits && window.__kits(fk, isC, isR, area); $('area').innerHTML = fmt(area,2)+'<span class="unit"> m²</span>';
+    $('rate').textContent = (noF ? '≈ ' : '')+rate.toLocaleString('fr-FR',{maximumFractionDigits:2})+' kg/m²';
+    $('ratel').textContent = isClr ? '319 Clear : poids total du mélange' : is107 ? 'primaire 107 : poids total du mélange' : noF ? 'mélange sans charge' : (enr ? 'mélange sur enrobé, '+thickE+' mm' : C.perMm ? 'mélange, '+mmv+' mm ('+fmt(C.perMm,2)+' kg/m²/mm)' : (C.thick ? 'mélange, épaisseur '+thick+' mm' : F.tag+' : poids total du mélange'));
+    var pr = useF ? F.primer : 0;
+    show('primbox', !!pr);
+    $('ratebox').style.gridColumn = pr ? 'auto' : '1 / -1';
+    if (pr){
+      $('prim').textContent = fmt(area*F.primer,2)+' kg';
+      $('priml').textContent = 'primaire Flowfast 107 ('+fmt(F.primer,1)+' kg/m²) à appliquer au préalable';
+    }
+  }
+
+  var refs = s.pts.map(function(x){return x[0]});
+  var near = Math.round(Math.min(30,Math.max(0,t)));
+  var rows='';
+  for (var x=0;x<=30;x++){
+    var px = pctAt(x,s), gx = q*1000*px/100;
+    var isRef = refs.indexOf(x)>=0;
+    var cls = (isRef?'ref':'int') + (x===near && t>=0 && t<=30?' hl':'');
+    rows += '<tr class="'+cls+'"><td>'+x+' °C</td><td>'+fmtPct(px)+' %</td><td>'+fmtG(gx)+' g</td><td>'+fmt(gx/sw,2)+'</td></tr>';
+  }
+  $('tb').innerHTML = rows;
+
+  var rc='';
+  [['107','u',''],['208','u',''],['215','u',''],['319','c',' Clear'],['319','u',' Unpigmented']].forEach(function(e){
+    var ss = RES[e[0]].sets[e[1]];
+    rc += '<tr><td style="text-align:left"><b>'+e[0]+'</b>'+e[2]+'</td>';
+    [0,10,20,30].forEach(function(T){ var pp=pctAt(T,ss); rc += '<td>'+fmtPct(pp)+' %<small>'+fmt(20000*pp/100,0)+' g</small></td>'; });
+    rc += '</tr>';
+  });
+  $('recap').innerHTML = rc;
+}
+
+function bindSeg(id, attr, fn){
+  Array.prototype.forEach.call(document.querySelectorAll('#'+id+' button'),function(b){
+    b.addEventListener('click',function(){
+      fn(b.getAttribute(attr));
+      Array.prototype.forEach.call(document.querySelectorAll('#'+id+' button'),function(x){x.classList.toggle('on',x===b)});
+      render();
+    });
+  });
+}
+['qty','sach'].forEach(function(id){$(id).addEventListener('input',render)});
+$('surf').addEventListener('input',function(){ var v=parseFloat(String(this.value).replace(',','.')); window.__lock = v>0 ? v : 0; if (window.__ratio>0 && v>0){ $('qty').value=Math.round(v/window.__ratio*100)/100; render(); } });
+(function(){
+  var fm=function(n){return n.toLocaleString('fr-FR')};
+  var num=function(id){return parseFloat(String($(id).value).replace(',','.'))||0};
+  var T={ q:{k:0,base:40,div:400,inp:'qty',lab:'Résine (kg)',low:false}, s:{k:0,base:100,div:200,inp:'surf',lab:'Surface (m²)',low:false}, t:{inp:'temp',lab:'Température (°C)'} };
+  var cur='q', cs=$('cur');
+  var _lx=0,_lt=0; window.__slow=false;
+  cs.addEventListener('pointerdown',function(e){ _lx=e.clientX; _lt=e.timeStamp; window.__slow=false; });
+  cs.addEventListener('pointermove',function(e){ var dt=e.timeStamp-_lt; if(dt>=30){ window.__slow=(Math.abs(e.clientX-_lx)/dt)<0.15; _lx=e.clientX; _lt=e.timeStamp; } });
+  cs.addEventListener('keydown',function(){ window.__slow=true; });
+  function mx(o){return o.base*Math.pow(10,o.k)}
+  function ensure(o){ var v=num(o.inp); while(v>mx(o)+1e-9) o.k++; }
+  function paint(){
+    var o=T[cur], up=$('cur-up'), dn=$('cur-dn'), v=num(o.inp);
+    ['q','s','t'].forEach(function(k){ $(T[k].inp).style.boxShadow=(k===cur)?'0 0 0 2px var(--acc)':''; });
+    if(cur==='t'){
+      cs.min=-6; cs.max=35; cs.step=1;
+      if(document.activeElement!==cs) cs.value=Math.max(-6,Math.min(35,v));
+      up.style.visibility=(v>=35)?'hidden':'visible'; dn.style.visibility=(v<=-6)?'hidden':'visible';
+      $('cur-n').textContent='Curseur : '+o.lab+' · −6 à 35 · ◀ ▶ = 1 °C';
+    } else {
+      if(!o.low) ensure(o);
+      var m=mx(o); cs.min=0; cs.max=m; cs.step=m/o.div;
+      if(document.activeElement!==cs) cs.value=Math.min(v,m);
+      up.style.visibility=(v>=m*0.998||parseFloat(cs.value)>=m*0.998)?'visible':'hidden';
+      dn.style.visibility=o.k>0?'visible':'hidden';
+      $('cur-n').textContent='Curseur : '+o.lab+' · 0 à '+fm(m);
+    }
+    $('cur-t').textContent=o.lab;
+  }
+  window.__paint=paint;
+
+  var KITS={ r:[{n:'SNLR1',w:1.455},{n:'SNLR2',w:2.91},{n:'SNLR5',w:5.825},{n:'SNLR11',w:11.65}], c:[{n:'SNLC1',w:1.26},{n:'SNLC2',w:2.52},{n:'SNLC5',w:5.04}] };
+  var kitSel='auto', kitOpen=false;
+  $('kitbtn').addEventListener('click',function(){ kitOpen=!kitOpen; $('kitbox').style.display=kitOpen?'block':'none'; this.textContent=kitOpen?'Masquer détails des kits ▴':'Voir détails des kits ▾'; try{ window.frameElement.style.height=(document.documentElement.scrollHeight)+'px'; }catch(e){} });
+  var f3=function(n){return n.toLocaleString('fr-FR',{maximumFractionDigits:3})};
+  window.__kits=function(fk,isC,isR,area){
+    var apk=(fk>0 && area>0 && isFinite(area))?area/fk:0; var f2=function(n){return n.toLocaleString('fr-FR',{maximumFractionDigits:2})};
+    var wrap=$('kitwrap'); if(!wrap) return;
+    var key=isR?'r':(isC?'c':null), list=key?KITS[key]:[];
+    wrap.style.display=list.length?'block':'none'; if(!list.length) return;
+    $('kitt').textContent='Kits '+(isR?'SNLR':'SNLC')+' disponibles';
+    var opts=[{k:'auto',label:'Combinaison'}].concat(list.map(function(x){return {k:x.n,label:x.n+' · '+f3(x.w)+' kg'}}));
+    if(!opts.some(function(o){return String(o.k)===kitSel})) kitSel='auto';
+    buildSeg('kitseg',opts,kitSel,function(k){ kitSel=String(k); });
+    var parts=[], total=0;
+    if(kitSel==='auto'){
+      var sorted=list.slice().sort(function(a,b){return b.w-a.w}); var big=sorted[0], small=sorted.slice(1), best=null;
+      var rec=function(i,cnt,sum){
+        if(i===small.length){ var nb=Math.max(0,Math.ceil((fk-sum-1e-6)/big.w)); var tot=sum+nb*big.w; var kits=nb+cnt.reduce(function(a,b){return a+b},0);
+          if(!best||tot<best.tot-1e-6||(Math.abs(tot-best.tot)<1e-6&&kits<best.kits)){ best={tot:tot,kits:kits,cnt:cnt.slice(),nb:nb}; } return; }
+        for(var c=0;c<=3;c++){ cnt[i]=c; rec(i+1,cnt,sum+c*small[i].w); }
+      };
+      rec(0,[],0);
+      if(best.nb>0) parts.push([big,best.nb]);
+      small.forEach(function(x,i){ if(best.cnt[i]>0) parts.push([x,best.cnt[i]]); });
+      total=best.tot;
+    } else {
+      var x=list.filter(function(y){return y.n===kitSel})[0]; var n=Math.max(0,Math.ceil(fk/x.w-1e-9)); if(n>0){ parts.push([x,n]); total=n*x.w; }
+    }
+    var rows=crow('Charge nécessaire', f3(fk)+' kg', 'ink');
+    parts.forEach(function(p){ rows+=crow(p[0].n+' ('+f3(p[0].w)+' kg · <b>'+f2(p[0].w*apk)+' m² / kit</b>)', '× '+p[1]+' = '+f2(p[1]*p[0].w*apk)+' m²', 'k3'); });
+    rows+='<tr class="tot"><td>Total des kits</td><td>'+f3(total)+' kg</td></tr>'; rows+=crow('Surface appliquée avec les kits', f2(total*apk)+' m²', 'k1');
+    rows+=crow('Reste après application', f3(Math.max(0,total-fk))+' kg', 'k3');
+    $('kittb').innerHTML=rows;
+    $('kitsum').textContent=parts.map(function(p){return p[0].n+' × '+p[1]}).join(' + ')+' · '+f3(total)+' kg · '+f2(total*apk)+' m²';
+    $('kitbox').style.display=kitOpen?'block':'none';
+  };
+
+  $('temp').addEventListener('change',function(){ var t=Math.max(-6,Math.min(35,Math.round(num('temp')))); this.value=t; $('rng').value=t; render(); });
+  function select(k){ cur=k; paint(); }
+  ['q','s','t'].forEach(function(k){
+    var el=$(T[k].inp);
+    el.addEventListener('focus',function(){ select(k); });
+    el.addEventListener('click',function(){ select(k); });
+    if(k!=='t') el.addEventListener('input',function(){ T[k].low=false; if(k==='q') window.__lock=0; },true);
+  });
+  cs.addEventListener('input',function(){
+    var v=parseFloat(this.value);
+    if(cur==='q'){ window.__lock=0; $('qty').value=Math.round(v*100)/100; render(); }
+    else if(cur==='s'){ var sc=mx(T.s)/100, st=window.__slow?sc/2:sc; v=Math.round(v/st)*st; var s=$('surf'); s.value=Math.round(v*100)/100; s.dispatchEvent(new Event('input',{bubbles:true})); }
+    else { var tv=Math.max(-6,Math.min(35,Math.round(v))); $('temp').value=tv; $('rng').value=tv; render(); }
+  });
+  $('cur-up').addEventListener('click',function(){
+    if(cur==='t'){ var t=Math.min(35,Math.round(num('temp'))+1); $('temp').value=t; $('rng').value=t; render(); }
+    else { T[cur].k++; T[cur].low=false; paint(); }
+  });
+  $('cur-dn').addEventListener('click',function(){
+    if(cur==='t'){ var t=Math.max(-6,Math.round(num('temp'))-1); $('temp').value=t; $('rng').value=t; render(); }
+    else if(T[cur].k>0){ T[cur].k--; T[cur].low=true; paint(); }
+  });
+  paint();
+})();
+$('temp').addEventListener('input',function(){ $('rng').value = this.value; render(); });
+$('rng').addEventListener('input',function(){ $('temp').value = this.value; render(); });
+bindSeg('rseg','data-r',function(v){ cur = v; pig = null; fill = null; $('qty').value = DEFQ[v]; });
+bindSeg('seg','data-m',function(v){ mode = v; pig = null; });
+$('in-gran').innerHTML = GRANS.map(function(g){return '<option value="'+g[0]+'"'+(g[0]===gran?' selected':'')+'>'+g[1]+'</option>'}).join('');
+$('in-gran').addEventListener('change',function(){ gran = this.value; render(); });
+function setRatio(v, fromRange){
+  var x = parseFloat(v); if (isNaN(x)) x = 1.25;
+  ratio208 = Math.min(3, Math.max(1, x));
+  if (fromRange) $('in-rat').value = ratio208; else $('in-ratr').value = ratio208;
+  render();
+}
+$('in-rat').addEventListener('input',function(){ setRatio(this.value,false); });
+$('in-ratr').addEventListener('input',function(){ setRatio(this.value,true); });
+$('in-mm').addEventListener('input',function(){ var x = parseFloat(this.value); mmv = x>0 ? x : 2; render(); });
+$('in-rr').addEventListener('input',function(){ var x = parseFloat(this.value); rateR = isNaN(x) ? 1 : Math.min(1.2, Math.max(0.7, x)); render(); });
+$('in-rclr').addEventListener('input',function(){ var x = parseFloat(this.value); rateClr = isNaN(x) ? 0.5 : Math.min(1, Math.max(0.3, x)); render(); });
+$('in-r107').addEventListener('input',function(){ var x = parseFloat(this.value); rate107 = isNaN(x) ? 0.5 : Math.min(0.5, Math.max(0.4, x)); render(); });
+$('detbtn').addEventListener('click',function(){ detOpen = !detOpen; render(); });
+/* ── Détail des formules : clients cochés dans MonCRM et administrateur ── */
+var FORMULES = null;
+var SB = 'https://qkjxcfosutclnahvxflf.supabase.co', SBK = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFranhjZm9zdXRjbG5haHZ4ZmxmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MjUxNTAsImV4cCI6MjA4OTEwMTE1MH0.f58MNUBfySu5H6VS4nftxt5IAz966jw5frFpzlfJt-w";
+function appelTarif(body, jwt){
+  return fetch(SB+'/functions/v1/tarif-catalogue', { method:'POST',
+    headers:{ 'Content-Type':'application/json', apikey:SBK, Authorization:'Bearer '+(jwt||SBK) },
+    body: JSON.stringify(body) })
+  .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){
+    if (!r.ok) { var e = new Error((j && j.erreur) || 'Service indisponible.'); e.statut = r.status; throw e; }
+    return j; }); });
+}
+function poserFormules(liste){
+  if (!liste || !liste.length) return;
+  FORMULES = {}; liste.forEach(function(f){ FORMULES[f.code] = f; });
+  detOpen = true; render();
+}
+function memo(k, v){ try { if (v) sessionStorage.setItem(k, v); else sessionStorage.removeItem(k); } catch(e){} }
+function relu(k){ try { return sessionStorage.getItem(k); } catch(e){ return null; } }
+$('detlbtn').addEventListener('click', function(){ var f = $('detlform'); f.style.display = f.style.display === 'none' ? 'block' : 'none'; render(); });
+$('detlform').addEventListener('submit', function(e){
+  e.preventDefault();
+  var id = $('detlid').value.trim(), mdp = $('detlmdp').value, err = $('detlerr'), go = $('detlgo');
+  err.textContent = ''; go.disabled = true; go.textContent = 'Connexion…';
+  appelTarif({ action:'login', identifiant:id, mdp:mdp })
+    .then(function(r){ return appelTarif({ action:'formules', jeton:r.jeton }).then(function(f){ memo('ff_jeton', r.jeton); poserFormules(f.formules); }); },
+      function(eLogin){
+        /* Pas un client du tarif : compte MonCRM de l'administrateur. */
+        return fetch(SB+'/auth/v1/token?grant_type=password', { method:'POST',
+          headers:{ 'Content-Type':'application/json', apikey:SBK }, body: JSON.stringify({ email:id, password:mdp }) })
+        .then(function(a){ if (!a.ok) throw eLogin; return a.json(); })
+        .then(function(a){ return appelTarif({ action:'formules' }, a.access_token).then(function(f){ memo('ff_jwt', a.access_token); poserFormules(f.formules); }); });
+      })
+    .catch(function(x){ err.textContent = x.message; render(); })
+    .then(function(){ go.disabled = false; go.textContent = 'Se connecter'; });
+});
+(function(){
+  var j = relu('ff_jeton'), t = relu('ff_jwt');
+  var p = j ? appelTarif({ action:'formules', jeton:j }) : t ? appelTarif({ action:'formules' }, t) : null;
+  if (p) p.then(function(f){ poserFormules(f.formules); }, function(){ memo('ff_jeton'); memo('ff_jwt'); });
+})();
+
+document.addEventListener('click',function(e){var a=e.target.closest?e.target.closest('a[href^="#"]'):null; if(!a) return; e.preventDefault(); window.__h=a.getAttribute('href').slice(1); route(); try{window.frameElement.scrollIntoView({block:'start'});}catch(x){} });
+function route(){
+  var h = (window.__h !== undefined) ? window.__h : location.hash.replace('#','');
+  var ann = (h==='annexe-1' || h==='annexe-2') ? h : '';
+  document.body.classList.toggle('ann', !!ann);
+  ['annexe-1','annexe-2'].forEach(function(id){ $(id).classList.toggle('on', id===ann); });
+  if (ann) { try { window.scrollTo(0,0); } catch(e){} }
+}
+window.addEventListener('hashchange', route);
+render();
+route();
+
+function fitFrame(){try{var f=window.frameElement;if(f){f.style.height=document.documentElement.scrollHeight+'px';}}catch(e){}}
+window.addEventListener('load',fitFrame);window.addEventListener('resize',fitFrame);window.addEventListener('hashchange',function(){setTimeout(fitFrame,50)});
+if(window.ResizeObserver){try{new ResizeObserver(fitFrame).observe(document.body)}catch(e){}}
+fitFrame();
+</script>
+</body>
+</html>

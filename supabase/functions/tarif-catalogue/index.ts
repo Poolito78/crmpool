@@ -28,9 +28,15 @@
  *   identifiants admin : { client_id } → crée / renouvelle le mot de passe,
  *                rendu UNE fois en clair, coche `acces_tarif`
  *
- * `formules` (réponse de `tarif`) : composition des charges SNLR / SNLC du
- * calculateur Flowfast, renvoyée SEULEMENT si la fiche client porte
- * `acces_formules` — la page publique ne la contient pas.
+ *   formules     { jeton } d'un client dont la fiche porte `acces_formules`,
+ *                ou session MonCRM d'un ADMINISTRATEUR → { formules }. Sert le
+ *                calculateur Flowfast d'isofloor.fr : ses boutons « Voir
+ *                détails de la charge » n'apparaissent qu'après cette réponse.
+ *
+ * `formules` (aussi dans la réponse de `tarif`) : composition des charges
+ * SNLR / SNLC du calculateur Flowfast, renvoyée SEULEMENT aux clients cochés
+ * et à l'administrateur, qui la voit toujours — aucune page publique ne la
+ * contient.
  *
  * `verify_jwt = false` (config.toml) : le client du tarif n'a pas de session.
  */
@@ -206,6 +212,24 @@ async function login(b: Record<string, unknown>) {
   return rep({ jeton: await signer(client.id), client: { societe: client.societe || client.nom } });
 }
 
+/* Détail des formules de charge pour le calculateur d'isofloor.fr. Le droit
+   est relu à chaque appel : décocher la case coupe l'accès aussitôt. */
+async function formules(req: Request, b: Record<string, unknown>) {
+  if (b.jeton) {
+    const clientId = await lireJeton(String(b.jeton));
+    if (!clientId) return rep({ erreur: "Session expirée, reconnectez-vous." }, 401);
+    const { data: client } = await db.from("clients")
+      .select("acces_tarif, acces_formules").eq("id", clientId).maybeSingle();
+    if (!client?.acces_tarif || !client?.acces_formules) {
+      return rep({ erreur: "Le détail des formules n'est pas ouvert pour votre compte : contactez ISOFLOOR." }, 403);
+    }
+    return rep({ formules: FORMULES_CHARGE });
+  }
+  const staff = await equipe(req);
+  if (staff?.role === "admin") return rep({ formules: FORMULES_CHARGE });
+  return rep({ erreur: "Le détail des formules est réservé aux clients ISOFLOOR autorisés." }, 403);
+}
+
 async function tarif(req: Request, b: Record<string, unknown>) {
   let clientId: string | null = null;
   let staff: Equipe = null;
@@ -299,7 +323,7 @@ async function tarif(req: Request, b: Record<string, unknown>) {
     date: new Date().toISOString(),
     lignes,
     /* L'aperçu de l'équipe montre ce que voit CE client : rien de plus. */
-    ...(client?.acces_formules ? { formules: FORMULES_CHARGE } : {}),
+    ...(admin || client?.acces_formules ? { formules: FORMULES_CHARGE } : {}),
   });
 }
 
@@ -347,6 +371,7 @@ serve(async (req) => {
       case "demande": return await demande(b);
       case "login": return await login(b);
       case "tarif": return await tarif(req, b);
+      case "formules": return await formules(req, b);
       case "identifiants": return await identifiants(req, b);
       case "clients_acces": return await clientsAcces(req);
       default: return rep({ erreur: "Action inconnue." }, 400);
