@@ -1026,6 +1026,19 @@ jusqu'à 6 résultats : clic sur le nom = nom seul ; clic sur **« + N lignes »
 nom + ajout des lignes du modèle au devis (quantités et prix recalculés à la
 surface du devis et au tarif de son client).
 
+## Clavier sur la bannière de mise à jour et logo 4FLOOR (17 nov.)
+
+Deux changements poussés sur main le 17/11, en ligne au prochain déploiement Vercel.
+
+**Clavier sur la bannière « Nouvelle version disponible »** (commit bdb26a4,
+`src/main.tsx` + `src/App.tsx`) :
+- **Entrée** clique « Recharger » ; **← / →** basculent entre « Recharger » et « ✕ » ; **Entrée** valide le bouton sélectionné (entouré de blanc).
+- Ces touches **n'interceptent rien** si le curseur est dans un champ, sur un autre bouton ou si un dialogue est ouvert.
+- Sur l'écran « Mise à jour en cours… », « Recharger maintenant » est sélectionné d'office.
+- ⚠️ Non testé en vrai : la bannière n'apparaît qu'en production, à la prochaine mise à jour.
+
+**Logo 4FLOOR** (commit 398990b) : favicon, appli installée (PC / Android), Apple touch icon — sur fond blanc. Chrome garde longtemps l'ancienne icône en cache (Ctrl+Maj+R pour forcer l'onglet ; le raccourci et l'appli installée se mettent à jour d'eux-mêmes, sans délai garanti).
+
 ## Ce qui reste ouvert
 
 1. **La RÉFÉRENCE de la bride** reste à trancher. La section est désormais
