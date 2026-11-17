@@ -34,7 +34,7 @@ describe('Calculateur Flowfast → devis', () => {
     const q = Object.fromEntries(r.lignes.filter(l => l.produitId).map(l => [l.produitId, l.quantite]));
     expect(q).toEqual({ FLOWFAST319: 9, PIGMENT2KG: 18, CATALYST2: 2, SNLR11: 18 });
     expect(r.lignes[0].type).toBe('texte');
-    expect(r.lignes[0].description).toContain('18 × SNLR11');
+    expect(r.lignes[0].description).toContain('18 sachets SNLR11');
     expect(r.aVerifier).toEqual([]);
     // sans client : prix public de la fiche
     expect(r.lignes.find(l => l.produitId === 'SNLR11')!.prixUnitaireHT).toBe(44.29);
@@ -55,8 +55,8 @@ describe('Calculateur Flowfast → devis', () => {
       "Détail d'un kit :",
       '• Résine 319 Flexible Seal : 20 kg (1 seau)',
       '• Pigment jaune 20 % : 4 kg à rajouter par seau (2 sachets de 2 kg)',
-      '• Catalyst C2 : 300 g par seau à 20 °C (à prélever sur un pot de 2 kg)',
-      '• Charge SNLR : 23,3 kg (2 × SNLR11)',
+      '• Catalyst C2 : 300 g par seau à 20 °C (à prélever sur un seau de 2 kg)',
+      '• Charge SNLR : 23,3 kg (2 sachets SNLR11)',
       "Mélange d'un kit : 47,6 kg, soit 47,6 m² à 1 kg/m² (476 ml en bande de 10 cm).",
     ]);
     // 178 kg de résine : le 9e seau n'est pas entier
@@ -66,7 +66,7 @@ describe('Calculateur Flowfast → devis', () => {
 
   it('un article absent du catalogue part à vérifier, jamais deviné', () => {
     const r = lignesDepuisCalculateur({ ...ROAD, kits: [{ code: 'SNLR2', kg: 2.91, n: 3 }] }, CATALOGUE, null, id);
-    expect(r.aVerifier).toEqual(['Kit SNLR2 (2,91 kg) × 3']);
+    expect(r.aVerifier).toEqual(['3 sachets SNLR2 (2,91 kg)']);
     expect(r.lignes.some(l => /SNLR2.*à vérifier/.test(l.description) && !l.produitId)).toBe(true);
   });
 

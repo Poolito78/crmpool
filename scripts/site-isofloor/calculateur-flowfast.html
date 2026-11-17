@@ -141,7 +141,7 @@
     <div style="color:var(--mut);font-size:14px">de catalyseur à ajouter à <span id="qk">4</span> kg de résine</div>
     <div class="grid">
       <div class="box"><b id="pct">–</b><span>% du poids de résine</span></div>
-      <div class="box"><b id="sachets">–</b><span id="swl">pots de Catalyst de 2 kg</span></div>
+      <div class="box"><b id="sachets">–</b><span id="swl">seaux de Catalyst de 2 kg</span></div>
     </div>
     <div class="warn" id="warn"></div>
   </div>
@@ -254,7 +254,7 @@ var PERMM208 = 2.12;
 var THICK208ENR = {1:2.8, 2:4.5};
 var GRANS = [['0,1–0,3','0,1–0,3'],['0,3–0,8','0,3–0,8'],['0,5–1','0,5–1 (moyen)'],['0,7–1,3','0,7–1,3'],['1–2,5','1–2,5']];
 var n20 = 4, detOpen = false;
-var CATS = [{k:'80',l:'Sachet 80 g'},{k:'150',l:'Sachet 150 g'},{k:'2000',l:'Pot 2 kg'}], catSel = '2000';
+var CATS = [{k:'80',l:'Sachet 80 g'},{k:'150',l:'Sachet 150 g'},{k:'2000',l:'Seau 2 kg'}], catSel = '2000';
 var ctype = 'quartz', gran = '0,5–1', ratio208 = 1.25, mmv = 2, sup208 = 'std', thickE = 2, rate107 = 0.5, rateClr = 0.5, rateR = 1, rateC = 0.8;
 
 var cur = '319', mode = 'u', fill = null, pig = null, thick = 2;
@@ -318,7 +318,7 @@ function render(){
 
   var q = parseFloat($('qty').value)||0;
   var t = parseFloat($('temp').value); if (isNaN(t)) t = 20;
-  /* Catalyst : sachet de 80 g, de 150 g ou pot de 2 kg (par défaut, règle du
+  /* Catalyst : sachet de 80 g, de 150 g ou seau de 2 kg (par défaut, règle du
      17/11) ; un poids saisi remplace le choix. */
   var swLibre = parseFloat($('sach').value)||0;
   buildSeg('catseg', CATS.map(function(c){return {k:c.k,label:c.l}}), swLibre>0 ? '' : catSel, function(k){ catSel = String(k); $('sach').value = ''; });
@@ -344,7 +344,7 @@ function render(){
   $('qk').textContent = fmt(q,q%1?1:0);
   $('pct').textContent = fmtPct(p)+' %';
   $('sachets').textContent = fmt(g/sw,2);
-  $('swl').textContent = (sw>=1000 ? 'pots' : 'sachets')+' de Catalyst de '+(sw>=1000 ? fmtPct(sw/1000)+' kg' : fmt(sw,0)+' g');
+  $('swl').textContent = (sw>=1000 ? 'seaux' : 'sachets')+' de Catalyst de '+(sw>=1000 ? fmtPct(sw/1000)+' kg' : fmt(sw,0)+' g');
   $('tq').textContent = fmt(q,q%1?1:0);
   var msg='';
   if (t < 0) msg = 'Sous 0 °C : dosage « < 0 °C » de la fiche, et ajouter d\'abord du Flowfast 404 Accelerator avant le catalyseur.';
@@ -601,8 +601,8 @@ $('surf').addEventListener('input',function(){ var v=fromU(parseFloat(String(thi
     var condR=' ('+pl_(nSeaux,'seau','seaux')+' de '+SEAU_RESINE+' kg)';
     var sp=(window.__sacsParts||[]).filter(function(x){return x.n>0});
     var condP=sp.length?' ('+sp.map(function(x){return pl_(x.n,'sachet','sachets')+' de '+fw(x.kg)}).join(' + ')+')':'';
-    var condK=' ('+(cw>=1000?pl_(nCat,'pot','pots')+' de '+fmtPct(cw/1000)+' kg':pl_(nCat,'sachet','sachets')+' de '+fmt(cw,0)+' g')+')';
-    var condF=' ('+res.parts.map(function(pt){return pt[1]+' × '+pt[0].n}).join(' + ')+')';
+    var condK=' ('+(cw>=1000?pl_(nCat,'seau','seaux')+' de '+fmtPct(cw/1000)+' kg':pl_(nCat,'sachet','sachets')+' de '+fmt(cw,0)+' g')+')';
+    var condF=' ('+res.parts.map(function(pt){return pl_(pt[1],'sachet','sachets')+' '+pt[0].n}).join(' + ')+')';
     rows+='<tr class="hl"><td>Total à préparer ('+nbKits+' kit'+(nbKits>1?'s':'')+')</td><td></td></tr>';
     rows+=crow('Résine'+condR, fmtKg(tot.r), 'ink');
     if(c.usePig) rows+=crow('Pigment'+c.pigNom+' ('+fmtPct(c.pig)+' %)'+condP, fmtKg(tot.p), 'k2');

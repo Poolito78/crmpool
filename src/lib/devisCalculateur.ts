@@ -44,7 +44,7 @@ export interface EtatCalculateur {
   larg: number;
   rate: number;
   temp: number;
-  /** Conditionnement du Catalyst choisi, en g (80, 150, 2000) ; absent = pot de 2 kg. */
+  /** Conditionnement du Catalyst choisi, en g (80, 150, 2000) ; absent = seau de 2 kg. */
   catW?: number;
   /** Poids saisi à la main plutôt qu'un conditionnement proposé. */
   catLibre?: boolean;
@@ -67,7 +67,7 @@ const RESINES: Record<string, { refs: string[]; kg: number }[]> = {
 /** Sachets de pigment (formats Odoo, 17/11) → fiche. */
 const SACHETS: Record<string, string> = { '0.2': 'PIGMENT02', '0.4': 'PIGMENT04', '0.5': 'PIGMENT05', '1': 'PIGMENTKG', '2': 'PIGMENT2KG' };
 
-/* Catalyst par conditionnement (g) → fiche. Seul le pot de 2 kg a un article :
+/* Catalyst par conditionnement (g) → fiche. Seul le seau de 2 kg a un article :
    les sachets de 80 g et 150 g partent « à vérifier » (17/11). */
 const CATALYSEURS: Record<number, string[]> = { 2000: ['CATALYST2'] };
 const SNL_FILLER = { refs: ['SNLFILLER'], kg: 25 };
@@ -173,14 +173,14 @@ export function noteRecap(
     const g = e.catW && e.catW > 0 ? e.catW : 2000;
     const n = ct * 1000 / g;
     const format = g >= 1000
-      ? `à prélever sur un pot de ${nf(g / 1000)} kg`
+      ? `à prélever sur un seau de ${nf(g / 1000)} kg`
       : `${Math.abs(n - Math.round(n)) < 0.01 ? Math.round(n) : nf(n)} sachet${n > 1 ? 's' : ''} de ${nf(g, 0)} g`;
     lignes.push(`• Catalyst C2 : ${kg(ct)} par seau à ${nf(e.temp, 0)} °C (${format})`);
   }
   if (ch > 0) {
     const k = kits.length === 1 ? kits[0] : undefined;
     const nk = k ? ch / k.kg : 0;
-    const enKits = k && Math.abs(nk - Math.round(nk)) < 0.01 ? ` (${Math.round(nk)} × ${k.code})` : '';
+    const enKits = k && Math.abs(nk - Math.round(nk)) < 0.01 ? ` (${Math.round(nk)} sachet${Math.round(nk) > 1 ? 's' : ''} ${k.code})` : '';
     lignes.push(`• Charge ${e.charge || ''} : ${kg(ch)}${enKits}`);
   }
   const melange = SEAU_RESINE_KG + pg + ct + ch;
@@ -231,7 +231,7 @@ export function lignesDepuisCalculateur(
     id: genererId(), type: 'texte', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0,
     description: `Calculateur Flowfast — ${e.nomResine}${e.charge ? `, charge ${e.charge}` : ''} : ${surface}, `
       + `${nf(e.rate)} kg/m², ${nf(e.temp, 0)} °C`
-      + (prep ? `. Préconisation : ${kits.map(k => `${k.n} × ${k.code}`).join(' + ')}` : '')
+      + (prep ? `. Préconisation : ${kits.map(k => `${k.n} sachet${k.n > 1 ? 's' : ''} ${k.code}`).join(' + ')}` : '')
       + `. Mélange ${kg(prep ? prep.total : e.total)} (résine ${kg(resine)}${pigment > 0 ? `, pigment ${kg(pigment)}` : ''}, catalyseur ${kg(catalyseur)}${e.fk > 0 ? `, charge ${kg(prep ? prep.charge : e.fk)}` : ''}).`,
   });
 
@@ -273,7 +273,7 @@ export function lignesDepuisCalculateur(
     const n = Math.max(1, Math.ceil(catalyseur * 1000 / g - 1e-9));
     const refs = e.catLibre ? undefined : CATALYSEURS[g];
     const p = refs ? trouver(produits, refs) : undefined;
-    const format = g >= 1000 ? `pot de ${nf(g / 1000)} kg` : `sachet de ${nf(g, 0)} g`;
+    const format = g >= 1000 ? `seau de ${nf(g / 1000)} kg` : `sachet de ${nf(g, 0)} g`;
     if (p) lignes.push(article(p, n, `Catalyst C2 nécessaire : ${kg(catalyseur)}`));
     else libre(`Catalyst C2 en ${format} × ${n} (${kg(catalyseur)})`);
   }
@@ -283,7 +283,7 @@ export function lignesDepuisCalculateur(
     for (const k of kits) {
       const p = trouver(produits, [k.code]);
       if (p) lignes.push(article(p, k.n));
-      else libre(`Kit ${k.code} (${nf(k.kg, 3)} kg) × ${k.n}`);
+      else libre(`${k.n} sachet${k.n > 1 ? 's' : ''} ${k.code} (${nf(k.kg, 3)} kg)`);
     }
   } else if (e.fk > 0 && e.charge) {
     const p = /SNL Filler/i.test(e.charge) ? trouver(produits, SNL_FILLER.refs) : undefined;
