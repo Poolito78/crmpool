@@ -8,6 +8,7 @@ import {
   POCHOIRS_SURFACE, CATEGORIES_POCHOIRS, chercherPochoirs, surfaceDimension,
   type PochoirSurface, type CategoriePochoir,
 } from '@/lib/pochoirsSurface';
+import { melangeFlowfast319, masse, GAMMES_FLOWFAST319, PIGMENTS_319, type GammeFlowfast319 } from '@/lib/melangeFlowfast319';
 
 interface Ligne {
   id: string;
@@ -27,6 +28,78 @@ function Vignette({ p, className }: { p: PochoirSurface; className?: string }) {
   return ko
     ? <div className={cn(base, 'bg-muted')} />
     : <img src={p.image} alt={p.nom} loading="lazy" referrerPolicy="no-referrer" onError={() => setKo(true)} className={base} />;
+}
+
+/* Mélange Flowfast 319 de la surface à peindre — même calcul que le site
+   isofloor.fr (`melangeFlowfast319.ts`). */
+function CarteMelange({ surface }: { surface: number }) {
+  const [gamme, setGamme] = useState<GammeFlowfast319>('road');
+  const [pigment, setPigment] = useState<number>(10);
+  const [conso, setConso] = useState(String(GAMMES_FLOWFAST319.road.conso));
+  const consoNum = parseFloat(conso.replace(',', '.'));
+  const m = melangeFlowfast319(surface, gamme, pigment, consoNum > 0 ? consoNum : undefined);
+  const G = GAMMES_FLOWFAST319[gamme];
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Mélange Flowfast 319 pour cette surface (consommations de base à 20 °C)</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap gap-1.5">
+          {(Object.keys(GAMMES_FLOWFAST319) as GammeFlowfast319[]).map(g => (
+            <Button key={g} size="sm" variant={gamme === g ? 'default' : 'outline'} className="h-8"
+                    onClick={() => { setGamme(g); setConso(String(GAMMES_FLOWFAST319[g].conso).replace('.', ',')); }}>
+              {GAMMES_FLOWFAST319[g].libelle}
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-3 items-end">
+          <label className="flex-1 min-w-[12rem] space-y-1">
+            <span className="text-xs text-muted-foreground">Pigment</span>
+            <select value={pigment} onChange={e => setPigment(Number(e.target.value))}
+                    className="h-10 w-full rounded-md border bg-background px-2 text-sm">
+              {PIGMENTS_319.map(p => <option key={p.pct} value={p.pct}>{p.libelle}</option>)}
+            </select>
+          </label>
+          <label className="w-28 space-y-1">
+            <span className="text-xs text-muted-foreground">Conso. (kg/m²)</span>
+            <Input inputMode="decimal" value={conso} onChange={e => setConso(e.target.value)} className="h-10" />
+          </label>
+        </div>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="rounded-lg bg-muted/60 p-3">
+            <div className="text-xs text-muted-foreground">Surface à couvrir (+10 %)</div>
+            <div className="font-bold tabular-nums">{fmt(m.surfaceACouvrir)} m²</div>
+          </div>
+          <div className="rounded-lg bg-primary/10 p-3">
+            <div className="text-xs text-muted-foreground">Mélange à préparer</div>
+            <div className="font-bold text-primary tabular-nums">{masse(m.melangeKg)}</div>
+          </div>
+          <div className="rounded-lg bg-muted/60 p-3">
+            <div className="text-xs text-muted-foreground">dont résine 319</div>
+            <div className="font-bold tabular-nums">{masse(m.resineKg)}</div>
+          </div>
+        </div>
+        <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-900 dark:bg-green-950/40 dark:text-green-200 dark:border-green-800">
+          <div className="font-semibold">
+            Kit le plus adapté : {m.kits.map(([k, n]) => `${n} × ${k.code} (${masse(k.kg)})`).join(' + ')}
+          </div>
+          <div>Résine 319 : {masse(m.kit.resine)}</div>
+          <div>{G.charge} (charge) : {masse(m.kit.charge)}</div>
+          {pigment > 0 && <div>Pigment {pigment} % : {masse(m.kit.pigment)}</div>}
+          <div>Catalyseur C2 : {masse(m.kit.catalyseur)}</div>
+          <div>
+            <span className="font-semibold">Mélange total : {masse(m.kit.total)}</span>
+            {' '}· couvre jusqu'à {m.couvreM2.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m² avec la marge
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Surface à couvrir = surface à peindre + 10 % de marge d'erreur à l'application ; consommations de base à 20 °C. Le mélange
+          comprend résine, pigment, catalyseur et charge.
+        </p>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function CalculSurfacePochoirs() {
@@ -256,6 +329,29 @@ export default function CalculSurfacePochoirs() {
           )}
         </CardContent>
       </Card>
+
+      {detail.length > 0 && (
+        <Card>
+          <CardContent className="pt-6 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-muted/60 p-4 text-center">
+                <div className="text-3xl font-bold text-primary tabular-nums">{fmt(totalPlaque)}</div>
+                <div className="text-sm text-muted-foreground">m² de plaque · {totalQte} pochoir{totalQte > 1 ? 's' : ''}</div>
+              </div>
+              <div className="rounded-lg bg-primary/10 p-4 text-center">
+                <div className="text-3xl font-bold text-primary tabular-nums">{fmt(totalPeint)}</div>
+                <div className="text-sm text-muted-foreground">m² à peindre</div>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Zone à peindre = surface de la plaque × part ajourée du dessin (poignées de préhension exclues). Part ajourée mesurée sur la
+              vignette du pochoir : précision de quelques %. Prévoir une marge pour le gaspillage.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {totalPeint > 0 && <CarteMelange surface={totalPeint} />}
 
       <p className="text-xs text-muted-foreground">
         Dimensions : fiches produits virages.com (dimensions de la marque). Surface à peindre = plaque × part ajourée du dessin,
