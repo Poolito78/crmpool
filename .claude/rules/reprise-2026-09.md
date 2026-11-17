@@ -1086,3 +1086,28 @@ ou dupliquées pour un client (`duplicateSystemeEtRemplir`) : prix du client
 (prix spécifique d'abord) et **remise du modèle remise à 0** — elle
 s'ajoutait au prix net du client (SYS Flowfast 215 2mm Quartz collor :
 4 lignes remisées). Une remise dictée reste.
+
+## Kits SNLR/SNLC petits conditionnements (17 nov.)
+
+6 articles créés en base : SNLR-025, SNLR-05, SNLR-1, SNLC-025, SNLC-05, SNLC-1.
+Catégorie ISOMARK / FLOORING / GRANULATS, TVA 20 %. Calculés comme SNLR2 :
+achat = charge sac au prorata + main d'œuvre QRM ; revendeur = achat × 1,8 ;
+public = revendeur ÷ 0,7 ; paliers 1 / 5 / 10 (forfait préparation QRM 15 €
+par commande réparti). Note sur chaque fiche : « à mélanger avec 0,25 / 0,5 / 1 kg
+de Flowfast 319 unpigmented ».
+
+Migration `20261117150000_kits_charge_flowfast319.sql` (calcul initial) puis
+`20261117160000_kits_charge_mo_qrm.sql` (recalcul selon tarif QRM 2026) —
+les deux appliquées, committées et poussées.
+
+**Main d'œuvre QRM extrapolée du tarif :**
+- SNLR : ≈ 2,00 €/sac + 0,514 €/kg (droite des 3 sacs du tarif : 2,91 / 5,83 / 11,65 kg → 3,50 / 5,00 / 8,00 €).
+- SNLC : ≈ 1,10 €/sac + 0,677 €/kg (prolongation de SNLC2 et SNLC5 ; moins fiable).
+
+⚠️ **À CONFIRMER PAR LE FABRICANT QRM.** Chaque fiche porte la note interne
+« MAIN D'ŒUVRE QRM x € PAR SAC — À CONFIRMER PAR LE FABRICANT QRM ». Corriger
+la main d'œuvre sur la fiche → achat se recalcule ; **les paliers sont enregistrés
+en dur et ne suivent pas** : les reprendre à la main ou demander un recalcul.
+
+⚠️ SNLR1 (1,455 kg, hors tarif QRM) : MO fiche = 2,07 €, règle QRM ≈ 2,75 €. Non touché.
+⚠️ SNLC1/SNLC2/SNLC5 existants : coefficient ≈ 3,07, paliers saisis à la main — calcul différent des 3 nouveaux SNLC.
