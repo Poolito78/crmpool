@@ -120,6 +120,16 @@
     <div class="grid" id="pbox">
       <div class="box" style="grid-column:1/-1"><b id="pq">–</b><span id="pl">pigment</span></div>
     </div>
+    <div id="sacwrap" style="display:none;margin-top:12px">
+      <div class="sll">Sachets de pigment</div>
+      <div id="sacsum" style="font-size:14px;margin-top:4px"></div>
+      <div class="seg" id="sacseg" style="margin-top:8px;flex-wrap:wrap"></div>
+      <div class="row" style="margin-top:10px">
+        <div><label for="sacw">Autre poids de sachet (g)</label><input id="sacw" type="number" inputmode="decimal" min="1" step="1" placeholder="g"></div>
+        <div style="align-self:end;color:var(--mut);font-size:13px;padding-bottom:10px">Un poids saisi remplace le choix ci-dessus.</div>
+      </div>
+      <table style="margin-top:8px"><tbody id="sactb"></tbody></table>
+    </div>
     <div class="info" id="pigi">Le pigment se dose sur le poids de résine seule.</div>
   </div>
 
@@ -310,6 +320,7 @@ function render(){
   var pk = usePig ? q*pig/100 : 0;
   if (C.pig) buildSeg('pseg', C.pig.map(function(o){return {k:o.v,label:o.btn}}), pig, function(k){ pig = parseFloat(k); });
   show('pbox', usePig, 'grid');
+  if (window.__sacs) window.__sacs(usePig && !C.talc ? pk : 0);
   if (usePig){
     $('pq').textContent = fmtKg(pk);
     $('pl').textContent = (C.talc ? 'Fintalc M15' : 'pigment'+(pigOpt.n ? ' '+pigOpt.n : ''))+' ('+fmtPct(pig)+' % du poids de résine)';
@@ -487,10 +498,52 @@ $('surf').addEventListener('input',function(){ var v=fromU(parseFloat(String(thi
   }
   window.__paint=paint;
 
-  var KITS={ r:[{n:'SNLR1',w:1.455},{n:'SNLR2',w:2.91},{n:'SNLR5',w:5.825},{n:'SNLR11',w:11.65}], c:[{n:'SNLC1',w:1.26},{n:'SNLC2',w:2.52},{n:'SNLC5',w:5.04}] };
-  var kitSel='auto', kitOpen=false;
+  /* Conditionnements du catalogue MonCRM (poids de la fiche article). Les
+     unités SNLR-025 / -05 / -1 et SNLC-025 / -05 / -1 chargent 0,25, 0,5 et
+     1 kg de résine. */
+  var KITS={ r:[{n:'SNLR-025',w:0.291},{n:'SNLR-05',w:0.583},{n:'SNLR-1',w:1.165},{n:'SNLR1',w:1.455},{n:'SNLR2',w:2.91},{n:'SNLR5',w:5.825},{n:'SNLR11',w:11.65}],
+             c:[{n:'SNLC-025',w:0.126},{n:'SNLC-05',w:0.252},{n:'SNLC-1',w:0.504},{n:'SNLC1',w:1.26},{n:'SNLC2',w:2.52},{n:'SNLC5',w:5.04}] };
+  /* Sachets de pigment : les conditionnements d'Odoo (règle du 17/11),
+     désignés par leur poids. */
+  var SACS=[{n:'s02',w:0.2},{n:'s04',w:0.4},{n:'s05',w:0.5},{n:'s1',w:1},{n:'s2',w:2},{n:'s4',w:4}];
+  var kitSel='auto', kitOpen=false, sacSel='auto';
   $('kitbtn').addEventListener('click',function(){ kitOpen=!kitOpen; $('kitbox').style.display=kitOpen?'block':'none'; this.textContent=kitOpen?'Masquer détails des kits ▴':'Voir détails des kits ▾'; try{ window.frameElement.style.height=(document.documentElement.scrollHeight)+'px'; }catch(e){} });
   var f3=function(n){return n.toLocaleString('fr-FR',{maximumFractionDigits:3})};
+  /* Combinaison : le moins de surplus, puis le moins d'unités (le plus grand
+     conditionnement à volonté, jusqu'à 3 de chacun des autres). */
+  function combo(list, need){
+    var sorted=list.slice().sort(function(a,b){return b.w-a.w}); var big=sorted[0], small=sorted.slice(1), best=null;
+    var rec=function(i,cnt,sum){
+      if(best && sum>best.tot+1e-6) return;
+      if(i===small.length){ var nb=Math.max(0,Math.ceil((need-sum-1e-6)/big.w)); var tot=sum+nb*big.w; var kits=nb+cnt.reduce(function(a,b){return a+b},0);
+        if(!best||tot<best.tot-1e-6||(Math.abs(tot-best.tot)<1e-6&&kits<best.kits)){ best={tot:tot,kits:kits,cnt:cnt.slice(),nb:nb}; } return; }
+      for(var c=0;c<=3;c++){ cnt[i]=c; rec(i+1,cnt,sum+c*small[i].w); }
+    };
+    rec(0,[],0);
+    var parts=[]; if(best.nb>0) parts.push([big,best.nb]);
+    small.forEach(function(x,i){ if(best.cnt[i]>0) parts.push([x,best.cnt[i]]); });
+    return {parts:parts,total:best.tot};
+  }
+  function seul(x, need){ var n=Math.max(0,Math.ceil(need/x.w-1e-9)); return {parts:n>0?[[x,n]]:[], total:n*x.w}; }
+  var fw=function(w){ return w<1 ? fmt(w*1000,0)+' g' : f3(w)+' kg'; };
+  $('sacw').addEventListener('input',function(){ render(); });
+  /* Pigment en sachets : combinaison des conditionnements, un seul format,
+     ou un poids de sachet saisi (qui remplace le choix). */
+  window.__sacs=function(pk){
+    var wrap=$('sacwrap'); if(!wrap) return;
+    wrap.style.display=pk>0?'block':'none'; if(!(pk>0)) return;
+    var libre=num('sacw')/1000;
+    var opts=[{k:'auto',label:'Combinaison'}].concat(SACS.map(function(x){return {k:x.n,label:fw(x.w)}}));
+    if(!opts.some(function(o){return String(o.k)===sacSel})) sacSel='auto';
+    buildSeg('sacseg',opts,libre>0?'':sacSel,function(k){ sacSel=String(k); $('sacw').value=''; });
+    var r = libre>0 ? seul({n:'',w:libre},pk) : sacSel==='auto' ? combo(SACS,pk) : seul(SACS.filter(function(y){return y.n===sacSel})[0],pk);
+    var rows=crow('Pigment nécessaire', fmtKg(pk), 'ink');
+    r.parts.forEach(function(p){ rows+=crow('Sachet de '+fw(p[0].w),'× '+p[1]+' = '+fmtKg(p[1]*p[0].w), 'k2'); });
+    rows+='<tr class="tot"><td>Total des sachets</td><td>'+fmtKg(r.total)+'</td></tr>';
+    rows+=crow('Reste après mélange', fmtKg(Math.max(0,r.total-pk)), 'k2');
+    $('sactb').innerHTML=rows;
+    $('sacsum').textContent=r.parts.map(function(p){return fw(p[0].w)+' × '+p[1]}).join(' + ')+' · '+fmtKg(r.total);
+  };
   window.__kits=function(fk,isC,isR,area){
     var apk=(fk>0 && area>0 && isFinite(area))?area/fk:0; var f2=function(n){return n.toLocaleString('fr-FR',{maximumFractionDigits:2})};
     var wrap=$('kitwrap'); if(!wrap) return;
@@ -500,24 +553,12 @@ $('surf').addEventListener('input',function(){ var v=fromU(parseFloat(String(thi
     var opts=[{k:'auto',label:'Combinaison'}].concat(list.map(function(x){return {k:x.n,label:x.n+' · '+f3(x.w)+' kg'}}));
     if(!opts.some(function(o){return String(o.k)===kitSel})) kitSel='auto';
     buildSeg('kitseg',opts,kitSel,function(k){ kitSel=String(k); });
-    var parts=[], total=0;
-    if(kitSel==='auto'){
-      var sorted=list.slice().sort(function(a,b){return b.w-a.w}); var big=sorted[0], small=sorted.slice(1), best=null;
-      var rec=function(i,cnt,sum){
-        if(i===small.length){ var nb=Math.max(0,Math.ceil((fk-sum-1e-6)/big.w)); var tot=sum+nb*big.w; var kits=nb+cnt.reduce(function(a,b){return a+b},0);
-          if(!best||tot<best.tot-1e-6||(Math.abs(tot-best.tot)<1e-6&&kits<best.kits)){ best={tot:tot,kits:kits,cnt:cnt.slice(),nb:nb}; } return; }
-        for(var c=0;c<=3;c++){ cnt[i]=c; rec(i+1,cnt,sum+c*small[i].w); }
-      };
-      rec(0,[],0);
-      if(best.nb>0) parts.push([big,best.nb]);
-      small.forEach(function(x,i){ if(best.cnt[i]>0) parts.push([x,best.cnt[i]]); });
-      total=best.tot;
-    } else {
-      var x=list.filter(function(y){return y.n===kitSel})[0]; var n=Math.max(0,Math.ceil(fk/x.w-1e-9)); if(n>0){ parts.push([x,n]); total=n*x.w; }
-    }
+    var res = kitSel==='auto' ? combo(list,fk) : seul(list.filter(function(y){return y.n===kitSel})[0],fk);
+    var parts=res.parts, total=res.total;
+    var rpk = fk>0 ? num('qty')/fk : 0; // kg de résine chargés par kg de charge
     var rows=crow('Charge nécessaire', f3(fk)+' kg', 'ink');
     var u=' '+uL();
-    parts.forEach(function(p){ rows+=crow(p[0].n+' ('+f3(p[0].w)+' kg · <b>'+f2(toU(p[0].w*apk))+u+' / kit</b>)', '× '+p[1]+' = '+f2(toU(p[1]*p[0].w*apk))+u, 'k3'); });
+    parts.forEach(function(p){ rows+=crow(p[0].n+' ('+f3(p[0].w)+' kg · pour '+f3(Math.round(p[0].w*rpk*1000)/1000)+' kg de résine · <b>'+f2(toU(p[0].w*apk))+u+' / kit</b>)', '× '+p[1]+' = '+f2(toU(p[1]*p[0].w*apk))+u, 'k3'); });
     rows+='<tr class="tot"><td>Total des kits</td><td>'+f3(total)+' kg</td></tr>'; rows+=crow((UM ? 'Longueur' : 'Surface')+' appliquée avec les kits', f2(toU(total*apk))+u, 'k1');
     rows+=crow('Reste après application', f3(Math.max(0,total-fk))+' kg', 'k3');
     $('kittb').innerHTML=rows;
