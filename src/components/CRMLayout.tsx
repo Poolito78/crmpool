@@ -1,5 +1,5 @@
 import { useLocation, useNavigate, Link } from 'react-router-dom';
-import { Tag, LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic, MailSearch, Ruler, Power } from 'lucide-react';
+import { Tag, LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic, MailSearch, Ruler, Power, Globe, Link2, Plus } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef, useCallback, useContext, createContext, lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -29,6 +29,8 @@ import PageOnglet from '@/components/PageOnglet';
 import BarreOnglets from '@/components/BarreOnglets';
 import { memePage, type Onglet } from '@/lib/onglets';
 import AssistantVocal from '@/components/AssistantVocal';
+import LiensWebDialog from '@/components/LiensWebDialog';
+import { lireLiensWeb, ecrireLiensWeb, type LienWeb } from '@/lib/liensWeb';
 import { AssistantVocalContext, type AssistantVocalCtx, type CaptureDictee, type GestionnaireDictee } from '@/hooks/useAssistantVocal';
 import { terminerConnexionRedirection } from '@/lib/microsoftGraph';
 import { toast } from 'sonner';
@@ -47,6 +49,9 @@ function lancerChiffrage() {
 }
 /* page de confirmation d'arrêt (serveur local + fenêtre noire), réservée au poste */
 const CHIFFRAGE_ARRET_URL = 'http://127.0.0.1:8765/arret';
+const ISOFLOOR_URL = 'https://www.isofloor.fr/';
+/** Clé de « Gérer les liens… » dans le groupe Web : une action, pas une adresse. */
+const CLE_LIENS_WEB = '#liens-web';
 const TYPES_DEPOSABLES: readonly TypeDocument[] = ['demande_devis', 'commande_client', 'devis_fournisseur'];
 
 // `external` : le lien sort de l'application (nouvel onglet) au lieu de router.
@@ -150,10 +155,18 @@ const NAV: NavEntry[] = [
   { type: 'link',  label: 'Stock',            icon: BarChart3,       path: '/stock' },
   { type: 'link',  label: 'Calcul Transport', icon: Calculator,      path: '/calculateur-ups' },
   { type: 'link',  label: 'Surface Pochoirs', icon: Ruler,           path: '/surface-pochoirs' },
-  /* Page publique du client (hors coquille, `App.tsx`) : un onglet MonCRM ne la
-     connaît pas, et y router ferait quitter le CRM — elle s'ouvre dans un onglet
-     du navigateur. */
-  { type: 'link',  label: 'Tarif en ligne',   icon: Tag,             path: '/tarif', external: true },
+  /* Sites et pages publiques, ouverts dans un onglet du NAVIGATEUR. Les liens
+     ajoutés à la main (`liensWeb.ts`) et « Gérer les liens… » s'y joignent
+     dans `navDroits`. Le Tarif en ligne est la page du client, hors coquille
+     (`App.tsx`) : un onglet MonCRM ne la connaît pas, y router ferait quitter
+     le CRM. */
+  {
+    type: 'group', label: 'Web', icon: Globe,
+    items: [
+      { type: 'link', label: 'Tarif en ligne', icon: Tag,   path: '/tarif', external: true },
+      { type: 'link', label: 'ISOFLOOR.FR',    icon: Globe, path: ISOFLOOR_URL, external: true },
+    ],
+  },
   {
     type: 'group', label: 'Paramètres', icon: Settings,
     items: [
@@ -381,13 +394,26 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
 
   // Nav filtrée selon les droits : groupe « Achat » masqué sans droit Achat,
   // lien « CRM » masqué sans droit CRM, onglet « Admin » masqué aux non-admins.
+  /* Liens web ajoutés à la main (groupe Web), propres à ce navigateur. */
+  const [liensWeb, setLiensWeb] = useState<LienWeb[]>(lireLiensWeb);
+  useEffect(() => { ecrireLiensWeb(liensWeb); }, [liensWeb]);
+  const [liensWebOpen, setLiensWebOpen] = useState(false);
   const navDroits = useMemo<NavEntry[]>(() => NAV
     .filter(e => canAchat || !(e.type === 'group' && e.label === 'Achat'))
     .filter(e => canCrm || !(e.type === 'link' && e.path === '/crm'))
     .map(e => e.type === 'group'
       ? { ...e, items: e.items.filter(i => isAdmin || !['/parametres?tab=administration', '/parametres?tab=entrepots', '/parametres?tab=general', '/parametres?tab=clients', '/parametres?tab=veille'].includes(i.path)) }
+      : e)
+    .map(e => e.type === 'group' && e.label === 'Web'
+      ? { ...e, items: [
+          ...e.items,
+          ...liensWeb
+            .filter(l => !e.items.some(i => i.path === l.url))
+            .map((l): NavLink => ({ type: 'link', label: l.libelle, icon: Link2, path: l.url, external: true })),
+          { type: 'link', label: 'Gérer les liens…', icon: Plus, path: CLE_LIENS_WEB, external: true, action: () => setLiensWebOpen(true) },
+        ] }
       : e),
-  [canAchat, canCrm, isAdmin]);
+  [canAchat, canCrm, isAdmin, liensWeb]);
 
   /* Ordre choisi par l'utilisateur : appui long sur une entrée, puis glisser
      (`ordreNav.ts`, `useReordonnerAppuiLong`). Une page se range dans son
@@ -840,6 +866,14 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
           />
         </Suspense>
       )}
+
+      <LiensWebDialog
+        open={liensWebOpen}
+        onOpenChange={setLiensWebOpen}
+        liens={liensWeb}
+        onChange={setLiensWeb}
+        reserves={['/tarif', ISOFLOOR_URL]}
+      />
 
       {agentMailOpen && (
         <Suspense fallback={null}>

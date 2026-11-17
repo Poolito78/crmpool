@@ -47,7 +47,18 @@ export function appliquerOrdre<L extends LienBase, G extends GroupeBase<L>>(base
     if (!libelles.has(libelle)) continue;
     for (const c of cles) if (liens.has(c) && !place.has(c)) place.set(c, libelle);
   }
-  for (const c of ordre.racine ?? []) if (liens.has(c) && !place.has(c)) place.set(c, LISTE_RACINE);
+  /* Un GROUPE que l'ordre enregistré ne nomme pas est apparu depuis (« Web »,
+     17/11) : les pages qu'une version y a rangées le rejoignent, même si
+     l'ancien ordre les nommait au premier niveau — sans quoi « Tarif en
+     ligne » restait dehors chez tous ceux qui avaient déjà réordonné. */
+  const groupesConnus = ordre.racine
+    ? new Set(ordre.racine.filter(c => c.startsWith('groupe:')).map(c => c.slice('groupe:'.length)))
+    : null;
+  const nouveauGroupe = (c: string) => {
+    const o = origine.get(c)!;
+    return !!groupesConnus && o !== LISTE_RACINE && !groupesConnus.has(o);
+  };
+  for (const c of ordre.racine ?? []) if (liens.has(c) && !place.has(c) && !nouveauGroupe(c)) place.set(c, LISTE_RACINE);
   const ou = (c: string) => place.get(c) ?? origine.get(c)!;
   /** Les liens d'une liste : ceux d'origine restés là, puis ceux venus d'ailleurs. */
   const venus = (liste: string) => [...liens.values()].filter(i => ou(i.path) === liste && origine.get(i.path) !== liste);

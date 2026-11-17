@@ -67,6 +67,17 @@ describe('appliquerOrdre / placer', () => {
     expect(vue({ groupes: { Vente: ['/devis', '/clients'] } }).groupes.Vente).toEqual(['/devis', '/clients', 'chiffrage']);
   });
 
+  it('un groupe nouveau reprend ses pages, même nommées au premier niveau par un ancien ordre', () => {
+    const avecWeb: Array<L | G> = [...MENU.filter(e => !(e.type === 'link' && e.path === '/transport')),
+      { type: 'group', label: 'Web', items: [l('/transport'), l('https://site')] }];
+    const s = structureDe(appliquerOrdre<L, G>(avecWeb, { racine: ['/stock', '/transport', '/crm', 'groupe:Vente', 'groupe:Paramètres'] }));
+    expect(s.racine).not.toContain('/transport');
+    expect(s.groupes.Web).toEqual(['/transport', 'https://site']);
+    // une fois le groupe connu de l'ordre, la page peut en ressortir
+    const s2 = structureDe(appliquerOrdre<L, G>(avecWeb, { racine: [...s.racine, '/transport'] }));
+    expect(s2.racine).toContain('/transport');
+  });
+
   it('une page masquée par les droits n\'apparaît pas, même rangée ailleurs', () => {
     const sansParam = MENU.filter(e => !(e.type === 'group' && e.label === 'Paramètres'));
     const s = structureDe(appliquerOrdre<L, G>(sansParam, { racine: ['/param', '/crm'] }));
