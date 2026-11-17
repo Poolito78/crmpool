@@ -44,6 +44,10 @@ export interface EtatCalculateur {
   larg: number;
   rate: number;
   temp: number;
+  /** Conditionnement du Catalyst choisi, en g (80, 150, 2000) ; absent = pot de 2 kg. */
+  catW?: number;
+  /** Poids saisi à la main plutôt qu'un conditionnement proposé. */
+  catLibre?: boolean;
   longueur: number | null;
   kits: { code: string; kg: number; n: number }[];
   sachets: { kg: number; n: number; libre: boolean }[];
@@ -62,7 +66,9 @@ const RESINES: Record<string, { refs: string[]; kg: number }[]> = {
 /** Sachets de pigment (formats Odoo, 17/11) → fiche. */
 const SACHETS: Record<string, string> = { '0.2': 'PIGMENT02', '0.4': 'PIGMENT04', '0.5': 'PIGMENT05', '1': 'PIGMENTKG', '2': 'PIGMENT2KG' };
 
-const CATALYSEUR = { refs: ['CATALYST2'], kg: 2 };
+/* Catalyst par conditionnement (g) → fiche. Seul le pot de 2 kg a un article :
+   les sachets de 80 g et 150 g partent « à vérifier » (17/11). */
+const CATALYSEURS: Record<number, string[]> = { 2000: ['CATALYST2'] };
 const SNL_FILLER = { refs: ['SNLFILLER'], kg: 25 };
 
 const nf = (n: number, d = 2) => n.toLocaleString('fr-FR', { maximumFractionDigits: d });
@@ -197,11 +203,15 @@ export function lignesDepuisCalculateur(
     }
   }
 
-  /* Catalyseur, en pots de 2 kg. */
+  /* Catalyseur, au conditionnement choisi dans le calculateur. */
   if (catalyseur > 0) {
-    const p = trouver(produits, CATALYSEUR.refs);
-    if (p) lignes.push(article(p, Math.max(1, Math.ceil(catalyseur / CATALYSEUR.kg - 1e-9)), `Catalyst C2 nécessaire : ${kg(catalyseur)}`));
-    else libre(`Catalyst C2 : ${kg(catalyseur)}`);
+    const g = e.catW && e.catW > 0 ? e.catW : 2000;
+    const n = Math.max(1, Math.ceil(catalyseur * 1000 / g - 1e-9));
+    const refs = e.catLibre ? undefined : CATALYSEURS[g];
+    const p = refs ? trouver(produits, refs) : undefined;
+    const format = g >= 1000 ? `pot de ${nf(g / 1000)} kg` : `sachet de ${nf(g, 0)} g`;
+    if (p) lignes.push(article(p, n, `Catalyst C2 nécessaire : ${kg(catalyseur)}`));
+    else libre(`Catalyst C2 en ${format} × ${n} (${kg(catalyseur)})`);
   }
 
   /* Charge : kits SNLR / SNLC sous leur code, SNL Filler en sacs. */

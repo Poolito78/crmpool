@@ -109,8 +109,10 @@
       <div id="surfh" style="align-self:end;color:var(--mut);font-size:13px;padding-bottom:10px">Saisir la surface : la quantité de résine est calculée.</div>
     </div>
     <div class="sliders"><div class="sl"><div class="sll" id="cur-t">Curseur</div><div class="slr"><button type="button" class="slb" id="cur-dn" aria-label="Précédent">◀</button><input id="cur" type="range" min="0" max="40" step="0.1" value="10" aria-label="Curseur"><button type="button" class="slb" id="cur-up" aria-label="Suivant">▶</button></div><div class="sln" id="cur-n"></div></div><input id="rng" type="hidden" value="20"></div>
-    <div class="row" style="margin-top:12px">
-      <div><label for="sach">Poids d'un sachet de Catalyst (g)</label><input id="sach" type="number" inputmode="decimal" min="1" value="150"></div>
+    <div style="margin-top:12px"><label>Conditionnement du Catalyst</label><div class="seg" id="catseg" style="margin-top:0"></div></div>
+    <div class="row" style="margin-top:8px">
+      <div><label for="sach">Autre poids de Catalyst (g)</label><input id="sach" type="number" inputmode="decimal" min="1" placeholder="g"></div>
+      <div style="align-self:end;color:var(--mut);font-size:13px;padding-bottom:10px">Un poids saisi remplace le choix ci-dessus.</div>
     </div>
   </div>
 
@@ -139,7 +141,7 @@
     <div style="color:var(--mut);font-size:14px">de catalyseur à ajouter à <span id="qk">4</span> kg de résine</div>
     <div class="grid">
       <div class="box"><b id="pct">–</b><span>% du poids de résine</span></div>
-      <div class="box"><b id="sachets">–</b><span>sachets de Catalyst de <span id="sw">150</span> g</span></div>
+      <div class="box"><b id="sachets">–</b><span id="swl">pots de Catalyst de 2 kg</span></div>
     </div>
     <div class="warn" id="warn"></div>
   </div>
@@ -252,6 +254,7 @@ var PERMM208 = 2.12;
 var THICK208ENR = {1:2.8, 2:4.5};
 var GRANS = [['0,1–0,3','0,1–0,3'],['0,3–0,8','0,3–0,8'],['0,5–1','0,5–1 (moyen)'],['0,7–1,3','0,7–1,3'],['1–2,5','1–2,5']];
 var n20 = 4, detOpen = false;
+var CATS = [{k:'80',l:'Sachet 80 g'},{k:'150',l:'Sachet 150 g'},{k:'2000',l:'Pot 2 kg'}], catSel = '2000';
 var ctype = 'quartz', gran = '0,5–1', ratio208 = 1.25, mmv = 2, sup208 = 'std', thickE = 2, rate107 = 0.5, rateClr = 0.5, rateR = 1, rateC = 0.8;
 
 var cur = '319', mode = 'u', fill = null, pig = null, thick = 2;
@@ -315,7 +318,11 @@ function render(){
 
   var q = parseFloat($('qty').value)||0;
   var t = parseFloat($('temp').value); if (isNaN(t)) t = 20;
-  var sw = parseFloat($('sach').value)||150;
+  /* Catalyst : sachet de 80 g, de 150 g ou pot de 2 kg (par défaut, règle du
+     17/11) ; un poids saisi remplace le choix. */
+  var swLibre = parseFloat($('sach').value)||0;
+  buildSeg('catseg', CATS.map(function(c){return {k:c.k,label:c.l}}), swLibre>0 ? '' : catSel, function(k){ catSel = String(k); $('sach').value = ''; });
+  var sw = swLibre>0 ? swLibre : parseFloat(catSel);
   var s = set();
 
   var pigOpt = C.pig ? C.pig.filter(function(o){return o.v===pig})[0] : null;
@@ -337,7 +344,7 @@ function render(){
   $('qk').textContent = fmt(q,q%1?1:0);
   $('pct').textContent = fmtPct(p)+' %';
   $('sachets').textContent = fmt(g/sw,2);
-  $('sw').textContent = fmt(sw,0);
+  $('swl').textContent = (sw>=1000 ? 'pots' : 'sachets')+' de Catalyst de '+(sw>=1000 ? fmtPct(sw/1000)+' kg' : fmt(sw,0)+' g');
   $('tq').textContent = fmt(q,q%1?1:0);
   var msg='';
   if (t < 0) msg = 'Sous 0 °C : dosage « < 0 °C » de la fiche, et ajouter d\'abord du Flowfast 404 Accelerator avant le catalyseur.';
@@ -427,7 +434,7 @@ function render(){
     if (useF) cr += crow('Charge '+F.name, fmtKg(fk), 'k3');
     cr += '<tr class="tot"><td>Total mélange</td><td>'+fmtKg(total)+'</td></tr>';
     $('compb').innerHTML = cr;
-    window.__ratio = (q>0 && isFinite(area)) ? area/q : 0; if (window.__lock>0 && window.__ratio>0 && !window.__rec) { var tq=Math.round(window.__lock/window.__ratio*100)/100; if (Math.abs(tq-q)>0.005) { window.__rec=1; $('qty').value=tq; try { render(); } finally { window.__rec=0; } return; } } var sf=$('surf'); if (sf && document.activeElement!==sf && !window.__lock) sf.value = (area>0 && isFinite(area)) ? (Math.round(toU(area)*100)/100) : ''; if (window.__paint) window.__paint(); window.__etatCalc = { resine: cur, mode: mode, nomResine: r.name, q: q, pig: usePig ? pig : 0, pigNom: (pigOpt && pigOpt.n) || '', talc: !!C.talc, pk: pk, ck: ck, charge: useF ? F.name : null, chargeTag: useF ? (F.tag || '') : '', isC: !!isC, isR: !!isR, fk: fk, total: total, area: area, um: UM, larg: LARG, rate: rate, temp: t }; window.__kits && window.__kits(fk, isC, isR, area); window.__prep && window.__prep({ q:q, fk:fk, pk:pk, ck:ck, pig:pig, usePig:usePig && !C.talc, pigNom:(pigOpt && pigOpt.n ? ' '+pigOpt.n : ''), isC:isC, isR:isR, area:area }); $('area').innerHTML = fmt(toU(area),2)+'<span class="unit"> '+uL()+'</span>';
+    window.__ratio = (q>0 && isFinite(area)) ? area/q : 0; if (window.__lock>0 && window.__ratio>0 && !window.__rec) { var tq=Math.round(window.__lock/window.__ratio*100)/100; if (Math.abs(tq-q)>0.005) { window.__rec=1; $('qty').value=tq; try { render(); } finally { window.__rec=0; } return; } } var sf=$('surf'); if (sf && document.activeElement!==sf && !window.__lock) sf.value = (area>0 && isFinite(area)) ? (Math.round(toU(area)*100)/100) : ''; if (window.__paint) window.__paint(); window.__etatCalc = { resine: cur, mode: mode, nomResine: r.name, q: q, pig: usePig ? pig : 0, pigNom: (pigOpt && pigOpt.n) || '', talc: !!C.talc, pk: pk, ck: ck, charge: useF ? F.name : null, chargeTag: useF ? (F.tag || '') : '', isC: !!isC, isR: !!isR, fk: fk, total: total, area: area, um: UM, larg: LARG, rate: rate, temp: t, catW: sw, catLibre: swLibre>0 }; window.__kits && window.__kits(fk, isC, isR, area); window.__prep && window.__prep({ q:q, fk:fk, pk:pk, ck:ck, pig:pig, usePig:usePig && !C.talc, pigNom:(pigOpt && pigOpt.n ? ' '+pigOpt.n : ''), isC:isC, isR:isR, area:area }); $('area').innerHTML = fmt(toU(area),2)+'<span class="unit"> '+uL()+'</span>';
     $('areat').textContent = UM ? 'Longueur couverte' : 'Surface couverte';
     $('areas').textContent = 'sur le poids total du mélange' + (UM ? ', soit '+fmt(area,2)+' m² en bande de '+fmtPct(LARG)+' cm' : '');
     $('rate').textContent = (noF ? '≈ ' : '')+(UM ? (rate*wM()).toLocaleString('fr-FR',{maximumFractionDigits:3})+' kg/ml' : rate.toLocaleString('fr-FR',{maximumFractionDigits:2})+' kg/m²');

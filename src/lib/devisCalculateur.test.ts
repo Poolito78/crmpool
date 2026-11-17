@@ -51,4 +51,12 @@ describe('Calculateur Flowfast → devis', () => {
     expect(r.lignes.find(l => l.produitId === 'CATALYST2')!.quantite).toBe(2); // 2,68 kg → 2 pots
     expect(r.aVerifier).toEqual(['Pigment 20 % : 35,8 kg', 'Charge SNLR : 208,52 kg']);
   });
+
+  it('catalyst : pot de 2 kg par défaut, sachets de 80 / 150 g sans article', () => {
+    const pot = lignesDepuisCalculateur({ ...ROAD, catW: 2000 }, CATALOGUE, null, id);
+    expect(pot.lignes.find(l => l.produitId === 'CATALYST2')!.quantite).toBe(2);
+    const sachets = lignesDepuisCalculateur({ ...ROAD, catW: 150 }, CATALOGUE, null, id);
+    expect(sachets.lignes.some(l => l.produitId === 'CATALYST2')).toBe(false);
+    expect(sachets.aVerifier).toEqual(['Catalyst C2 en sachet de 150 g × 18 (2,7 kg)']);
+  });
 });
