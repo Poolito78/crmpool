@@ -150,7 +150,10 @@ const NAV: NavEntry[] = [
   { type: 'link',  label: 'Stock',            icon: BarChart3,       path: '/stock' },
   { type: 'link',  label: 'Calcul Transport', icon: Calculator,      path: '/calculateur-ups' },
   { type: 'link',  label: 'Surface Pochoirs', icon: Ruler,           path: '/surface-pochoirs' },
-  { type: 'link',  label: 'Tarif en ligne',   icon: Tag,             path: '/tarif' },
+  /* Page publique du client (hors coquille, `App.tsx`) : un onglet MonCRM ne la
+     connaît pas, et y router ferait quitter le CRM — elle s'ouvre dans un onglet
+     du navigateur. */
+  { type: 'link',  label: 'Tarif en ligne',   icon: Tag,             path: '/tarif', external: true },
   {
     type: 'group', label: 'Paramètres', icon: Settings,
     items: [
