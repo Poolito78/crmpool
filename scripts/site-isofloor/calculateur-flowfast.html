@@ -2,7 +2,9 @@
 <!-- Calculateur Flowfast d'isofloor.fr : le détail des charges SNLR / SNLC n'apparaît
      qu'aux clients dont la fiche MonCRM porte « Accès au détail des formules » (onglet WEB)
      et à l'administrateur. Généré par MonCRM le 17/11/2026 — à coller dans le bloc HTML
-     de la page Odoo /calculateur-flowfast, à la place de l'ancien code. -->
+     de la page Odoo /calculateur-flowfast, à la place de l'ancien code.
+     Quantité en surface (m²) ou en bande (ml × largeur 10 à 50 cm, ou saisie). -->
+
 
 <html lang="fr">
 <head>
@@ -90,9 +92,21 @@
       <div><label for="qty">Résine (kg)</label><input id="qty" type="number" inputmode="decimal" min="0" step="0.1" value="10"></div>
       <div><label for="temp">Température (°C)</label><input id="temp" type="number" inputmode="decimal" min="-6" max="35" step="1" value="20"></div>
     </div>
+    <div class="seg" id="useg" style="margin-top:12px">
+      <button type="button" data-u="m2" class="on">Surface (m²)</button>
+      <button type="button" data-u="ml">Bande (ml)</button>
+    </div>
+    <div id="wrow" style="display:none;margin-top:10px">
+      <label>Largeur de la bande</label>
+      <div class="seg" id="wseg" style="margin-top:0;flex-wrap:wrap"></div>
+      <div class="row" style="margin-top:10px">
+        <div><label for="larg">Largeur (cm), modifiable</label><input id="larg" type="number" inputmode="decimal" min="1" step="1" value="10"></div>
+        <div style="align-self:end;color:var(--mut);font-size:13px;padding-bottom:10px">Toute autre largeur se saisit à la main.</div>
+      </div>
+    </div>
     <div class="row" style="margin-top:12px">
-      <div><label for="surf">Surface à appliquer (m²)</label><input id="surf" type="number" inputmode="decimal" min="0" step="0.5" placeholder="m²"></div>
-      <div style="align-self:end;color:var(--mut);font-size:13px;padding-bottom:10px">Saisir la surface : la quantité de résine est calculée.</div>
+      <div><label for="surf" id="surfl">Surface à appliquer (m²)</label><input id="surf" type="number" inputmode="decimal" min="0" step="0.5" placeholder="m²"></div>
+      <div id="surfh" style="align-self:end;color:var(--mut);font-size:13px;padding-bottom:10px">Saisir la surface : la quantité de résine est calculée.</div>
     </div>
     <div class="sliders"><div class="sl"><div class="sll" id="cur-t">Curseur</div><div class="slr"><button type="button" class="slb" id="cur-dn" aria-label="Précédent">◀</button><input id="cur" type="range" min="0" max="40" step="0.1" value="10" aria-label="Curseur"><button type="button" class="slb" id="cur-up" aria-label="Suivant">▶</button></div><div class="sln" id="cur-n"></div></div><input id="rng" type="hidden" value="20"></div>
     <div class="row" style="margin-top:12px">
@@ -154,10 +168,10 @@
     </div>
     <div class="sec nosep">Poids du mélange</div>
     <table style="margin-top:6px"><tbody id="compb"></tbody></table>
-    <div class="sec">Surface couverte</div>
+    <div class="sec" id="areat">Surface couverte</div>
     <div class="res" style="margin-top:10px">
       <div class="big" id="area">–</div>
-      <div style="color:var(--mut);font-size:14px">sur le poids total du mélange</div>
+      <div style="color:var(--mut);font-size:14px" id="areas">sur le poids total du mélange</div>
     </div>
     <div class="grid">
       <div class="box" id="ratebox"><b id="rate">–</b><span id="ratel">consommation</span></div>
@@ -228,6 +242,14 @@ var ctype = 'quartz', gran = '0,5–1', ratio208 = 1.25, mmv = 2, sup208 = 'std'
 var cur = '319', mode = 'u', fill = null, pig = null, thick = 2;
 var DEFQ = {'107':5, '208':4, '215':10, '319':10};
 var $ = function(id){return document.getElementById(id)};
+/* Bande : la quantité se saisit en mètres linéaires sur une largeur donnée
+   (10 à 50 cm proposés, toute autre saisissable). Le calcul reste en m² :
+   surface = longueur × largeur ; seul l'affichage passe en ml. */
+var UM = false, LARG = 10, WIDTHS = [10,12,15,20,25,30,50];
+function wM(){ return LARG/100; }
+function toU(a){ return UM ? a/wM() : a; }
+function fromU(v){ return UM ? v*wM() : v; }
+function uL(){ return UM ? 'ml' : 'm²'; }
 function show(id, on, disp){ $(id).style.display = on ? (disp||'block') : 'none'; }
 function set(){ var r = RES[cur]; return r.sets[mode] || r.sets.u; }
 function cfg(){
@@ -378,9 +400,11 @@ function render(){
     if (useF) cr += crow('Charge '+F.name, fmtKg(fk), 'k3');
     cr += '<tr class="tot"><td>Total mélange</td><td>'+fmtKg(total)+'</td></tr>';
     $('compb').innerHTML = cr;
-    window.__ratio = (q>0 && isFinite(area)) ? area/q : 0; if (window.__lock>0 && window.__ratio>0 && !window.__rec) { var tq=Math.round(window.__lock/window.__ratio*100)/100; if (Math.abs(tq-q)>0.005) { window.__rec=1; $('qty').value=tq; try { render(); } finally { window.__rec=0; } return; } } var sf=$('surf'); if (sf && document.activeElement!==sf && !window.__lock) sf.value = (area>0 && isFinite(area)) ? (Math.round(area*100)/100) : ''; if (window.__paint) window.__paint(); window.__kits && window.__kits(fk, isC, isR, area); $('area').innerHTML = fmt(area,2)+'<span class="unit"> m²</span>';
-    $('rate').textContent = (noF ? '≈ ' : '')+rate.toLocaleString('fr-FR',{maximumFractionDigits:2})+' kg/m²';
-    $('ratel').textContent = isClr ? '319 Clear : poids total du mélange' : is107 ? 'primaire 107 : poids total du mélange' : noF ? 'mélange sans charge' : (enr ? 'mélange sur enrobé, '+thickE+' mm' : C.perMm ? 'mélange, '+mmv+' mm ('+fmt(C.perMm,2)+' kg/m²/mm)' : (C.thick ? 'mélange, épaisseur '+thick+' mm' : F.tag+' : poids total du mélange'));
+    window.__ratio = (q>0 && isFinite(area)) ? area/q : 0; if (window.__lock>0 && window.__ratio>0 && !window.__rec) { var tq=Math.round(window.__lock/window.__ratio*100)/100; if (Math.abs(tq-q)>0.005) { window.__rec=1; $('qty').value=tq; try { render(); } finally { window.__rec=0; } return; } } var sf=$('surf'); if (sf && document.activeElement!==sf && !window.__lock) sf.value = (area>0 && isFinite(area)) ? (Math.round(toU(area)*100)/100) : ''; if (window.__paint) window.__paint(); window.__kits && window.__kits(fk, isC, isR, area); $('area').innerHTML = fmt(toU(area),2)+'<span class="unit"> '+uL()+'</span>';
+    $('areat').textContent = UM ? 'Longueur couverte' : 'Surface couverte';
+    $('areas').textContent = 'sur le poids total du mélange' + (UM ? ', soit '+fmt(area,2)+' m² en bande de '+fmtPct(LARG)+' cm' : '');
+    $('rate').textContent = (noF ? '≈ ' : '')+(UM ? (rate*wM()).toLocaleString('fr-FR',{maximumFractionDigits:3})+' kg/ml' : rate.toLocaleString('fr-FR',{maximumFractionDigits:2})+' kg/m²');
+    $('ratel').textContent = (UM ? rate.toLocaleString('fr-FR',{maximumFractionDigits:2})+' kg/m² × '+fmtPct(LARG)+' cm · ' : '') + (isClr ? '319 Clear : poids total du mélange' : is107 ? 'primaire 107 : poids total du mélange' : noF ? 'mélange sans charge' : (enr ? 'mélange sur enrobé, '+thickE+' mm' : C.perMm ? 'mélange, '+mmv+' mm ('+fmt(C.perMm,2)+' kg/m²/mm)' : (C.thick ? 'mélange, épaisseur '+thick+' mm' : F.tag+' : poids total du mélange')));
     var pr = useF ? F.primer : 0;
     show('primbox', !!pr);
     $('ratebox').style.gridColumn = pr ? 'auto' : '1 / -1';
@@ -421,7 +445,7 @@ function bindSeg(id, attr, fn){
   });
 }
 ['qty','sach'].forEach(function(id){$(id).addEventListener('input',render)});
-$('surf').addEventListener('input',function(){ var v=parseFloat(String(this.value).replace(',','.')); window.__lock = v>0 ? v : 0; if (window.__ratio>0 && v>0){ $('qty').value=Math.round(v/window.__ratio*100)/100; render(); } });
+$('surf').addEventListener('input',function(){ var v=fromU(parseFloat(String(this.value).replace(',','.'))); window.__lock = v>0 ? v : 0; if (window.__ratio>0 && v>0){ $('qty').value=Math.round(v/window.__ratio*100)/100; render(); } });
 (function(){
   var fm=function(n){return n.toLocaleString('fr-FR')};
   var num=function(id){return parseFloat(String($(id).value).replace(',','.'))||0};
@@ -434,6 +458,7 @@ $('surf').addEventListener('input',function(){ var v=parseFloat(String(this.valu
   function mx(o){return o.base*Math.pow(10,o.k)}
   function ensure(o){ var v=num(o.inp); while(v>mx(o)+1e-9) o.k++; }
   function paint(){
+    T.s.lab = UM ? 'Longueur (ml)' : 'Surface (m²)';
     var o=T[cur], up=$('cur-up'), dn=$('cur-dn'), v=num(o.inp);
     ['q','s','t'].forEach(function(k){ $(T[k].inp).style.boxShadow=(k===cur)?'0 0 0 2px var(--acc)':''; });
     if(cur==='t'){
@@ -482,11 +507,12 @@ $('surf').addEventListener('input',function(){ var v=parseFloat(String(this.valu
       var x=list.filter(function(y){return y.n===kitSel})[0]; var n=Math.max(0,Math.ceil(fk/x.w-1e-9)); if(n>0){ parts.push([x,n]); total=n*x.w; }
     }
     var rows=crow('Charge nécessaire', f3(fk)+' kg', 'ink');
-    parts.forEach(function(p){ rows+=crow(p[0].n+' ('+f3(p[0].w)+' kg · <b>'+f2(p[0].w*apk)+' m² / kit</b>)', '× '+p[1]+' = '+f2(p[1]*p[0].w*apk)+' m²', 'k3'); });
-    rows+='<tr class="tot"><td>Total des kits</td><td>'+f3(total)+' kg</td></tr>'; rows+=crow('Surface appliquée avec les kits', f2(total*apk)+' m²', 'k1');
+    var u=' '+uL();
+    parts.forEach(function(p){ rows+=crow(p[0].n+' ('+f3(p[0].w)+' kg · <b>'+f2(toU(p[0].w*apk))+u+' / kit</b>)', '× '+p[1]+' = '+f2(toU(p[1]*p[0].w*apk))+u, 'k3'); });
+    rows+='<tr class="tot"><td>Total des kits</td><td>'+f3(total)+' kg</td></tr>'; rows+=crow((UM ? 'Longueur' : 'Surface')+' appliquée avec les kits', f2(toU(total*apk))+u, 'k1');
     rows+=crow('Reste après application', f3(Math.max(0,total-fk))+' kg', 'k3');
     $('kittb').innerHTML=rows;
-    $('kitsum').textContent=parts.map(function(p){return p[0].n+' × '+p[1]}).join(' + ')+' · '+f3(total)+' kg · '+f2(total*apk)+' m²';
+    $('kitsum').textContent=parts.map(function(p){return p[0].n+' × '+p[1]}).join(' + ')+' · '+f3(total)+' kg · '+f2(toU(total*apk))+u;
     $('kitbox').style.display=kitOpen?'block':'none';
   };
 
@@ -533,6 +559,34 @@ $('in-rr').addEventListener('input',function(){ var x = parseFloat(this.value); 
 $('in-rclr').addEventListener('input',function(){ var x = parseFloat(this.value); rateClr = isNaN(x) ? 0.5 : Math.min(1, Math.max(0.3, x)); render(); });
 $('in-r107').addEventListener('input',function(){ var x = parseFloat(this.value); rate107 = isNaN(x) ? 0.5 : Math.min(0.5, Math.max(0.4, x)); render(); });
 $('detbtn').addEventListener('click',function(){ detOpen = !detOpen; render(); });
+/* Surface ou bande. Changer d'unité garde la surface ; changer de largeur
+   garde la longueur saisie (la résine suit). */
+function paintW(){
+  Array.prototype.forEach.call(document.querySelectorAll('#useg button'),function(b){ b.classList.toggle('on', (b.getAttribute('data-u')==='ml')===UM); });
+  show('wrow', UM);
+  $('wseg').innerHTML = '';
+  WIDTHS.forEach(function(w){
+    var b = document.createElement('button'); b.type = 'button'; b.textContent = w+' cm';
+    if (w === LARG) b.className = 'on';
+    b.addEventListener('click', function(){ setLarg(w); });
+    $('wseg').appendChild(b);
+  });
+  $('surfl').textContent = UM ? 'Longueur à appliquer (ml)' : 'Surface à appliquer (m²)';
+  $('surf').placeholder = uL();
+  $('surfh').textContent = UM ? 'Saisir la longueur : la quantité de résine est calculée pour une bande de '+fmtPct(LARG)+' cm.' : 'Saisir la surface : la quantité de résine est calculée.';
+}
+function majSurf(){ if (window.__lock>0) $('surf').value = Math.round(toU(window.__lock)*100)/100; }
+function setLarg(cm){
+  var x = parseFloat(String(cm).replace(',','.')); if (!(x>0)) return;
+  if (UM && window.__lock>0) window.__lock = window.__lock / wM() * (x/100);
+  LARG = x; if (parseFloat($('larg').value) !== x) $('larg').value = x;
+  paintW(); majSurf(); render();
+}
+Array.prototype.forEach.call(document.querySelectorAll('#useg button'),function(b){
+  b.addEventListener('click',function(){ UM = b.getAttribute('data-u')==='ml'; paintW(); majSurf(); render(); });
+});
+$('larg').addEventListener('input',function(){ setLarg(this.value); });
+paintW();
 /* ── Détail des formules : clients cochés dans MonCRM et administrateur ── */
 var FORMULES = null;
 var SB = 'https://qkjxcfosutclnahvxflf.supabase.co', SBK = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFranhjZm9zdXRjbG5haHZ4ZmxmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1MjUxNTAsImV4cCI6MjA4OTEwMTE1MH0.f58MNUBfySu5H6VS4nftxt5IAz966jw5frFpzlfJt-w";
