@@ -28,6 +28,10 @@
  *   identifiants admin : { client_id } → crée / renouvelle le mot de passe,
  *                rendu UNE fois en clair, coche `acces_tarif`
  *
+ * `formules` (réponse de `tarif`) : composition des charges SNLR / SNLC du
+ * calculateur Flowfast, renvoyée SEULEMENT si la fiche client porte
+ * `acces_formules` — la page publique ne la contient pas.
+ *
  * `verify_jwt = false` (config.toml) : le client du tarif n'a pas de session.
  */
 
@@ -47,6 +51,30 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SECRET = Deno.env.get("TARIF_SECRET") || SERVICE_KEY;
 const DUREE_JETON_MS = 12 * 3600 * 1000;
 const ITERATIONS = 100_000;
+
+/* Formules de charge du calculateur Flowfast 319 (isofloor.fr/calculateur-flowfast,
+   relevées le 17/11/2026) : kg de chaque composant par kg de résine. */
+const FORMULES_CHARGE = [
+  {
+    code: "SNLR",
+    titre: "Charge SNLR — Flowfast 319 Road (319r enrobé, 1 : 1,165)",
+    composants: [
+      { nom: "Flowfast SNL Filler", ratio: "1 : 0,75", kgParKg: 0.75 },
+      { nom: "Quartz 0,1–0,3", ratio: "1 : 0,4", kgParKg: 0.4 },
+      { nom: "HDK N20", ratio: "1,5 % du poids de résine (15 g/kg)", kgParKg: 0.015 },
+    ],
+    note: "Soit 1,165 kg de charge par kg de résine (mélange total 2,165 kg).",
+  },
+  {
+    code: "SNLC",
+    titre: "Charge SNLC — Flowfast 319 Concrete (319c béton, 1 : 0,5)",
+    composants: [
+      { nom: "Flowfast SNL Filler", ratio: "1 : 0,5", kgParKg: 0.5 },
+      { nom: "HDK N20", ratio: "0,4 % du poids de résine (4 g/kg)", kgParKg: 0.004 },
+    ],
+    note: "Soit 504 g de charge par kg de résine. Le HDK N20 peut descendre à 0,3 % (3 g/kg).",
+  },
+];
 
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
@@ -191,10 +219,10 @@ async function tarif(req: Request, b: Record<string, unknown>) {
   }
   const admin = staff?.role === "admin";
 
-  let client: { societe?: string; nom?: string; est_revendeur?: boolean; remises_par_categorie?: Record<string, number>; acces_tarif?: boolean; user_id?: string } | null = null;
+  let client: { societe?: string; nom?: string; est_revendeur?: boolean; remises_par_categorie?: Record<string, number>; acces_tarif?: boolean; acces_formules?: boolean; user_id?: string } | null = null;
   if (clientId) {
     const { data } = await db.from("clients")
-      .select("societe, nom, est_revendeur, remises_par_categorie, acces_tarif, user_id").eq("id", clientId).maybeSingle();
+      .select("societe, nom, est_revendeur, remises_par_categorie, acces_tarif, acces_formules, user_id").eq("id", clientId).maybeSingle();
     client = data;
     if (!client) return rep({ erreur: "Client introuvable." }, 404);
     if (staff?.role === "commercial" && client.user_id !== staff.uid) {
@@ -270,6 +298,8 @@ async function tarif(req: Request, b: Record<string, unknown>) {
     equipe: staff?.role ?? null,
     date: new Date().toISOString(),
     lignes,
+    /* L'aperçu de l'équipe montre ce que voit CE client : rien de plus. */
+    ...(client?.acces_formules ? { formules: FORMULES_CHARGE } : {}),
   });
 }
 

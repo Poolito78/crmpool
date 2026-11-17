@@ -58,6 +58,8 @@ export interface Client {
   remisesParCategorie?: Record<string, number>;
   /** Accès au tarif en ligne `/tarif`, à ses prix (fonction `tarif-catalogue`). */
   accesTarif?: boolean;
+  /** Le tarif en ligne montre le détail des formules SNLR / SNLC (`acces_formules`). */
+  accesFormules?: boolean;
   contacts?: Contact[];
   delaiReglement?: string;
   /**
@@ -1121,6 +1123,7 @@ function dbToClient(r: any): Client {
     estRevendeur: r.est_revendeur || false,
     remisesParCategorie: (r.remises_par_categorie as Record<string, number>) || {},
     accesTarif: r.acces_tarif ?? undefined,
+    accesFormules: (r as { acces_formules?: boolean }).acces_formules ?? undefined,
     contacts: (r.contacts as Contact[]) || [],
     delaiReglement: r.delai_reglement || undefined,
     niveauTarif: /^R[0-4]$/.test(r.niveau_tarif || '') ? r.niveau_tarif : undefined,
@@ -1172,6 +1175,7 @@ function clientToDb(c: Client, userId: string): Record<string, unknown> {
     ...(c.dateCreationEntreprise !== undefined ? { date_creation_entreprise: c.dateCreationEntreprise } : {}),
     ...(c.capitalSocial !== undefined ? { capital_social: c.capitalSocial } : {}),
     ...(c.accesTarif !== undefined ? { acces_tarif: c.accesTarif } : {}),
+    ...(c.accesFormules !== undefined ? { acces_formules: c.accesFormules } : {}),
   };
 }
 

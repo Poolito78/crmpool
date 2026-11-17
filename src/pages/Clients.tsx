@@ -377,7 +377,7 @@ export default function Clients() {
     if (contacts.length === 0 && (c.nom || c.email || c.telephone)) {
       contacts = [{ id: generateId(), nom: c.nom || '', prenom: '', email: c.email || '', telephone: c.telephone || '', telephoneMobile: c.telephoneMobile || '', fonction: '' }];
     }
-    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, accesTarif: c.accesTarif || false, contacts, delaiReglement: c.delaiReglement || '45J FDM', siret: c.siret || '', codeApe: c.codeApe || '', libelleApe: c.libelleApe || '', formeJuridique: c.formeJuridique || '', tvaIntra: c.tvaIntra || '', rcs: c.rcs || '', trancheEffectif: c.trancheEffectif || '', dateCreationEntreprise: c.dateCreationEntreprise || '', capitalSocial: c.capitalSocial || '', niveauTarif: c.niveauTarif ?? null, listePrixOdoo: c.listePrixOdoo || '', contratCadreOdoo: c.contratCadreOdoo || '', tarifsOdooMaj: c.tarifsOdooMaj || '' });
+    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, accesTarif: c.accesTarif || false, accesFormules: c.accesFormules || false, contacts, delaiReglement: c.delaiReglement || '45J FDM', siret: c.siret || '', codeApe: c.codeApe || '', libelleApe: c.libelleApe || '', formeJuridique: c.formeJuridique || '', tvaIntra: c.tvaIntra || '', rcs: c.rcs || '', trancheEffectif: c.trancheEffectif || '', dateCreationEntreprise: c.dateCreationEntreprise || '', capitalSocial: c.capitalSocial || '', niveauTarif: c.niveauTarif ?? null, listePrixOdoo: c.listePrixOdoo || '', contratCadreOdoo: c.contratCadreOdoo || '', tarifsOdooMaj: c.tarifsOdooMaj || '' });
     setSiretOpen(false);
     setSiretResults([]);
     setSiretQuery('');
@@ -1321,6 +1321,28 @@ export default function Clients() {
                 onChange={v => setForm(prev => ({ ...prev, accesTarif: v }))}
               />
             )}
+            {/* Détail des formules de charge du calculateur : n'apparaît que dans
+                le tarif en ligne de CE client (la fonction ne l'envoie qu'aux
+                fiches cochées). Ouvert par l'administrateur, comme le tarif. */}
+            <div className="border-t border-border pt-4">
+              <div className="flex items-center gap-3 mb-2">
+                <Checkbox
+                  id="accesFormules"
+                  checked={form.accesFormules || false}
+                  disabled={!isAdmin}
+                  onCheckedChange={v => setForm(prev => ({ ...prev, accesFormules: v === true }))}
+                />
+                <Label htmlFor="accesFormules" className="text-base font-semibold cursor-pointer">
+                  Accès au détail des formules SNLR / SNLC
+                </Label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Dans son tarif en ligne, le client voit la composition des charges Flowfast 319 du calculateur
+                (SNL Filler, quartz 0,1–0,3, HDK N20) et les quantités pour sa résine.
+                {!form.accesTarif && ' Sans accès au tarif en ligne, il ne peut pas les consulter.'}
+                {!isAdmin && " Seul l'administrateur ouvre cet accès."}
+              </p>
+            </div>
           </div>
 
           {/* ── Onglet Infos (form) ─────────────────────────────────────────── */}
