@@ -159,7 +159,7 @@
     <div class="row" id="rclrrow" style="display:none;margin-bottom:12px">
       <div><label for="in-rclr">Consommation du Clear : <b id="rclrv">0,5</b> kg/m² (de 0,3 à 1)</label><input id="in-rclr" type="range" min="0.3" max="1" step="0.05" value="0.5"></div>
     </div>
-    <div class="row" id="rrrow" style="display:none;margin-bottom:12px"><div><label for="in-rr">Consommation du mélange : <b id="rrv">1</b> kg/m² (de 0,7 à 1,2)</label><input id="in-rr" type="range" min="0.7" max="1.2" step="0.05" value="1"></div></div>
+    <div class="row" id="rrrow" style="display:none;margin-bottom:12px"><div><label for="in-rr">Consommation du mélange : <b id="rrv">1</b> kg/m² <span id="rrr">(de 0,7 à 1,2)</span></label><input id="in-rr" type="range" min="0.7" max="1.2" step="0.05" value="1"></div></div>
     <div class="info" id="clrinfo" style="display:none;margin:-4px 0 12px"></div>
     <div class="seg" id="sseg" style="margin-top:0;margin-bottom:12px;display:none"></div>
     <div class="seg" id="tseg" style="margin-top:0;margin-bottom:12px"></div>
@@ -204,7 +204,7 @@
       <thead><tr><th>Résine</th><th>0 °C</th><th>10 °C</th><th>20 °C</th><th>30 °C</th></tr></thead>
       <tbody id="recap"></tbody>
     </table>
-    <div class="note">% en poids de résine, et grammes de C2 pour un seau de 20 kg. Sous 0 °C, ajouter d'abord du Flowfast 404 Accelerator, puis le catalyseur. Optimum d'utilisation : 15–20 °C. Le catalyseur se mélange lentement, sans incorporer d'air.<br>319 Unpigmented : 319c sur béton, charge SNLC 1 : 0,504, 0,8 kg/m² (après primaire 107 à 0,5 kg/m²) ; 319r sur enrobé, charge 1 : 1,165, 1 kg/m².<br>215 autolissant : charge SNL Filler 1 : 2 (béton) ou 1 : 2,5 (enrobé) ; pigment 5 % (jaune 10 %) ; consommation du mélange 2,5 kg/m² à 1 mm, 3,2 kg/m² à 2 mm, 4,5 kg/m² à 3 mm ; sans charge environ 0,75 kg/m².<br>208 mortier : charge quartz ou granit, ratio 1 : 1 à 1 : 3 (1 : 1,25 conseillé pour pavé et BAO Mortar), 2,12 kg/m² par mm d'épaisseur (sur enrobé : 2,8 kg/m² à 1 mm, 4,5 kg/m² à 2 mm), pigment 0,5 %.<br>107 : consommation 0,4 à 0,5 kg/m² (0,5 par défaut).<br>319 Clear : consommation 0,3 à 1 kg/m² (0,5 par défaut), au-delà de 0,5 appliquer en deux couches.</div>
+    <div class="note">% en poids de résine, et grammes de C2 pour un seau de 20 kg. Sous 0 °C, ajouter d'abord du Flowfast 404 Accelerator, puis le catalyseur. Optimum d'utilisation : 15–20 °C. Le catalyseur se mélange lentement, sans incorporer d'air.<br>319 Unpigmented : 319c sur béton, charge SNLC 1 : 0,504, 0,8 kg/m² en moyenne, de 0,6 à 1,3 (après primaire 107 à 0,5 kg/m²) ; 319r sur enrobé, charge 1 : 1,165, 1 kg/m² en moyenne, de 0,7 à 1,2.<br>215 autolissant : charge SNL Filler 1 : 2 (béton) ou 1 : 2,5 (enrobé) ; pigment 5 % (jaune 10 %) ; consommation du mélange 2,5 kg/m² à 1 mm, 3,2 kg/m² à 2 mm, 4,5 kg/m² à 3 mm ; sans charge environ 0,75 kg/m².<br>208 mortier : charge quartz ou granit, ratio 1 : 1 à 1 : 3 (1 : 1,25 conseillé pour pavé et BAO Mortar), 2,12 kg/m² par mm d'épaisseur (sur enrobé : 2,8 kg/m² à 1 mm, 4,5 kg/m² à 2 mm), pigment 0,5 %.<br>107 : consommation 0,4 à 0,5 kg/m² (0,5 par défaut).<br>319 Clear : consommation 0,3 à 1 kg/m² (0,5 par défaut), au-delà de 0,5 appliquer en deux couches.</div>
   </div>
 </div>
 
@@ -237,7 +237,7 @@ var PERMM208 = 2.12;
 var THICK208ENR = {1:2.8, 2:4.5};
 var GRANS = [['0,1–0,3','0,1–0,3'],['0,3–0,8','0,3–0,8'],['0,5–1','0,5–1 (moyen)'],['0,7–1,3','0,7–1,3'],['1–2,5','1–2,5']];
 var n20 = 4, detOpen = false;
-var ctype = 'quartz', gran = '0,5–1', ratio208 = 1.25, mmv = 2, sup208 = 'std', thickE = 2, rate107 = 0.5, rateClr = 0.5, rateR = 1;
+var ctype = 'quartz', gran = '0,5–1', ratio208 = 1.25, mmv = 2, sup208 = 'std', thickE = 2, rate107 = 0.5, rateClr = 0.5, rateR = 1, rateC = 0.8;
 
 var cur = '319', mode = 'u', fill = null, pig = null, thick = 2;
 var DEFQ = {'107':5, '208':4, '215':10, '319':10};
@@ -377,14 +377,23 @@ function render(){
   show('c3', useF || noF || isRng);
   show('r107row', is107, 'flex');
   show('rclrrow', isClr, 'flex');
-  show('rrrow', cur === '319' && fill === 'r', 'flex');
-  $('rrv').textContent = fmt(rateR,2);
+  /* Consommation moyenne du mélange 319 chargé, au choix : SNLR 1 kg/m²
+     (0,7 à 1,2), SNLC 0,8 kg/m² (0,6 à 1,3). Un seul curseur, bornes et
+     valeur selon la charge. */
+  var isRC = useF && cur === '319' && (fill === 'r' || fill === 'c');
+  show('rrrow', isRC, 'flex');
+  if (isRC){
+    var rr = $('in-rr'), rb = fill === 'c' ? [0.6, 1.3, rateC] : [0.7, 1.2, rateR];
+    rr.min = rb[0]; rr.max = rb[1]; if (document.activeElement !== rr) rr.value = rb[2];
+    $('rrv').textContent = fmt(rb[2],2);
+    $('rrr').textContent = '(de '+fmtPct(rb[0])+' à '+fmtPct(rb[1])+')';
+  }
   show('clrinfo', isClr && rateClr > 0.5);
   $('rclrv').textContent = fmtPct(rateClr);
   $('clrinfo').textContent = 'Au-delà de 0,5 kg/m² : appliquer en deux couches (environ '+fmt(rateClr/2,2)+' kg/m² par couche).';
   if (useF || noF || isRng){
     var enr = useF && cur==='208' && sup208==='enr';
-    var rate = is107 ? rate107 : isClr ? rateClr : noF ? C.nofillRate : (enr ? THICK208ENR[thickE] : (C.perMm ? C.perMm*mmv : (C.thick ? C.thick[thick] : (cur === '319' && fill === 'r' ? rateR : F.rate))));
+    var rate = is107 ? rate107 : isClr ? rateClr : noF ? C.nofillRate : (enr ? THICK208ENR[thickE] : (C.perMm ? C.perMm*mmv : (C.thick ? C.thick[thick] : (cur === '319' && fill === 'r' ? rateR : cur === '319' && fill === 'c' ? rateC : F.rate))));
     var ck = g/1000;
     var total = q + ck + pk + fk;
     var area = total / rate;
@@ -555,7 +564,10 @@ function setRatio(v, fromRange){
 $('in-rat').addEventListener('input',function(){ setRatio(this.value,false); });
 $('in-ratr').addEventListener('input',function(){ setRatio(this.value,true); });
 $('in-mm').addEventListener('input',function(){ var x = parseFloat(this.value); mmv = x>0 ? x : 2; render(); });
-$('in-rr').addEventListener('input',function(){ var x = parseFloat(this.value); rateR = isNaN(x) ? 1 : Math.min(1.2, Math.max(0.7, x)); render(); });
+$('in-rr').addEventListener('input',function(){ var x = parseFloat(this.value);
+  if (fill === 'c') rateC = isNaN(x) ? 0.8 : Math.min(1.3, Math.max(0.6, x));
+  else rateR = isNaN(x) ? 1 : Math.min(1.2, Math.max(0.7, x));
+  render(); });
 $('in-rclr').addEventListener('input',function(){ var x = parseFloat(this.value); rateClr = isNaN(x) ? 0.5 : Math.min(1, Math.max(0.3, x)); render(); });
 $('in-r107').addEventListener('input',function(){ var x = parseFloat(this.value); rate107 = isNaN(x) ? 0.5 : Math.min(0.5, Math.max(0.4, x)); render(); });
 $('detbtn').addEventListener('click',function(){ detOpen = !detOpen; render(); });
