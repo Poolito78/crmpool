@@ -948,6 +948,89 @@ question « Consos déjà en kg/ml ? » — « Oui, garder les valeurs » ou « 
 conso des fiches ». Réglage enregistré sur le devis. L'unité s'affiche sur toutes
 les lignes de coût (€/m² ou €/ml, groupes, sous-totaux).
 
+## PDF allégé (11 nov.)
+
+`pdfImage.ts` + `pdfFolder.ts` + `pdfImage.test.ts`. 2 pages : **2,4 Mo → 0,5 Mo
+(−78 %)**, qualité meilleure qu'avant.
+
+- **Logo ISOFLOOR** réduit à 660 px (était 1 376 px, 1,2 Mo à lui seul en tête
+  des pages 2+). Reste 600 dpi à l'impression.
+- **Pages sans photo** : PNG à palette 256 couleurs (écart max 6/255 contre 104/255
+  pour l'ancien JPEG 0,92). Une page avec photo reste en JPEG.
+- Vaut pour tous les PDF : devis, ARC, commandes, mise en œuvre.
+
+## Devis : APERÇU, coût chantier et catalyseur (11 nov.)
+
+- **« APERÇU »** retiré du numéro de devis provisoire (`Devis.tsx` ligne ~3489) et
+  du nom du fichier PDF. Sur un devis enregistré, le vrai numéro s'affiche comme avant.
+- **Coût chantier** : était calculé uniquement quand m²/conso était affiché. Corrigé :
+  même formule que la conception et Odoo (montant × €/m²), indépendamment du tableau
+  m²/conso.
+- **Catalyseur** calculé sur la résine **consommée** (non le total du chantier) —
+  corrige DEV-2026-152 : écart de 0,008 € dû à l'arrondi au gramme du dosage
+  (`calculerCatalyse`), attendu.
+- **Case Coût/groupe** : ajoutée et conservée telle quelle.
+
+## Calculateur Flowfast : bande, unités et améliorations (11–18 nov.)
+
+Fichier `scripts/site-isofloor/calculateur-flowfast.html`, publié sur isofloor.fr et
+intégré au CRM. Chaque publication contrôle SHA-256 avant/après via la vue Odoo 1791
+(voir mémoire `publier-calculateur-flowfast.md`).
+
+- **Mode bande (ml)** : bouton Surface (m²) | Bande (ml), largeurs 10/12/15/20/25/30/50 cm
+  + champ libre (défaut 10 cm). Conso affichée en kg/ml, longueur couverte en ml et m².
+- **Curseur SNLC** : 0,8 kg/m² par défaut, de 0,6 à 1,3 (SNLR existait déjà à 1 kg/m²,
+  de 0,7 à 1,2).
+- **Petites unités** dans les kits : SNLR-025 (0,291 kg), SNLR-05 (0,583 kg), SNLR-1
+  (1,165 kg) et leurs équivalents SNLC — libellés « SNLR-05 · pour 0,5 kg de résine ».
+- **Sachets pigment** : formats 200 g, 400 g, 500 g, 1 kg, 2 kg (pas de 4 kg — seau de
+  résine ≤ 20 kg). Combinaison automatique, format unique ou poids libre.
+- **Catalyst** : sachet 80 g / sachet 150 g / sachet 2 kg (défaut). ⚠️ Sachet 2 kg s'appelle
+  « sachet » (non « seau » ni « pot »).
+- **Résine** : seaux de **20 kg uniquement** (seau de 10 kg retiré).
+- **Préconisation** : section 4 suit le kit choisi en section 3 ; « Total à préparer »
+  détaille le conditionnement et le nombre entre parenthèses (ex. « Catalyst C2
+  (4 sachets de 2 kg) », « Charge SNLR (171 sachets SNLR1) »).
+- **Formules SNLR/SNLC** : retirées du calculateur public. Remplacées par un bouton
+  « Détail de la charge : espace client ISOFLOOR — se connecter » (voir ci-dessous).
+
+## CRM : calculateur Flowfast → Créer devis (17–18 nov.)
+
+Page `src/pages/CalculateurFlowfast.tsx`, logique `src/lib/calculateurFlowfastDevis.ts`.
+Menu **Web › Calculateur Flowfast**. Sources identiques au site : un seul fichier,
+pas de divergence possible.
+
+- Choix du client + bouton **« Créer devis »** : devis brouillon ouvert aussitôt.
+- Lignes du devis : résine en seaux 20 kg (FLOWFAST319 × n), pigment par sachet
+  (PIGMENT02 à PIGMENT2KG), catalyst (CATALYST2 ou DUR50FT150 pour sachet 150 g ;
+  sachet 80 g = « à vérifier »), kits SNLR/SNLC (SNLR11, SNLC-05…).
+- **Jaune → RAL 1023 (Traffic Yellow)** posé d'office sur chaque sachet de pigment jaune.
+- **Température** du calculateur reportée sur la ligne Catalyst (T° chantier).
+- **Surface** du calculateur (ml si mode bande) transmise au devis, qui s'ouvre en mode
+  surface correspondant.
+- **Note récap** dans le devis : nombre de kits × détail d'un kit (résine, pigment
+  dose/seau, catalyst dose/seau, charge sachets, mélange total et surface) ; si kits
+  multiples (combinaison), un bloc par format.
+- Prix suivent les règles du client (prix convenu > remise de gamme > prix public au palier).
+- ⚠️ Article absent du catalogue → ligne « à vérifier », notification à la création.
+
+## Fiche client : onglet WEB et formules charges (17–18 nov.)
+
+- **Onglet WEB** (après Tarifs) : « Accès à son tarif en ligne » déplacé depuis l'onglet
+  Tarifs ; bouton Enregistrer disponible.
+- **Case « Accès au détail des formules SNLR/SNLC »** : visible admin seulement, colonne
+  `acces_formules` (migration appliquée 17/11). Client coché → voit dans son tarif en
+  ligne un bloc « Formules des charges Flowfast 319 » : saisit sa quantité de résine,
+  clique « Voir le détail » de chaque charge.
+- Formules : SNLR = SNL Filler 0,75 kg + quartz 0,1–0,3 0,4 kg + HDK N20 15 g **par kg
+  de résine** (11,65 kg pour 10 kg) ; SNLC = SNL Filler 0,5 kg + HDK N20 4 g (peut
+  descendre à 3 g) par kg de résine (5,04 kg pour 10 kg).
+- **Calculateur public** : compositions retirées du code source. Bouton de connexion espace
+  client ; client coché = détail visible ; sinon message « contacter ISOFLOOR ».
+- Fonction `tarif-catalogue` déployée (version 5, `verify_jwt` désactivé, 18/11).
+  Anonyme refusé avec message explicite.
+- ⚠️ **À déployer** si jamais modifié : `.\deploy-function.ps1 tarif-catalogue`.
+
 ## Re-tarif depuis modèle (16 nov.)
 
 Bug corrigé : une ligne d'article reprise d'un modèle système (via « + lignes »
