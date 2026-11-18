@@ -82,7 +82,7 @@ export function RechercheClientOdoo({ clients, nouveau, clientId, onRemplir, onO
         type="button"
         variant="outline"
         size="sm"
-        className="w-full border-dashed border-violet-400/60 text-violet-700 dark:text-violet-300 hover:bg-violet-500/10"
+        className="w-full border-dashed border-violet-400/60 text-violet-700 dark:text-violet-300 hover:bg-violet-500/10 hover:text-violet-800 dark:hover:text-violet-200"
         onClick={() => { setOuvert(o => !o); setResultats(null); setFiche(null); }}
       >
         <Search className="w-3.5 h-3.5 mr-1.5" />
