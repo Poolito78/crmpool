@@ -31,6 +31,10 @@ export interface PartenaireOdoo {
   estSociete: boolean;
   societeMere: string;
   contrat: string;
+  /** `type` Odoo : contact, invoice, delivery, other (fonction redéployée). */
+  type?: string;
+  /** Fonction d'une personne (fonction redéployée). */
+  fonction?: string;
 }
 
 export async function chercherPartenairesOdoo(terme: string): Promise<PartenaireOdoo[]> {

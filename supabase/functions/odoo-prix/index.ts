@@ -1744,30 +1744,116 @@ serve(async (req) => {
      *
      * Ce mode répond seul et n'exécute aucune tarification : il n'a ni ligne
      * ni article à chiffrer. */
+    /* ── Fiche complète d'un partenaire, pour la fiche client MonCRM ────────
+     *
+     * « Nouveau client » → Rechercher dans Odoo : la fiche cliquée est lue
+     * en entier — la SOCIÉTÉ (la mère d'un contact rattaché), son adresse,
+     * sa TVA, son SIRET quand le module français le porte, ses conditions de
+     * règlement, et les PERSONNES qui lui sont rattachées. Lecture seule. */
+    const ficheId = Number(corps?.ficheClient) || 0;
+    if (ficheId) {
+      const od = new Odoo();
+      const ctx = { context: { lang: "fr_FR" } };
+      const defs = (await od.kw("res.partner", "fields_get", [[]], { attributes: ["type"] })) as Record<string, unknown>;
+      const optionnels = ["siret", "website", "street2", "country_id", "property_payment_term_id",
+                          "property_product_pricelist", "function", "commercial_partner_id", "ref"]
+        .filter((c) => c in defs);
+      const champs = ["name", "email", "city", "zip", "street", "phone", "mobile",
+                      "vat", "is_company", "parent_id", "type", ...optionnels];
+      const [lu] = (await od.kw("res.partner", "read", [[ficheId], champs], ctx)) as any[];
+      if (!lu) return repondre({ erreur: `Fiche Odoo #${ficheId} introuvable` });
+
+      /* La société : la fiche elle-même, sinon celle qui la porte. */
+      const societeId: number = lu.is_company
+        ? lu.id
+        : (lu.commercial_partner_id?.[0] || lu.parent_id?.[0] || lu.id);
+      const societe = societeId === lu.id
+        ? lu
+        : ((await od.kw("res.partner", "read", [[societeId], champs], ctx)) as any[])[0] || lu;
+
+      const m2o = (v: unknown) => (Array.isArray(v) ? String(v[1] || "") : "");
+      const fiche = (p: any) => ({
+        id: p.id,
+        nom: p.name || "",
+        email: p.email || "",
+        telephone: p.phone || "",
+        mobile: p.mobile || "",
+        adresse: p.street || "",
+        adresse2: p.street2 || "",
+        codePostal: p.zip || "",
+        ville: p.city || "",
+        pays: m2o(p.country_id),
+        tva: p.vat || "",
+        siret: p.siret || "",
+        siteWeb: p.website || "",
+        conditionsReglement: m2o(p.property_payment_term_id),
+        listePrix: m2o(p.property_product_pricelist),
+        fonction: p.function || "",
+        reference: p.ref || "",
+        estSociete: !!p.is_company,
+        type: p.type || "",
+      });
+
+      /* Les personnes de la société — pas ses adresses de livraison ou de
+         facturation, qui ne sont pas des interlocuteurs. Enveloppé : un
+         complément ne doit pas emporter la fiche. */
+      let contacts: unknown[] = [];
+      try {
+        if (societe.is_company || societeId !== lu.id) {
+          contacts = ((await od.kw(
+            "res.partner", "search_read",
+            [[["parent_id", "=", societeId], ["active", "=", true]],
+             ["id", "name", "function", "email", "phone", "mobile", "type"]],
+            { limit: 60, order: "name" },
+          )) as any[])
+            .filter((c) => (!c.type || c.type === "contact") && c.name)
+            .map((c) => ({
+              id: c.id, nom: c.name || "", fonction: c.function || "", email: c.email || "",
+              telephone: c.phone || "", mobile: c.mobile || "",
+            }));
+        }
+      } catch (e) {
+        console.warn("[ficheClient contacts]", (e as Error).message);
+      }
+
+      return repondre({ fiche: { societe: fiche(societe), choisi: fiche(lu), contacts } });
+    }
+
     const terme = String(corps?.rechercheClient ?? "").trim();
     if (terme) {
       /* Deux caractères ne discriminent rien et rapporteraient la moitié du
          fichier : on refuse plutôt que de faire travailler Odoo pour rien. */
       if (terme.length < 3) return repondre({ partenaires: [] });
 
-      const od = new Odoo();
-      const motif = `%${terme}%`;
-      const champs = ["name", "email", "city", "zip", "street", "phone", "mobile",
-                      "vat", "is_company", "parent_id",
-                      "property_product_pricelist"];
-      const trouves = (await od.kw(
-        "res.partner", "search_read",
-        [[["active", "=", true],
-          "|", "|", "|",
+      /* MOT À MOT : « Jean Dupont Colas » doit trouver le contact « DUPONT
+         Jean » de la société COLAS. Chaque mot doit se trouver quelque part —
+         nom, courriel, TVA, ville ou société mère —, dans n'importe quel
+         ordre. Un mot d'une lettre ne discrimine rien : ignoré. */
+      const mots = [...new Set(terme.split(/\s+/).map((m) => m.trim()).filter((m) => m.length >= 2))]
+        .slice(0, 5);
+      const domaine: unknown[] = [["active", "=", true]];
+      for (const m of (mots.length ? mots : [terme])) {
+        const motif = `%${m}%`;
+        domaine.push("|", "|", "|", "|",
           ["name", "ilike", motif],
           ["email", "ilike", motif],
           ["vat", "ilike", motif],
-          ["city", "ilike", motif]],
-         champs],
-        { limit: 25, order: "is_company desc, name" },
+          ["city", "ilike", motif],
+          ["parent_id.name", "ilike", motif]);
+      }
+
+      const od = new Odoo();
+      const champs = ["name", "email", "city", "zip", "street", "phone", "mobile",
+                      "vat", "is_company", "parent_id", "type", "function",
+                      "property_product_pricelist"];
+      const trouves = (await od.kw(
+        "res.partner", "search_read",
+        [domaine, champs],
+        { limit: 30, order: "is_company desc, name" },
       )) as any[];
 
       return repondre({
+        motAMot: true,
         partenaires: trouves.map((p) => ({
           id: p.id,
           nom: p.name || "",
@@ -1783,6 +1869,8 @@ serve(async (req) => {
              homonymes de groupes différents restent distinguables. */
           societeMere: p.parent_id ? p.parent_id[1] : "",
           contrat: p.property_product_pricelist ? p.property_product_pricelist[1] : "",
+          type: p.type || "",
+          fonction: p.function || "",
         })),
       });
     }

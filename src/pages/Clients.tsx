@@ -29,6 +29,9 @@ import AnalyseCroisee from '@/components/AnalyseCroisee';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput from '@/components/FilterChoiceInput';
 import RowActionsMenu from '@/components/RowActionsMenu';
+import { RechercheClientOdoo } from '@/components/RechercheClientOdoo';
+import { remplirDepuisOdoo, type ContactOdoo, type FicheClientOdoo } from '@/lib/ficheClientOdoo';
+import { setOdooPartnerId } from '@/lib/odooSync';
 
 type ClientColKey = 'societe' | 'contacts' | 'ville' | 'adresses' | 'devis' | 'encours' | 'commercial';
 const CLIENT_COLS: { key: ClientColKey; label: string; align: 'left' | 'right'; sortable: boolean; filterCol: 'societe' | 'contacts' | 'ville' | 'adresses' | null }[] = [
@@ -188,6 +191,7 @@ export default function Clients() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [clientDialogTab, setClientDialogTab] = useState<'infos' | 'crm' | 'comptabilite' | 'tarifs' | 'web' | 'ventes'>('infos');
   const [tarifsOdooEnCours, setTarifsOdooEnCours] = useState(false);
+  const [odooPartenaireChoisi, setOdooPartenaireChoisi] = useState<{ id: number; nom: string } | null>(null);
   const { actions: crmActions, addAction: addCrmAction } = useCrmActions();
   const [crmActionDialogOpen, setCrmActionDialogOpen] = useState(false);
 
@@ -297,6 +301,7 @@ export default function Clients() {
   function openNew() {
     setEditingClient(null);
     setForm(emptyClient);
+    setOdooPartenaireChoisi(null);
     setClientDialogTab('infos');
     setSiretOpen(false);
     setSiretQuery('');
@@ -355,6 +360,7 @@ export default function Clients() {
 
   function handleEmailExtracted(contact: ExtractedContact) {
     setEditingClient(null);
+    setOdooPartenaireChoisi(null);
     setForm({
       ...emptyClient,
       nom: contact.nom,
@@ -372,6 +378,7 @@ export default function Clients() {
 
   function openEdit(c: Client) {
     setEditingClient(c);
+    setOdooPartenaireChoisi(null);
     // Migration automatique : si pas de contacts[] mais des champs legacy (nom/email/tel), créer le contact principal
     let contacts = c.contacts && c.contacts.length > 0 ? c.contacts : [];
     if (contacts.length === 0 && (c.nom || c.email || c.telephone)) {
@@ -502,16 +509,16 @@ export default function Clients() {
    * Le niveau n'est remplacé que si Odoo en annonce un : un contrat muet ne
    * doit pas effacer un niveau choisi à la main.
    */
-  async function recupererTarifsOdoo() {
-    const email = form.email || (form.contacts || []).find(ct => ct.email)?.email || '';
-    if (!form.societe?.trim() && !email) {
+  async function recupererTarifsOdoo(source: typeof form = form) {
+    const email = source.email || (source.contacts || []).find(ct => ct.email)?.email || '';
+    if (!source.societe?.trim() && !email) {
       toast.error('Renseignez la société ou un e-mail pour retrouver le client dans Odoo');
       return;
     }
     setTarifsOdooEnCours(true);
     try {
       const { data, error } = await supabase.functions.invoke('odoo-prix', {
-        body: { ficheTarifs: true, client: { email, societe: form.societe, nom: form.nom, ville: form.ville } },
+        body: { ficheTarifs: true, client: { email, societe: source.societe, nom: source.nom, ville: source.ville } },
       });
       if (error) throw error;
       /* Une fonction pas encore redéployée ignore `ficheTarifs` et répond
@@ -542,6 +549,24 @@ export default function Clients() {
     }
   }
 
+  /**
+   * La fiche Odoo retenue dans « Rechercher dans Odoo » remplit la fiche
+   * (tout sur un client neuf, le vide seulement sur un client existant),
+   * puis les tarifs Odoo du client sont relus — liste de prix, contrat-cadre,
+   * niveau R — comme le ferait « Récupérer d'Odoo » de l'onglet Tarifs.
+   */
+  function remplirDepuisFicheOdoo(fiche: FicheClientOdoo, contacts: ContactOdoo[]) {
+    const suivant = remplirDepuisOdoo(form, fiche, contacts, !editingClient, generateId);
+    setForm(suivant);
+    if (fiche.societe.id) {
+      const retenu = { id: fiche.societe.id, nom: fiche.societe.nom };
+      setOdooPartenaireChoisi(retenu);
+      if (editingClient) setOdooPartnerId(editingClient.id, retenu);
+    }
+    toast.success(`Fiche remplie depuis Odoo : ${fiche.societe.nom}${contacts.length ? ` + ${contacts.length} contact${contacts.length > 1 ? 's' : ''}` : ''}`);
+    if (!editingClient) void recupererTarifsOdoo(suivant);
+  }
+
   function save(silent = false): boolean {
     if (!form.societe?.trim()) { if (!silent) toast.error('La société est requise'); return false; }
     const derived = deriveFromContacts(form);
@@ -550,7 +575,11 @@ export default function Clients() {
       updateClients(prev => prev.map(c => c.id === editingClient.id ? { ...c, ...toSave } : c));
       if (!silent) toast.success('Client modifié');
     } else {
-      updateClients(prev => [...prev, { ...toSave, id: generateId(), dateCreation: new Date().toISOString().split('T')[0] }]);
+      const id = generateId();
+      /* La fiche Odoo choisie suit le client : l'envoi de ses devis la
+         retrouve par son id, sans repasser par le nom. */
+      if (odooPartenaireChoisi) setOdooPartnerId(id, odooPartenaireChoisi);
+      updateClients(prev => [...prev, { ...toSave, id, dateCreation: new Date().toISOString().split('T')[0] }]);
       if (!silent) toast.success('Client ajouté');
     }
     if (!silent) setDialogOpen(false);
@@ -1173,7 +1202,7 @@ export default function Clients() {
                   <h3 className="font-semibold text-sm">Niveau de tarif</h3>
                   <p className="text-xs text-muted-foreground">Pré-rempli dans chaque devis de ce client, et modifiable devis par devis.</p>
                 </div>
-                <Button type="button" size="sm" variant="outline" onClick={recupererTarifsOdoo} disabled={tarifsOdooEnCours}>
+                <Button type="button" size="sm" variant="outline" onClick={() => recupererTarifsOdoo()} disabled={tarifsOdooEnCours}>
                   {tarifsOdooEnCours ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
                   Récupérer d'Odoo
                 </Button>
@@ -1347,6 +1376,17 @@ export default function Clients() {
 
           {/* ── Onglet Infos (form) ─────────────────────────────────────────── */}
           <div className={clientDialogTab !== 'infos' ? 'hidden' : ''}>
+
+          {/* Recherche dans le fichier Odoo — lecture seule (`ficheClientOdoo.ts`) */}
+          <div className="mb-2">
+            <RechercheClientOdoo
+              clients={clients}
+              nouveau={!editingClient}
+              clientId={editingClient?.id}
+              onRemplir={remplirDepuisFicheOdoo}
+              onOuvrirExistant={c => openEdit(c)}
+            />
+          </div>
 
           {/* Zone IA — extraction automatique des coordonnées */}
           <div className="space-y-2">
