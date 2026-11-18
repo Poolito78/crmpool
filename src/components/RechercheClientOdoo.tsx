@@ -13,7 +13,7 @@ import type { Client } from '@/lib/store';
 import type { PartenaireOdoo } from '@/lib/fournisseurOdoo';
 import { natureFicheOdoo } from '@/lib/clientOdoo';
 import {
-  chercherClientsOdoo, lireFicheClientOdoo, clientDejaConnu, contactsProposes, contactCherche,
+  chercherClientsOdoo, lireFicheClientOdoo, clientDejaConnu, contactsProposes, contactCherche, fonctionOdoo,
   type ContactOdoo, type FicheClientOdoo,
 } from '@/lib/ficheClientOdoo';
 
@@ -124,7 +124,7 @@ export function RechercheClientOdoo({ clients, nouveau, clientId, onRemplir, onO
                         <div className="flex items-center gap-1.5 text-sm font-medium">
                           {p.estSociete ? <Building2 className="w-3.5 h-3.5 shrink-0 text-muted-foreground" /> : <User className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />}
                           <span className="truncate">{p.nom}</span>
-                          {p.fonction && <span className="text-xs font-normal text-muted-foreground truncate">· {p.fonction}</span>}
+                          {fonctionOdoo(p.fonction) && <span className="text-xs font-normal text-muted-foreground truncate">· {fonctionOdoo(p.fonction)}</span>}
                         </div>
                         <p className="text-xs text-muted-foreground truncate">
                           {[nature, [p.codePostal, p.ville].filter(Boolean).join(' '), p.email].filter(Boolean).join(' · ')}
@@ -192,7 +192,7 @@ export function RechercheClientOdoo({ clients, nouveau, clientId, onRemplir, onO
                         />
                         <span className="min-w-0">
                           <span className="font-medium">{c.nom}</span>
-                          {c.fonction && <span className="text-muted-foreground"> · {c.fonction}</span>}
+                          {fonctionOdoo(c.fonction) && <span className="text-muted-foreground"> · {fonctionOdoo(c.fonction)}</span>}
                           <span className="block text-muted-foreground truncate">{[c.email, c.telephone, c.mobile].filter(Boolean).join(' · ') || '—'}</span>
                         </span>
                       </label>

@@ -175,9 +175,10 @@ export function delaiDepuisConditions(libelle: string): string {
   const t = normaliser(libelle);
   if (!t) return '';
   if (/\b(IMMEDIAT|COMPTANT|RECEPTION)\b/.test(t)) return 'Comptant';
-  const j = t.match(/\b(\d+)\s*(J|JOURS?)\b/);
+  /* Odoo écrit aussi en abrégé, d'un seul tenant : « 45JRSFDM ». */
+  const j = t.match(/\b(\d+)\s*J(?:OURS|OUR|RS|R)?\s*(FDM|FIN DE MOIS)?/);
   if (!j) return '';
-  const fdm = /\bFIN DE MOIS\b|\bFDM\b/.test(t);
+  const fdm = !!j[2] || /FIN DE MOIS|FDM/.test(t);
   const option = `${j[1]}J${fdm ? ' FDM' : ''}`;
   return ['30J', '30J FDM', '45J', '45J FDM'].includes(option) ? option : '';
 }
@@ -199,11 +200,14 @@ export function clientDejaConnu(fiche: FicheClientOdoo, clients: Client[]): Clie
     || (nom && cle(c.societe) === nom));
 }
 
+/** « (Vide) » est une valeur de la liste des fonctions d'Odoo, pas une fonction. */
+export const fonctionOdoo = (f?: string) => (/^\(?\s*vide\s*\)?$/i.test((f || '').trim()) ? '' : (f || '').trim());
+
 function contactDepuisOdoo(c: ContactOdoo, nouvelId: () => string): Contact {
   const { prenom, nom } = separerNomPrenom(c.nom);
   return {
     id: nouvelId(), nom, prenom, email: c.email || '', telephone: c.telephone || '',
-    telephoneMobile: c.mobile || '', fonction: c.fonction || '',
+    telephoneMobile: c.mobile || '', fonction: fonctionOdoo(c.fonction),
   };
 }
 

@@ -64,6 +64,8 @@ describe('delaiDepuisConditions', () => {
     expect(delaiDepuisConditions('45 jours fin de mois')).toBe('45J FDM');
     expect(delaiDepuisConditions('30 Jours')).toBe('30J');
     expect(delaiDepuisConditions('Paiement immédiat')).toBe('Comptant');
+    expect(delaiDepuisConditions('45JRSFDM')).toBe('45J FDM');
+    expect(delaiDepuisConditions('30JRS')).toBe('30J');
     expect(delaiDepuisConditions('60 jours')).toBe('');
     expect(delaiDepuisConditions('')).toBe('');
   });
@@ -102,6 +104,11 @@ describe('remplirDepuisOdoo', () => {
     expect(f.codePostal).toBe('35000');
     expect(f.delaiReglement).toBe('30J');
     expect(f.contacts!.map(c => c.nom)).toEqual(['DUPONT', 'LEROY']);
+  });
+
+  it('« (Vide) » n\'est pas une fonction', () => {
+    const f = remplirDepuisOdoo(vide, fiche(), [{ id: 5, nom: 'Martial MARLIERE', fonction: '(Vide)', email: '', telephone: '', mobile: '' }], true, id);
+    expect(f.contacts![0].fonction).toBe('');
   });
 
   it('un champ vide chez Odoo ne vide rien, la trace n\'est pas doublée', () => {
