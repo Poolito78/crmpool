@@ -30,7 +30,7 @@
  */
 import { supabase } from '@/integrations/supabase/client';
 import { normaliser } from './rapprochementClient';
-import type { Client, Contact } from './store';
+import type { AdresseLivraison, Client, Contact } from './store';
 import type { PartenaireOdoo } from './fournisseurOdoo';
 
 /** Une fiche Odoo telle que la relit `ficheClient`. */
@@ -278,14 +278,21 @@ export interface ChoixAdresses {
 
 /**
  * Par défaut : la 1re adresse de facturation d'Odoo devient l'adresse
- * principale, sinon celle de la société ; TOUTES les autres sont reprises
- * — l'adresse de la société comprise quand elle n'est pas celle de
- * facturation, Odoo y livrant à défaut. Tout se décoche à l'écran.
+ * principale, sinon celle de la société ; les adresses filles sont toutes
+ * reprises. Le SIÈGE ne l'est que si Odoo n'a aucune adresse de livraison :
+ * c'est alors là qu'il livre ; sinon il reste proposé, décoché (EMPREINTE
+ * SIGNA : siège à Betheny, livraison et facturation à Guise).
  */
 export function choixAdressesParDefaut(fiche: FicheClientOdoo): ChoixAdresses {
   const proposees = adressesProposees(fiche);
   const facturation = (proposees.find(a => a.type === 'invoice') || proposees[0])?.id ?? null;
-  return { facturation, reprises: proposees.filter(a => a.id !== facturation).map(a => a.id) };
+  const livraisonOdoo = proposees.some(a => a.type === 'delivery');
+  return {
+    facturation,
+    reprises: proposees
+      .filter(a => a.id !== facturation && !(a.type === 'societe' && livraisonOdoo))
+      .map(a => a.id),
+  };
 }
 
 export const LIBELLE_TYPE_ADRESSE: Record<string, string> = {
@@ -347,26 +354,42 @@ export function remplirDepuisOdoo(
     ? cleAdresse(form.adresse, form.codePostal)
     : cleAdresse(adresse || form.adresse, principale.codePostal || form.codePostal);
   const adressesLivraison = [...(form.adressesLivraison || [])];
-  const connues = new Set([principaleFinale, ...adressesLivraison.map(a => cleAdresse(a.adresse, a.codePostal))]);
-  let livraisonParDefaut = adressesLivraison.some(a => a.parDefaut);
-  for (const a of proposees) {
+  /* Une adresse se reconnaît à sa rue, son code postal ET son rôle : la
+     LIVRAISON à la même adresse que la facturation principale a sa place
+     dans la liste, puisque l'adresse principale ne vaut que facturation. */
+  const connues = new Set([
+    `facturation#${principaleFinale}`,
+    ...adressesLivraison.map(a => `${a.type}#${cleAdresse(a.adresse, a.codePostal)}`),
+  ]);
+  const ajoutees: AdresseLivraison[] = [];
+  const rang = new Map<string, number>();
+  /* Les adresses de livraison d'Odoo passent devant le siège pour être celle par défaut. */
+  const ordre = (t: string) => (t === 'delivery' ? 0 : 1);
+  for (const a of [...proposees].sort((x, y) => ordre(x.type) - ordre(y.type))) {
     /* L'adresse de facturation choisie devient la principale — sauf sur une
        fiche qui garde la sienne : elle rejoint alors les adresses, en facturation. */
     const estFacturation = a.id === choix.facturation;
     if (estFacturation ? !garde : !choix.reprises.includes(a.id)) continue;
     const ligne = ligneAdresse(a);
     if (!ligne) continue;
-    const k = cleAdresse(ligne, a.codePostal);
+    const type = estFacturation || a.type === 'invoice' ? 'facturation' : 'livraison';
+    const k = `${type}#${cleAdresse(ligne, a.codePostal)}`;
     if (connues.has(k)) continue;
     connues.add(k);
-    const type = estFacturation || a.type === 'invoice' ? 'facturation' : 'livraison';
-    const parDefaut = type === 'livraison' && !livraisonParDefaut;
-    if (parDefaut) livraisonParDefaut = true;
-    adressesLivraison.push({
-      id: nouvelId(), libelle: libelleAdresse(a, s), adresse: ligne, ville: a.ville || '',
-      codePostal: a.codePostal || '', contact: '', telephone: a.telephone || '', parDefaut, type,
+    const idAdresse = nouvelId();
+    rang.set(idAdresse, proposees.indexOf(a));
+    ajoutees.push({
+      id: idAdresse, libelle: libelleAdresse(a, s), adresse: ligne, ville: a.ville || '',
+      codePostal: a.codePostal || '', contact: '', telephone: a.telephone || '', parDefaut: false, type,
     });
   }
+  /* Une livraison par défaut si la fiche n'en a pas : la 1re ajoutée. */
+  if (!adressesLivraison.some(a => a.parDefaut && a.type !== 'facturation')) {
+    const premiere = ajoutees.find(a => a.type === 'livraison');
+    if (premiere) premiere.parDefaut = true;
+  }
+  /* Rangées dans l'ordre de la liste Odoo : siège, facturation, livraisons. */
+  adressesLivraison.push(...ajoutees.sort((x, y) => (rang.get(x.id) ?? 0) - (rang.get(y.id) ?? 0)));
 
   const trace = s.id ? `Fiche reprise du fichier Odoo (partenaire #${s.id}).` : '';
   const notes = trace && !(form.notes || '').includes(`partenaire #${s.id}`)

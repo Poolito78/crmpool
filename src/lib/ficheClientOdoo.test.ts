@@ -129,40 +129,50 @@ describe('adresses de facturation et de livraison', () => {
     choisi: fo({ id: 74242, nom: 'EMPREINTE SIGNA' }),
     contacts: [],
     adresses: [
-      ad({ id: 92834, type: 'delivery', nom: 'EMPREINTE SIGNA GUISE', adresse: '3 RUE DU DEPOT', codePostal: '02120', ville: 'GUISE' }),
-      ad({ id: 101860, type: 'invoice', nom: 'EMPREINTE SIGNALISATION', adresse: '3 RUE DU DEPOT', adresse2: 'BP 12', codePostal: '02120', ville: 'GUISE' }),
+      /* Telles que les rend Odoo : facturation et livraison à la même adresse. */
+      ad({ id: 92834, type: 'delivery', nom: 'EMPREINTE SIGNA GUISE', adresse: '182 RUE DE LA GARE', codePostal: '02120', ville: 'GUISE' }),
+      ad({ id: 101860, type: 'invoice', nom: 'EMPREINTE SIGNALISATION', adresse: '182 RUE DE LA GARE', codePostal: '02120', ville: 'GUISE' }),
       ad({ id: 5, type: 'private', nom: 'Privé', adresse: 'x', ville: 'y' }),
     ],
   });
 
-  it('par défaut : facturation Odoo en adresse principale, siège et livraison repris', () => {
+  it('par défaut : facturation Odoo en principale, livraison reprise, siège proposé décoché', () => {
     const f = empreinte();
     expect(adressesProposees(f).map(a => a.type)).toEqual(['societe', 'invoice', 'delivery']);
-    expect(choixAdressesParDefaut(f)).toEqual({ facturation: 101860, reprises: [74242, 92834] });
+    expect(choixAdressesParDefaut(f)).toEqual({ facturation: 101860, reprises: [92834] });
   });
 
-  it('la fiche CRM : facturation en principale, une seule fiche avec ses adresses', () => {
+  it('la livraison à la même adresse que la facturation reste une adresse de livraison', () => {
     const r = remplirDepuisOdoo(vide, empreinte(), [], true, id);
-    expect(r).toMatchObject({ societe: 'EMPREINTE SIGNA', adresse: '3 RUE DU DEPOT, BP 12', codePostal: '02120', ville: 'GUISE' });
+    expect(r).toMatchObject({ societe: 'EMPREINTE SIGNA', adresse: '182 RUE DE LA GARE', codePostal: '02120', ville: 'GUISE' });
     expect(r.adressesLivraison.map(a => [a.libelle, a.type, a.ville, a.parDefaut])).toEqual([
-      ['Siège — BETHENY', 'livraison', 'BETHENY', true],
-      ['EMPREINTE SIGNA GUISE', 'livraison', 'GUISE', false],
+      ['EMPREINTE SIGNA GUISE', 'livraison', 'GUISE', true],
     ]);
   });
 
-  it('sans adresse de facturation fille : la société reste principale', () => {
-    const f = { ...empreinte(), adresses: [empreinte().adresses![0]] };
-    const r = remplirDepuisOdoo(vide, f, [], true, id);
+  it('siège coché en plus : rangé d\'abord, mais la livraison Odoo reste celle par défaut', () => {
+    const r = remplirDepuisOdoo(vide, empreinte(), [], true, id, { facturation: 101860, reprises: [74242, 92834] });
+    expect(r.adressesLivraison.map(a => [a.libelle, a.parDefaut])).toEqual([
+      ['Siège — BETHENY', false],
+      ['EMPREINTE SIGNA GUISE', true],
+    ]);
+  });
+
+  it('sans adresse de livraison fille, le siège est repris ; sans facturation fille, il est principal', () => {
+    const seuleFacturation = { ...empreinte(), adresses: [empreinte().adresses![1]] };
+    expect(choixAdressesParDefaut(seuleFacturation)).toEqual({ facturation: 101860, reprises: [74242] });
+    const seuleLivraison = { ...empreinte(), adresses: [empreinte().adresses![0]] };
+    const r = remplirDepuisOdoo(vide, seuleLivraison, [], true, id);
     expect(r).toMatchObject({ adresse: 'CHEMIN DE CERNAY', ville: 'BETHENY' });
-    expect(r.adressesLivraison).toHaveLength(1);
+    expect(r.adressesLivraison.map(a => a.libelle)).toEqual(['EMPREINTE SIGNA GUISE']);
   });
 
   it('adresse décochée non reprise ; adresse déjà connue non doublée', () => {
     const r = remplirDepuisOdoo(vide, empreinte(), [], true, id, { facturation: 74242, reprises: [101860] });
     expect(r.ville).toBe('BETHENY');
-    expect(r.adressesLivraison.map(a => [a.type, a.adresse])).toEqual([['facturation', '3 RUE DU DEPOT, BP 12']]);
+    expect(r.adressesLivraison.map(a => [a.type, a.adresse])).toEqual([['facturation', '182 RUE DE LA GARE']]);
     const existant: FormClient = { ...vide, adresse: 'Chemin de Cernay', codePostal: '51450', ville: 'Bétheny',
-      adressesLivraison: [{ id: 'a', libelle: 'Dépôt', adresse: '3 rue du Dépôt', codePostal: '02120', ville: 'Guise', parDefaut: true, type: 'livraison' }] };
+      adressesLivraison: [{ id: 'a', libelle: 'Dépôt', adresse: '182 rue de la Gare', codePostal: '02120', ville: 'Guise', parDefaut: true, type: 'livraison' }] };
     const r2 = remplirDepuisOdoo(existant, empreinte(), [], false, id);
     expect(r2.adresse).toBe('Chemin de Cernay');
     expect(r2.adressesLivraison.map(a => a.libelle)).toEqual(['Dépôt', 'EMPREINTE SIGNALISATION']);
