@@ -1794,29 +1794,42 @@ serve(async (req) => {
         type: p.type || "",
       });
 
-      /* Les personnes de la société — pas ses adresses de livraison ou de
-         facturation, qui ne sont pas des interlocuteurs. Enveloppé : un
-         complément ne doit pas emporter la fiche. */
+      /* Les fiches filles de la société, en deux lots : les PERSONNES
+         (type contact) d'un côté, les ADRESSES de facturation, de livraison
+         ou autres de l'autre — MonCRM les range dans la même fiche client,
+         contacts et adresses de livraison. Enveloppé : un complément ne doit
+         pas emporter la fiche. */
       let contacts: unknown[] = [];
+      let adresses: unknown[] = [];
       try {
         if (societe.is_company || societeId !== lu.id) {
-          contacts = ((await od.kw(
+          const filles = (await od.kw(
             "res.partner", "search_read",
             [[["parent_id", "=", societeId], ["active", "=", true]],
-             ["id", "name", "function", "email", "phone", "mobile", "type"]],
-            { limit: 60, order: "name" },
-          )) as any[])
+             ["id", "name", "function", "email", "phone", "mobile", "type",
+              "street", "street2", "zip", "city"]],
+            { limit: 80, order: "type, name" },
+          )) as any[];
+          contacts = filles
             .filter((c) => (!c.type || c.type === "contact") && c.name)
             .map((c) => ({
               id: c.id, nom: c.name || "", fonction: c.function || "", email: c.email || "",
               telephone: c.phone || "", mobile: c.mobile || "",
             }));
+          adresses = filles
+            .filter((c) => c.type && c.type !== "contact" && (c.street || c.city))
+            .map((c) => ({
+              id: c.id, type: c.type, nom: c.name || "",
+              adresse: c.street || "", adresse2: c.street2 || "",
+              codePostal: c.zip || "", ville: c.city || "",
+              telephone: c.phone || c.mobile || "", email: c.email || "",
+            }));
         }
       } catch (e) {
-        console.warn("[ficheClient contacts]", (e as Error).message);
+        console.warn("[ficheClient filles]", (e as Error).message);
       }
 
-      return repondre({ fiche: { societe: fiche(societe), choisi: fiche(lu), contacts } });
+      return repondre({ fiche: { societe: fiche(societe), choisi: fiche(lu), contacts, adresses } });
     }
 
     const terme = String(corps?.rechercheClient ?? "").trim();

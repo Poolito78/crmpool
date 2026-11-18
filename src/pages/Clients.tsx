@@ -30,7 +30,7 @@ import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput from '@/components/FilterChoiceInput';
 import RowActionsMenu from '@/components/RowActionsMenu';
 import { RechercheClientOdoo } from '@/components/RechercheClientOdoo';
-import { remplirDepuisOdoo, type ContactOdoo, type FicheClientOdoo } from '@/lib/ficheClientOdoo';
+import { remplirDepuisOdoo, type ChoixAdresses, type ContactOdoo, type FicheClientOdoo } from '@/lib/ficheClientOdoo';
 import { setOdooPartnerId } from '@/lib/odooSync';
 
 type ClientColKey = 'societe' | 'contacts' | 'ville' | 'adresses' | 'devis' | 'encours' | 'commercial';
@@ -555,8 +555,8 @@ export default function Clients() {
    * puis les tarifs Odoo du client sont relus — liste de prix, contrat-cadre,
    * niveau R — comme le ferait « Récupérer d'Odoo » de l'onglet Tarifs.
    */
-  function remplirDepuisFicheOdoo(fiche: FicheClientOdoo, contacts: ContactOdoo[]) {
-    const suivant = remplirDepuisOdoo(form, fiche, contacts, !editingClient, generateId);
+  function remplirDepuisFicheOdoo(fiche: FicheClientOdoo, contacts: ContactOdoo[], adresses: ChoixAdresses) {
+    const suivant = remplirDepuisOdoo(form, fiche, contacts, !editingClient, generateId, adresses);
     setForm(suivant);
     if (fiche.societe.id) {
       const retenu = { id: fiche.societe.id, nom: fiche.societe.nom };

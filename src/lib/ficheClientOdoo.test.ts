@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   classerPartenaires, separerNomPrenom, delaiDepuisConditions, clientDejaConnu,
-  remplirDepuisOdoo, contactsProposes, type FicheClientOdoo, type FicheOdoo, type FormClient,
+  remplirDepuisOdoo, contactsProposes, adressesProposees, choixAdressesParDefaut,
+  type FicheClientOdoo, type FicheOdoo, type FormClient, type AdresseOdoo,
 } from './ficheClientOdoo';
 import type { PartenaireOdoo } from './fournisseurOdoo';
 import type { Client } from './store';
@@ -116,6 +117,56 @@ describe('remplirDepuisOdoo', () => {
     const f = remplirDepuisOdoo(avant, fiche({ societe: fo({ siret: '' }) }), [], true, id);
     expect(f.siret).toBe('999');
     expect(f.notes).toBe('Fiche reprise du fichier Odoo (partenaire #10).');
+  });
+});
+
+describe('adresses de facturation et de livraison', () => {
+  const ad = (p: Partial<AdresseOdoo>): AdresseOdoo => ({
+    id: 0, type: 'delivery', nom: '', adresse: '', adresse2: '', codePostal: '', ville: '', telephone: '', email: '', ...p,
+  });
+  const empreinte = (): FicheClientOdoo => fiche({
+    societe: fo({ id: 74242, nom: 'EMPREINTE SIGNA', adresse: 'CHEMIN DE CERNAY', adresse2: '', codePostal: '51450', ville: 'BETHENY' }),
+    choisi: fo({ id: 74242, nom: 'EMPREINTE SIGNA' }),
+    contacts: [],
+    adresses: [
+      ad({ id: 92834, type: 'delivery', nom: 'EMPREINTE SIGNA GUISE', adresse: '3 RUE DU DEPOT', codePostal: '02120', ville: 'GUISE' }),
+      ad({ id: 101860, type: 'invoice', nom: 'EMPREINTE SIGNALISATION', adresse: '3 RUE DU DEPOT', adresse2: 'BP 12', codePostal: '02120', ville: 'GUISE' }),
+      ad({ id: 5, type: 'private', nom: 'Privé', adresse: 'x', ville: 'y' }),
+    ],
+  });
+
+  it('par défaut : facturation Odoo en adresse principale, siège et livraison repris', () => {
+    const f = empreinte();
+    expect(adressesProposees(f).map(a => a.type)).toEqual(['societe', 'invoice', 'delivery']);
+    expect(choixAdressesParDefaut(f)).toEqual({ facturation: 101860, reprises: [74242, 92834] });
+  });
+
+  it('la fiche CRM : facturation en principale, une seule fiche avec ses adresses', () => {
+    const r = remplirDepuisOdoo(vide, empreinte(), [], true, id);
+    expect(r).toMatchObject({ societe: 'EMPREINTE SIGNA', adresse: '3 RUE DU DEPOT, BP 12', codePostal: '02120', ville: 'GUISE' });
+    expect(r.adressesLivraison.map(a => [a.libelle, a.type, a.ville, a.parDefaut])).toEqual([
+      ['Siège — BETHENY', 'livraison', 'BETHENY', true],
+      ['EMPREINTE SIGNA GUISE', 'livraison', 'GUISE', false],
+    ]);
+  });
+
+  it('sans adresse de facturation fille : la société reste principale', () => {
+    const f = { ...empreinte(), adresses: [empreinte().adresses![0]] };
+    const r = remplirDepuisOdoo(vide, f, [], true, id);
+    expect(r).toMatchObject({ adresse: 'CHEMIN DE CERNAY', ville: 'BETHENY' });
+    expect(r.adressesLivraison).toHaveLength(1);
+  });
+
+  it('adresse décochée non reprise ; adresse déjà connue non doublée', () => {
+    const r = remplirDepuisOdoo(vide, empreinte(), [], true, id, { facturation: 74242, reprises: [101860] });
+    expect(r.ville).toBe('BETHENY');
+    expect(r.adressesLivraison.map(a => [a.type, a.adresse])).toEqual([['facturation', '3 RUE DU DEPOT, BP 12']]);
+    const existant: FormClient = { ...vide, adresse: 'Chemin de Cernay', codePostal: '51450', ville: 'Bétheny',
+      adressesLivraison: [{ id: 'a', libelle: 'Dépôt', adresse: '3 rue du Dépôt', codePostal: '02120', ville: 'Guise', parDefaut: true, type: 'livraison' }] };
+    const r2 = remplirDepuisOdoo(existant, empreinte(), [], false, id);
+    expect(r2.adresse).toBe('Chemin de Cernay');
+    expect(r2.adressesLivraison.map(a => a.libelle)).toEqual(['Dépôt', 'EMPREINTE SIGNALISATION']);
+    expect(r2.adressesLivraison[1].type).toBe('facturation');
   });
 });
 

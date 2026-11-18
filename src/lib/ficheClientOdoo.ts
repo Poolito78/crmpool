@@ -7,7 +7,10 @@
  * mère des fiches (`rechercheClient`). La fiche cliquée est relue en entier
  * (`ficheClient`) : la SOCIÉTÉ — la mère d'un contact rattaché —, son
  * adresse, sa TVA, son SIRET, ses conditions de règlement, et les personnes
- * qui lui sont rattachées, à cocher. Rien n'est jamais écrit chez Odoo.
+ * qui lui sont rattachées, à cocher, et ses adresses filles de FACTURATION
+ * et de LIVRAISON. MonCRM n'ayant qu'une fiche, l'adresse de facturation
+ * choisie devient l'adresse principale et les autres rejoignent les adresses
+ * de la fiche (`adressesLivraison`). Rien n'est jamais écrit chez Odoo.
  *
  * ⚠️ ON N'INVENTE RIEN. Un champ vide chez Odoo reste vide ; un délai de
  * règlement qui ne tombe pas sur une option de MonCRM n'est pas approché ;
@@ -62,11 +65,27 @@ export interface ContactOdoo {
   mobile: string;
 }
 
-/** La société, la fiche cliquée (la même, ou un contact), ses personnes. */
+/** Une adresse fille de la société chez Odoo : facturation, livraison, autre. */
+export interface AdresseOdoo {
+  id: number;
+  /** `invoice`, `delivery`, `other` — `societe` pour l'adresse de la société elle-même. */
+  type: string;
+  nom: string;
+  adresse: string;
+  adresse2: string;
+  codePostal: string;
+  ville: string;
+  telephone: string;
+  email: string;
+}
+
+/** La société, la fiche cliquée (la même, ou un contact), ses personnes et ses adresses. */
 export interface FicheClientOdoo {
   societe: FicheOdoo;
   choisi: FicheOdoo;
   contacts: ContactOdoo[];
+  /** Absent d'une fonction `odoo-prix` antérieure. */
+  adresses?: AdresseOdoo[];
   /** Fonction `odoo-prix` ancienne : contacts non lus. */
   partielle?: boolean;
 }
@@ -228,13 +247,71 @@ export function contactsProposes(fiche: FicheClientOdoo): ContactOdoo[] {
   return cherche ? [cherche, ...fiche.contacts.filter(c => c.id !== cherche.id)] : fiche.contacts;
 }
 
+/* ── Les adresses ──────────────────────────────────────────────────────────
+ *
+ * Odoo range sous la société des fiches filles « adresse de facturation » et
+ * « adresse de livraison ». MonCRM n'a qu'UNE fiche client : son adresse
+ * principale est celle de FACTURATION, les autres vont dans ses adresses
+ * (`adressesLivraison`, typées facturation ou livraison). */
+
+/** L'adresse de la société elle-même, en tête de liste. */
+const adresseSociete = (s: FicheOdoo): AdresseOdoo => ({
+  id: s.id, type: 'societe', nom: s.nom, adresse: s.adresse, adresse2: s.adresse2,
+  codePostal: s.codePostal, ville: s.ville, telephone: s.telephone || s.mobile, email: s.email,
+});
+
+/** Les adresses à proposer : la société, puis ses adresses de facturation, de livraison, autres. */
+export function adressesProposees(fiche: FicheClientOdoo): AdresseOdoo[] {
+  const ordre: Record<string, number> = { invoice: 1, delivery: 2, other: 3 };
+  const filles = (fiche.adresses || [])
+    .filter(a => a.type in ordre)
+    .sort((a, b) => ordre[a.type] - ordre[b.type] || a.nom.localeCompare(b.nom));
+  const s = fiche.societe;
+  return (s.adresse || s.ville ? [adresseSociete(s)] : []).concat(filles);
+}
+
+/** L'adresse principale de facturation, et celles qui rejoignent les adresses de la fiche. */
+export interface ChoixAdresses {
+  facturation: number | null;
+  reprises: number[];
+}
+
+/**
+ * Par défaut : la 1re adresse de facturation d'Odoo devient l'adresse
+ * principale, sinon celle de la société ; TOUTES les autres sont reprises
+ * — l'adresse de la société comprise quand elle n'est pas celle de
+ * facturation, Odoo y livrant à défaut. Tout se décoche à l'écran.
+ */
+export function choixAdressesParDefaut(fiche: FicheClientOdoo): ChoixAdresses {
+  const proposees = adressesProposees(fiche);
+  const facturation = (proposees.find(a => a.type === 'invoice') || proposees[0])?.id ?? null;
+  return { facturation, reprises: proposees.filter(a => a.id !== facturation).map(a => a.id) };
+}
+
+export const LIBELLE_TYPE_ADRESSE: Record<string, string> = {
+  societe: 'Société', invoice: 'Facturation', delivery: 'Livraison', other: 'Autre adresse',
+};
+
+const ligneAdresse = (a: Pick<AdresseOdoo, 'adresse' | 'adresse2'>) =>
+  [a.adresse, a.adresse2].map(x => (x || '').trim()).filter(Boolean).join(', ');
+
+const cleAdresse = (adresse: string, cp: string) => `${cle(adresse)}|${cle(cp)}`;
+
+/** Le libellé d'une adresse reprise : son nom Odoo s'il dit quelque chose, sinon son rôle et sa ville. */
+function libelleAdresse(a: AdresseOdoo, societe: FicheOdoo): string {
+  if (a.type === 'societe') return `Siège${a.ville ? ` — ${a.ville}` : ''}`;
+  if (a.nom && cle(a.nom) !== cle(societe.nom)) return a.nom;
+  return `${LIBELLE_TYPE_ADRESSE[a.type] || 'Adresse'}${a.ville ? ` — ${a.ville}` : ''}`;
+}
+
 /**
  * La fiche client remplie depuis Odoo.
  *
  * `remplacer` (nouveau client) : Odoo fait foi sur tout ce qu'il porte.
  * Sinon (fiche existante) : Odoo ne remplit que les champs vides. Un champ
  * vide chez Odoo ne vide jamais rien. Les contacts cochés s'ajoutent, sans
- * doublon (même courriel, ou même prénom + nom).
+ * doublon (même courriel, ou même prénom + nom) ; les adresses reprises
+ * aussi (même rue et même code postal), l'adresse principale comprise.
  */
 export function remplirDepuisOdoo(
   form: FormClient,
@@ -242,6 +319,7 @@ export function remplirDepuisOdoo(
   contactsRetenus: ContactOdoo[],
   remplacer: boolean,
   nouvelId: () => string,
+  choix: ChoixAdresses = choixAdressesParDefaut(fiche),
 ): FormClient {
   const s = fiche.societe;
   const pose = <K extends keyof FormClient>(champ: K, valeur: FormClient[K] | undefined | '') => {
@@ -250,13 +328,44 @@ export function remplirDepuisOdoo(
     if (!remplacer && actuel !== undefined && actuel !== null && String(actuel).trim() !== '') return {};
     return { [champ]: valeur } as Partial<FormClient>;
   };
-  const adresse = [s.adresse, s.adresse2].map(a => (a || '').trim()).filter(Boolean).join(', ');
+  const proposees = adressesProposees(fiche);
+  const facturation = proposees.find(a => a.id === choix.facturation);
+  /* Sans adresse choisie, la société reste l'adresse principale si elle en a une. */
+  const principale = facturation || adresseSociete(s);
+  const adresse = ligneAdresse(principale);
   const delai = delaiDepuisConditions(s.conditionsReglement);
 
   const contacts = [...(form.contacts || [])];
   for (const c of contactsRetenus) {
     const nouveau = contactDepuisOdoo(c, nouvelId);
     if (!contacts.some(x => memeContact(x, nouveau))) contacts.push(nouveau);
+  }
+
+  /* L'adresse principale qui sera en place : la nôtre si on la garde. */
+  const garde = !remplacer && (form.adresse || '').trim();
+  const principaleFinale = garde
+    ? cleAdresse(form.adresse, form.codePostal)
+    : cleAdresse(adresse || form.adresse, principale.codePostal || form.codePostal);
+  const adressesLivraison = [...(form.adressesLivraison || [])];
+  const connues = new Set([principaleFinale, ...adressesLivraison.map(a => cleAdresse(a.adresse, a.codePostal))]);
+  let livraisonParDefaut = adressesLivraison.some(a => a.parDefaut);
+  for (const a of proposees) {
+    /* L'adresse de facturation choisie devient la principale — sauf sur une
+       fiche qui garde la sienne : elle rejoint alors les adresses, en facturation. */
+    const estFacturation = a.id === choix.facturation;
+    if (estFacturation ? !garde : !choix.reprises.includes(a.id)) continue;
+    const ligne = ligneAdresse(a);
+    if (!ligne) continue;
+    const k = cleAdresse(ligne, a.codePostal);
+    if (connues.has(k)) continue;
+    connues.add(k);
+    const type = estFacturation || a.type === 'invoice' ? 'facturation' : 'livraison';
+    const parDefaut = type === 'livraison' && !livraisonParDefaut;
+    if (parDefaut) livraisonParDefaut = true;
+    adressesLivraison.push({
+      id: nouvelId(), libelle: libelleAdresse(a, s), adresse: ligne, ville: a.ville || '',
+      codePostal: a.codePostal || '', contact: '', telephone: a.telephone || '', parDefaut, type,
+    });
   }
 
   const trace = s.id ? `Fiche reprise du fichier Odoo (partenaire #${s.id}).` : '';
@@ -267,9 +376,13 @@ export function remplirDepuisOdoo(
   return {
     ...form,
     ...pose('societe', s.nom),
-    ...pose('adresse', adresse),
-    ...pose('codePostal', s.codePostal),
-    ...pose('ville', s.ville),
+    /* L'adresse principale se prend d'un bloc : rue, code postal et ville
+       d'une même adresse, jamais la rue de l'une et la ville de l'autre. */
+    ...(garde ? {} : {
+      ...pose('adresse', adresse),
+      ...pose('codePostal', principale.codePostal),
+      ...pose('ville', principale.ville),
+    }),
     ...pose('email', s.email),
     ...pose('telephone', s.telephone || s.mobile),
     ...pose('tvaIntra', s.tva),
@@ -279,6 +392,7 @@ export function remplirDepuisOdoo(
        neuve Odoo le remplace, sur une fiche existante il ne touche à rien. */
     ...(delai && remplacer ? { delaiReglement: delai } : {}),
     contacts,
+    adressesLivraison,
     notes,
   };
 }

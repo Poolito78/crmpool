@@ -14,7 +14,8 @@ import type { PartenaireOdoo } from '@/lib/fournisseurOdoo';
 import { natureFicheOdoo } from '@/lib/clientOdoo';
 import {
   chercherClientsOdoo, lireFicheClientOdoo, clientDejaConnu, contactsProposes, contactCherche, fonctionOdoo,
-  type ContactOdoo, type FicheClientOdoo,
+  adressesProposees, choixAdressesParDefaut, LIBELLE_TYPE_ADRESSE,
+  type ContactOdoo, type FicheClientOdoo, type ChoixAdresses,
 } from '@/lib/ficheClientOdoo';
 
 interface Props {
@@ -23,7 +24,7 @@ interface Props {
   nouveau: boolean;
   /** Client en cours de modification — n'est pas son propre doublon. */
   clientId?: string;
-  onRemplir: (fiche: FicheClientOdoo, contacts: ContactOdoo[]) => void;
+  onRemplir: (fiche: FicheClientOdoo, contacts: ContactOdoo[], adresses: ChoixAdresses) => void;
   onOuvrirExistant: (c: Client) => void;
 }
 
@@ -34,6 +35,7 @@ export function RechercheClientOdoo({ clients, nouveau, clientId, onRemplir, onO
   const [resultats, setResultats] = useState<PartenaireOdoo[] | null>(null);
   const [fiche, setFiche] = useState<FicheClientOdoo | null>(null);
   const [coches, setCoches] = useState<Set<number>>(new Set());
+  const [choixAdresses, setChoixAdresses] = useState<ChoixAdresses>({ facturation: null, reprises: [] });
 
   async function chercher() {
     if (terme.trim().length < 3) { toast.error('Tapez au moins 3 caractères'); return; }
@@ -55,6 +57,7 @@ export function RechercheClientOdoo({ clients, nouveau, clientId, onRemplir, onO
       setFiche(f);
       const cherche = contactCherche(f);
       setCoches(new Set(cherche ? [cherche.id] : []));
+      setChoixAdresses(choixAdressesParDefaut(f));
       if (f.partielle) toast.info('Contacts non lus : redéployez odoo-prix (.\\deploy-function.ps1 odoo-prix)');
     } catch (e) {
       toast.error(`Odoo injoignable : ${(e as Error).message}`);
@@ -66,7 +69,7 @@ export function RechercheClientOdoo({ clients, nouveau, clientId, onRemplir, onO
   function remplir() {
     if (!fiche) return;
     const retenus = contactsProposes(fiche).filter(c => coches.has(c.id));
-    onRemplir(fiche, retenus);
+    onRemplir(fiche, retenus, choixAdresses);
     setOuvert(false);
     setFiche(null);
     setResultats(null);
@@ -75,6 +78,8 @@ export function RechercheClientOdoo({ clients, nouveau, clientId, onRemplir, onO
 
   const existant = fiche ? clientDejaConnu(fiche, clients.filter(c => c.id !== clientId)) : undefined;
   const proposes = fiche ? contactsProposes(fiche) : [];
+  const adresses = fiche ? adressesProposees(fiche) : [];
+  const nbAdressesReprises = adresses.filter(a => a.id !== choixAdresses.facturation && choixAdresses.reprises.includes(a.id)).length;
 
   return (
     <div className="space-y-2">
@@ -174,6 +179,52 @@ export function RechercheClientOdoo({ clients, nouveau, clientId, onRemplir, onO
                 </div>
               )}
 
+              {adresses.length > 1 && (
+                <div>
+                  <p className="text-xs font-medium mb-1">Adresses <span className="font-normal text-muted-foreground">— ◉ = adresse de facturation de la fiche, ☑ = ajoutée aux adresses</span></p>
+                  <div className="space-y-0.5 max-h-48 overflow-y-auto">
+                    {adresses.map(a => {
+                      const estFacturation = choixAdresses.facturation === a.id;
+                      return (
+                        <div key={`${a.type}-${a.id}`} className="flex items-start gap-2 rounded px-1.5 py-1 hover:bg-accent/40 text-xs">
+                          <input
+                            type="radio"
+                            name="facturation-odoo"
+                            className="mt-0.5"
+                            title="Adresse de facturation de la fiche"
+                            checked={estFacturation}
+                            onChange={() => setChoixAdresses(prev => ({
+                              facturation: a.id,
+                              /* L'ancienne adresse de facturation reste reprise : elle ne se perd pas. */
+                              reprises: [...new Set([...prev.reprises.filter(id => id !== a.id), ...(prev.facturation !== null ? [prev.facturation] : [])])],
+                            }))}
+                          />
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            title="Ajouter aux adresses de la fiche"
+                            disabled={estFacturation}
+                            checked={estFacturation || choixAdresses.reprises.includes(a.id)}
+                            onChange={e => setChoixAdresses(prev => ({
+                              ...prev,
+                              reprises: e.target.checked ? [...prev.reprises, a.id] : prev.reprises.filter(id => id !== a.id),
+                            }))}
+                          />
+                          <span className="min-w-0">
+                            <span className="font-medium">{LIBELLE_TYPE_ADRESSE[a.type] || 'Adresse'}</span>
+                            {a.type !== 'societe' && a.nom && <span className="text-muted-foreground"> · {a.nom}</span>}
+                            {estFacturation && <span className="ml-1 text-[10px] px-1 rounded bg-primary/10 text-primary">facturation</span>}
+                            <span className="block text-muted-foreground truncate">
+                              {[[a.adresse, a.adresse2].filter(Boolean).join(', '), [a.codePostal, a.ville].filter(Boolean).join(' ')].filter(Boolean).join(' — ') || '—'}
+                            </span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {proposes.length > 0 ? (
                 <div>
                   <p className="text-xs font-medium mb-1">Contacts à reprendre</p>
@@ -205,7 +256,13 @@ export function RechercheClientOdoo({ clients, nouveau, clientId, onRemplir, onO
 
               <Button type="button" size="sm" className="w-full" onClick={remplir}>
                 {nouveau ? 'Remplir la fiche client' : 'Compléter les champs vides'}
-                {coches.size > 0 ? ` (+ ${coches.size} contact${coches.size > 1 ? 's' : ''})` : ''}
+                {(() => {
+                  const parts = [
+                    coches.size > 0 && `${coches.size} contact${coches.size > 1 ? 's' : ''}`,
+                    nbAdressesReprises > 0 && `${nbAdressesReprises} adresse${nbAdressesReprises > 1 ? 's' : ''}`,
+                  ].filter(Boolean);
+                  return parts.length ? ` (+ ${parts.join(', ')})` : '';
+                })()}
               </Button>
             </div>
           )}
