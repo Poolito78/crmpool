@@ -73,6 +73,56 @@ export async function urlOuverture(f: Pick<FichierDevis, 'url' | 'mime'>): Promi
 }
 
 /**
+ * Copie les FICHIERS et LIENS d'un devis (un modèle de système) dans un autre.
+ *
+ * Insérer les lignes d'un modèle par le champ Système (« + N lignes ») ne
+ * reprenait pas ses fichiers : DEV-2026-199, fait sur « SYS - FLowfast 319C »,
+ * n'avait ni la fiche récap ni la fiche produit du modèle. Seule la
+ * duplication les copiait.
+ *
+ * Chaque fichier est copié dans le dossier de l'utilisateur connecté (le
+ * modèle peut avoir été déposé par un autre) et enregistré sous une URL
+ * SIGNÉE : une URL publique du bucket privé ne s'ouvre pas. Un nom déjà
+ * présent dans le devis n'est pas repris deux fois. Rend les noms copiés.
+ */
+export async function copierFichiersDevis(srcId: string, destId: string): Promise<string[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user || srcId === destId) return [];
+  const [{ data: source, error }, { data: deja }] = await Promise.all([
+    supabase.from('devis_pieces_jointes')
+      .select('fichier_nom, fichier_url, fichier_taille, fichier_mime, confidentiel')
+      .eq('devis_id', srcId).eq('type', 'fichier').is('ligne_id', null)
+      .order('date', { ascending: true }),
+    supabase.from('devis_pieces_jointes').select('fichier_nom').eq('devis_id', destId).eq('type', 'fichier'),
+  ]);
+  if (error) throw new Error(error.message);
+  const presents = new Set((deja ?? []).map(r => r.fichier_nom));
+  const copies: string[] = [];
+  for (const f of source ?? []) {
+    if (!f.fichier_url || presents.has(f.fichier_nom)) continue;
+    let url = f.fichier_url;
+    const chemin = f.fichier_mime === MIME_LIEN ? null : f.fichier_url.match(/\/devis-pj\/([^?]+)/);
+    if (chemin) {
+      const ancien = decodeURIComponent(chemin[1]);
+      const nouveau = `${user.id}/${destId}/${Date.now()}_${ancien.split('/').pop()}`;
+      const { error: copieErr } = await supabase.storage.from('devis-pj').copy(ancien, nouveau);
+      if (copieErr) { console.error('[copie fichier modèle]', f.fichier_nom, copieErr.message); continue; }
+      const { data: signe } = await supabase.storage.from('devis-pj').createSignedUrl(nouveau, 60 * 60 * 24 * 365 * 10);
+      url = signe?.signedUrl ?? nouveau;
+    }
+    const { error: insErr } = await supabase.from('devis_pieces_jointes').insert({
+      user_id: user.id, devis_id: destId, type: 'fichier',
+      fichier_nom: f.fichier_nom, fichier_url: url, fichier_taille: f.fichier_taille,
+      fichier_mime: f.fichier_mime, confidentiel: f.confidentiel ?? false,
+    });
+    if (insErr) { console.error('[copie fichier modèle]', f.fichier_nom, insErr.message); continue; }
+    presents.add(f.fichier_nom);
+    copies.push(f.fichier_nom || 'document');
+  }
+  return copies;
+}
+
+/**
  * Ouvre le document dans un nouvel onglet.
  *
  * L'onglet s'ouvre AVANT la signature : ouvert après un `await`, il serait

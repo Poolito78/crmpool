@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { NIVEAUX_TARIF, LIBELLE_NIVEAU, estNiveauTarif, prixAuNiveau, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
 import { prixGamme } from '@/lib/remiseGammes';
 import { prixClientDeProduit, useMemoirePrix } from '@/lib/memoirePrix';
-import { chargerFichiersDevis, type FichierDevis } from '@/lib/piecesJointesDevis';
+import { chargerFichiersDevis, copierFichiersDevis, type FichierDevis } from '@/lib/piecesJointesDevis';
 import DocumentsDevis from '@/components/DocumentsDevis';
 import { chargerGrille } from '@/lib/grilleTarif.charger';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem } from '@/components/ui/dropdown-menu';
@@ -1126,7 +1126,11 @@ export default function Devis() {
   const accepteRetarif = (): boolean => lignesFigeesRef.current.size === 0
     || window.confirm(`Ce devis a été établi le ${new Date(dateCreation).toLocaleDateString('fr-FR')} : ses prix sont ceux de ce jour-là.\n\nLe re-tarifer aux prix d'aujourd'hui ?`);
 
+  /** Modèles dont les lignes ont été insérées dans un devis pas encore enregistré (`insererLignesSysteme`). */
+  const modelesAJoindreRef = useRef<string[]>([]);
+
   function populateForm(dOuvert: DevisType) {
+    modelesAJoindreRef.current = [];
     /* Retour de la fiche article créée depuis une ligne libre : la ligne s'y
        relie avant tout le reste, comme si elle avait été enregistrée ainsi
        (ni port ni catalyseur ne se recalculent pour autant). L'enregistrement
@@ -1233,6 +1237,7 @@ export default function Devis() {
   }
 
   function openNew() {
+    modelesAJoindreRef.current = [];
     lignesFigeesRef.current = new Set();   // devis neuf : prix du jour
     portOuvertureRef.current = null;       // et port calculé
     openedViaUrlRef.current = false;
@@ -1481,6 +1486,33 @@ export default function Devis() {
       ...nouvelles,
     ]);
     toast.success(`${nouvelles.length} ligne(s) du système « ${sys.systeme || sys.numero} » ajoutée(s)${surf > 0 ? ` — recalculées pour ${surf} ${libelleSurface(unite)}` : ''}${auPrixClient ? `, dont ${auPrixClient} au prix spécifique du client` : ''}.`);
+    /* Les fichiers du modèle (fiche récap, fiche produit…) suivent ses lignes :
+       tout de suite sur un devis enregistré, au 1er enregistrement sinon. */
+    if (editingId) void joindreFichiersModeles([id], editingId);
+    else if (!modelesAJoindreRef.current.includes(id)) modelesAJoindreRef.current.push(id);
+  }
+
+  async function joindreFichiersModeles(modeles: string[], devisId: string) {
+    const joints: string[] = [];
+    try {
+      for (const m of modeles) joints.push(...await copierFichiersDevis(m, devisId));
+    } catch (e) {
+      toast.error(`Fichiers du modèle non joints : ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    if (!joints.length) return;
+    toast.success(`${joints.length} fichier${joints.length > 1 ? 's' : ''} du modèle joint${joints.length > 1 ? 's' : ''} au devis`, { description: joints.join(' · ') });
+    if (devisId === editingId) {
+      const { data } = await supabase.from('devis_pieces_jointes')
+        .select('id, type, contenu, fichier_nom, fichier_url, fichier_taille, fichier_mime, confidentiel, date')
+        .eq('devis_id', devisId).order('date', { ascending: false });
+      setSidebarPjs((data ?? []).map(r => ({
+        id: r.id, type: r.type, contenu: r.contenu ?? undefined,
+        fichierNom: r.fichier_nom ?? undefined, fichierUrl: r.fichier_url ?? undefined,
+        fichierTaille: r.fichier_taille ?? undefined, fichierMime: r.fichier_mime ?? undefined,
+        confidentiel: r.confidentiel ?? false, date: r.date,
+      })));
+    }
   }
 
   const [newLigneId, setNewLigneId] = useState<string | null>(null);
@@ -2886,6 +2918,11 @@ export default function Devis() {
     }
     // Devis neuf : uploader les images collées avant le 1er enregistrement (le paste ne pouvait pas, sans id)
     if (!editingId && savedId) uploadPendingLineImages(savedId);
+    if (!editingId && savedId && modelesAJoindreRef.current.length) {
+      const modeles = modelesAJoindreRef.current;
+      modelesAJoindreRef.current = [];
+      void joindreFichiersModeles(modeles, savedId);
+    }
     if (!silent) {
       dialogOpenRef.current = false; // évite la ré-entrance via popstate
       setDialogOpen(false);
