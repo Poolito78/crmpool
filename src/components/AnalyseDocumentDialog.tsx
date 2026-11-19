@@ -71,6 +71,11 @@ import { compterBrides, fixationsPour, fixationDeSection, fixationsP50, type Fix
 import { Checkbox } from '@/components/ui/checkbox';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
 import { lireAnnotationsDesPages } from '@/lib/planImage';
+import {
+  estPlanDePanneauxEnImage, detecterPanneauxSurPlan, avecPanneauxDuPlan, panneauxAnnonces,
+  estPanneauAVerifier, libellePanneauPlan, type PanneauDetecte,
+} from '@/lib/panneauxSurPlan';
+import { PanneauxPlanEncart } from '@/components/PanneauxPlanEncart';
 import { lireDevisOdoo } from '@/lib/devisOdooPdf';
 import { prixAppris, useMemoirePrix } from '@/lib/memoirePrix';
 import { useMemoireArticles, produitDeMemoire, retenirArticle, oublierDemande, souvenirDe, type MemoireArticle } from '@/lib/memoireArticles';
@@ -370,6 +375,11 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      référence existe : une cote absente reste « à vérifier ». */
   /* `fichier` : le PDF du carnet, pour l'ouvrir à la page d'un ensemble. */
   const [planKadri, setPlanKadri] = useState<{ ensembles: EnsemblePlan[]; grille?: GrilleTarif; fichier?: File } | null>(null);
+  /* Un plan de voirie en IMAGE (PDF sans texte ni calque, « Plan Panneau pour
+     CD28.pdf ») : ses panneaux de police sont lus sur le dessin
+     (`panneauxSurPlan.ts`, reconnaissance des pictogrammes du Chiffrage
+     ISOSIGN). `premier` = indice de la ligne du premier panneau. */
+  const [panneauxPlan, setPanneauxPlan] = useState<{ panneaux: PanneauDetecte[]; premier: number; annonce: number | null } | null>(null);
   const [gammesKadri, setGammesKadri] = useState<Record<string, GammeDirectionnelle>>({});
   /* Ensemble par ensemble par défaut : le devis se relit sous les noms du
      plan (« HARF-06 »). */
@@ -1650,7 +1660,7 @@ const [contratOdoo, setContratOdoo] = useState<
        n'a rien à voir avec celui qu'on avait retenu. */
     setOptionsEnsemble({}); setHauteurSousPanneau({}); setSectionSupport('Ø60');
     setNomAgglo({}); setSupportsAgglo({}); setDptLivraison(''); setNiveauForce('');
-    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setMatsNeufsPlan([]); setTauxPal(null);
+    setPlanKadri(null); setPanneauxPlan(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setMatsNeufsPlan([]); setTauxPal(null);
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
     setClientsProposes([]);
@@ -1778,6 +1788,39 @@ const [contratOdoo, setContratOdoo] = useState<
         } else {
           const indice = await rappelerEmetteur([texteCtx, ...pages].join('\n'));
           analysis = await analyserDocument({ type: 'pdf', buffer: await principal.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, openrouterKey, impose, indice);
+          /* PLAN DE VOIRIE EN IMAGE. Un « Print To PDF » de plan d'exécution
+             n'a ni texte ni calque : l'IA n'y lisait que le mail (« voici les
+             7 panneaux ») et rendait une demande sans ligne. Les panneaux se
+             lisent sur le dessin, comme le Chiffrage ISOSIGN les reconnaît —
+             un code incertain reste « à vérifier ». */
+          if ((!impose || impose === 'demande_devis') && !isFournisseurDoc(analysis.typeDocument)
+              && estPlanDePanneauxEnImage(pages, texteCtx, principal.name)) {
+            try {
+              const panneaux = await detecterPanneauxSurPlan(await principal.arrayBuffer());
+              if (panneaux.length) {
+                const fusion = avecPanneauxDuPlan(analysis.lignes, panneaux,
+                  t => !!codeDansTexte(normaliserCodes(t)));
+                const annonce = panneauxAnnonces([texteCtx, principal.name].join('\n'));
+                analysis = {
+                  ...analysis,
+                  typeDocument: 'demande_devis',
+                  lignes: fusion.lignes as LigneAnalysee[],
+                  notes: [analysis.notes, ...fusion.resumees.map(r => `Demande : ${r}`)].filter(Boolean).join('\n') || undefined,
+                };
+                setPanneauxPlan({ panneaux, premier: fusion.lignes.length - panneaux.length, annonce });
+                const sansCode = panneaux.filter(p => !p.code).length;
+                toast.success(`${panneaux.length} panneau(x) détecté(s) sur le plan`
+                  + (sansCode ? ` — ${sansCode} code(s) à vérifier` : ''));
+                if (annonce != null && annonce !== panneaux.length) {
+                  toast.warning(`Le mail annonce ${annonce} panneaux, ${panneaux.length} détecté(s) sur le plan : à vérifier.`);
+                }
+              } else {
+                toast.info('Plan en image : aucun panneau de police reconnu sur le dessin.');
+              }
+            } catch (e) {
+              toast.warning(`Lecture des panneaux du plan impossible : ${(e as Error).message}`);
+            }
+          }
           const piece = principal;
           lireSource = async () => texteEnLignes(await extraireItemsPDF(await piece.arrayBuffer()));
         }
@@ -2015,7 +2058,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setCreerDevisClientId(''); setCreerDevisNumero(''); setCreerDevisDate('');
     setCreerDevisValidite(''); setCreerDevisRefAffaire(''); setCreerDevisChantier(''); setCreerDevisNotes('');
     setApercu(null);
-    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setMatsNeufsPlan([]); setTauxPal(null);
+    setPlanKadri(null); setPanneauxPlan(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setMatsNeufsPlan([]); setTauxPal(null);
     setTypeImpose('');
   }
 
@@ -2820,6 +2863,9 @@ const [contratOdoo, setContratOdoo] = useState<
          la rapprocher par ressemblance du catalogue local ne ramènerait
          qu'un voisin. Elle se résout chez Odoo, par code exact. */
       if (planKadri) return;
+      /* Un panneau du plan sans code : rapproché par ses mots (« panneau
+         détecté sur le plan »), il ramènerait n'importe quel panneau. */
+      if (estPanneauAVerifier(texteDemande(l, i))) return;
       /* Les mots du client comptent ici aussi : « plot PVC » doit retrouver
          le PLASTOBLOC dès qu'on le lui a appris une fois, sans quoi le tag ne
          servirait qu'à la recherche à la main — c'est-à-dire jamais quand
@@ -4567,7 +4613,7 @@ const [contratOdoo, setContratOdoo] = useState<
            ne peut ramener qu'un homonyme — le mot « système » y trouve un kit
            de crochets pour panneau. Elle se chiffre par ses composants, qui
            portent chacun leur propre référence. */
-        texte: estLigneSysteme(i) ? '' : texteRechercheOdoo(l, i),
+        texte: estLigneSysteme(i) || estPanneauAVerifier(texteDemande(l, i)) ? '' : texteRechercheOdoo(l, i),
         quantite: quantiteManuelle[`d${i}`] ?? (l.quantite || 1),
       }))
       .filter(r => r.texte.length >= 2)
@@ -7353,6 +7399,22 @@ const [contratOdoo, setContratOdoo] = useState<
                                 chiffrage, comme le devis Odoo : primaire,
                                 quartz, résine, charge et finition pour tout
                                 le chantier, un pigment par teinte. */}
+                            {panneauxPlan && (
+                              <PanneauxPlanEncart
+                                panneaux={panneauxPlan.panneaux}
+                                premier={panneauxPlan.premier}
+                                annonce={panneauxPlan.annonce}
+                                codeLigne={i => {
+                                  const l = result?.lignes?.[i];
+                                  return l ? codeDansTexte(texteDemande(l, i))?.code ?? null : null;
+                                }}
+                                onChoisir={(i, code) => setLibelleManuel(pr => ({
+                                  ...pr, [i]: libellePanneauPlan(code, i - panneauxPlan.premier + 1),
+                                }))}
+                                onVoirLigne={i => document.getElementById(`ligne-demande-${i}`)
+                                  ?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                              />
+                            )}
                             {planKadri && (
                               <PlanDirectionnelEncart
                                 ensembles={planKadri.ensembles}
@@ -7560,7 +7622,9 @@ const [contratOdoo, setContratOdoo] = useState<
                                         articles, il ne peut pas le faire à
                                         chaque touche. */}
                                     <input
-                                      key={`lib-${i}`}
+                                      /* La clé suit le libellé corrigé : un code
+                                         choisi dans l'encart du plan remonte ici. */
+                                      key={`lib-${i}-${libelleManuel[i] ?? ''}`}
                                       defaultValue={libelleManuel[i]
                                         ?? [l.reference, l.description].filter(Boolean).join(' ').trim()}
                                       onBlur={e => {
