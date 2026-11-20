@@ -25,6 +25,7 @@ import { useCommercials } from '@/hooks/useCommercials';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
 import AccesTarifClient from '@/components/AccesTarifClient';
 import PrixSpecifiquesClient from '@/components/PrixSpecifiquesClient';
+import NotesFinancieresClient from '@/components/NotesFinancieresClient';
 import AnalyseCroisee from '@/components/AnalyseCroisee';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput from '@/components/FilterChoiceInput';
@@ -1186,6 +1187,7 @@ export default function Clients() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground italic">Ces informations peuvent être pré-remplies via la recherche entreprise (onglet Infos).</p>
+              <NotesFinancieresClient siret={form.siret} />
             </div>
           )}
 
