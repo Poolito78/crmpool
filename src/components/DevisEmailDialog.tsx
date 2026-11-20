@@ -515,6 +515,8 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   const [selectedLinkIds, setSelectedLinkIds] = useState<Set<string>>(new Set());
   const pdfBase64Ref = useRef<string | null>(null);
   const regenTimer = useRef<ReturnType<typeof setTimeout>>();
+  /** Numéro de la dernière génération lancée : une capture dépassée ne s'écrit pas. */
+  const pdfGeneration = useRef(0);
   // PDF Mise en œuvre généré à la volée depuis moContent (si pas déjà en pièce jointe)
   const moPrintRef = useRef<HTMLDivElement>(null);
   const moPdfBase64Ref = useRef<string | null>(null);
@@ -731,7 +733,11 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     if (pdfContainerRef?.current) {
       setPdfReady(false);
       pdfBase64Ref.current = null;
-      setTimeout(() => generatePdf(), 600);
+      /* Une seule génération à la fois : cet effet repasse quand le catalogue
+         ou les mails types finissent de charger, et chaque passage lançait
+         sa capture en parallèle des précédentes — d'où un envoi lent. */
+      clearTimeout(regenTimer.current);
+      regenTimer.current = setTimeout(() => generatePdf(), 600);
     }
   }, [devis, client, open, produits, relance, modeleMail]);
 
@@ -884,6 +890,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
 
   async function generatePdf() {
     if (!pdfContainerRef?.current || !devis) return;
+    const n = ++pdfGeneration.current;
     setGenerating(true);
     try {
       // Même options que le bouton PDF : logo + numéro + date en entête pages 2+
@@ -892,17 +899,19 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       // Capturer le document A4 lui-même (#devis-print), pas le wrapper externe
       // (qui ajoute le padding p-4/p-8 de l'aperçu → contenu décalé/rogné).
       const printEl = (pdfContainerRef.current.querySelector('#devis-print') as HTMLElement) ?? pdfContainerRef.current;
-      pdfBase64Ref.current = await generatePdfFromElement(printEl, {
+      const pdf = await generatePdfFromElement(printEl, {
         devisNumero: devis.numero,
         devisDate: refDate ? formatDate(refDate) : undefined,
         logoDataUrl: logoDataUrl ?? undefined,
         legal: identite.legal,
       });
+      if (n !== pdfGeneration.current) return;
+      pdfBase64Ref.current = pdf;
       setPdfReady(true);
     } catch (err) {
       console.error('Erreur génération PDF:', err);
     } finally {
-      setGenerating(false);
+      if (n === pdfGeneration.current) setGenerating(false);
     }
   }
 
@@ -983,6 +992,9 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
         + '\n\nJoindre quand même le PDF Odoo ?',
       )) { setSending(false); return; }
       extraAttachments.push({ filename: odooPdf.nom, content: odooPdf.base64, mime: 'application/pdf' });
+      /* Rangé aussi à côté du PDF du CRM : si Outlook perd une pièce jointe
+         en ouvrant le brouillon, elle reste à glisser à la main. */
+      if (folderRes.ok) await writeFileToFolder(odooPdf.nom, Uint8Array.from(atob(odooPdf.base64), c => c.charCodeAt(0)));
     }
 
     // 3. Générer le .eml avec PDF + PJs et l'ouvrir dans Outlook
@@ -1047,9 +1059,13 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       const desc = result === 'mailto'
         ? `${totalFichiers > 1 ? `${totalFichiers} fichiers téléchargés` : 'PDF téléchargé'} — joignez-les manuellement dans Outlook`
         : result === 'share' ? `Partagé via la feuille de partage${extraAttachments.length > 0 ? ` (${totalFichiers} fichiers)` : ''}` : '';
-      toast.success('Outlook ouvert avec le devis', {
-        description: desc || (folderRes.ok ? `PDF aussi sauvegardé dans "${folderRes.folderName}"` : ''),
-        duration: 6000,
+      /* Ce que le brouillon DOIT contenir : Outlook perd parfois les pièces
+         jointes en l'ouvrant, la liste permet de le voir tout de suite. */
+      const joints = [pdfFileName, ...extraAttachments.map(a => a.filename)];
+      toast.success(`Outlook ouvert — ${joints.length} pièce${joints.length > 1 ? 's' : ''} jointe${joints.length > 1 ? 's' : ''}`, {
+        description: [desc, joints.join(' · '),
+          folderRes.ok ? `Si l'une manque dans Outlook : dossier « ${folderRes.folderName} »` : ''].filter(Boolean).join('\n'),
+        duration: 10000,
       });
       onSent(dateEnvoi, relance ? prochaine || undefined : undefined);
       onOpenChange(false);
