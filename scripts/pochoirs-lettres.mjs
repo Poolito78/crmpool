@@ -38,7 +38,20 @@ function traiterBleu(d, w, h) {
     let t = ((d[i] - B[0]) * vx + (d[i + 1] - B[1]) * vy + (d[i + 2] - B[2]) * vz) / v2; t = Math.max(0, Math.min(1, t));
     const v = Math.round(255 * t); out[i] = v; out[i + 1] = v; out[i + 2] = v; out[i + 3] = 255;
   }
-  return { out };
+  // Second pochoir (fermeture) : les PONTS = (ouvertures après fermeture morphologique) moins (ouvertures). Plaque noire, ponts blancs.
+  const N = w * h, Wm = new Uint8Array(N);
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) Wm[y * w + x] = out[(y * w + x) * 4] > 127 ? 1 : 0;
+  const RAD = 8, off = [];
+  for (let dy = -RAD; dy <= RAD; dy++) for (let dx = -RAD; dx <= RAD; dx++) if (dx * dx + dy * dy <= RAD * RAD) off.push([dx, dy]);
+  const dil = (m, v) => { const o = new Uint8Array(N); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let hit = 0; for (const [dx, dy] of off) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= w || yy >= h) { if (v === 0) { hit = 1; break; } continue; } if (m[yy * w + xx] === v) { hit = 1; break; } } o[y * w + x] = hit; } return o; };
+  const D = dil(Wm, 1), inv = new Uint8Array(N); for (let i = 0; i < N; i++) inv[i] = D[i] ? 0 : 1;
+  const Er = dil(inv, 1), out2 = new Uint8ClampedArray(d.length);
+  for (let i = 0; i < N; i++) {
+    const x = i % w, y = (i - x) / w, dedans = x >= x0 && x <= x1 && y >= y0 && y <= y1;
+    const pont = dedans && !Er[i] && !Wm[i];
+    const v = dedans ? (pont ? 255 : 0) : 255; out2[i * 4] = v; out2[i * 4 + 1] = v; out2[i * 4 + 2] = v; out2[i * 4 + 3] = 255;
+  }
+  return { out, out2 };
 }
 
 const sortie = process.argv[2] || 'public/pochoirs';
@@ -64,6 +77,7 @@ for (let i = 0; i < listeEnduit.length; i += 6) {
       const o = traiterBleu(data, info.width, info.height);
       if (!o) throw new Error('pas de plaque bleue détectée');
       await sharp(Buffer.from(o.out.buffer), { raw: { width: info.width, height: info.height, channels: 4 } }).resize(200, 200, { fit: 'inside' }).png({ palette: true }).toFile(`${sortie}/${id}.png`);
+      await sharp(Buffer.from(o.out2.buffer), { raw: { width: info.width, height: info.height, channels: 4 } }).resize(200, 200, { fit: 'inside' }).png({ palette: true }).toFile(`${sortie}/${id}-fermeture.png`);
       ok++;
     } catch (e) { echecs++; console.error('ÉCHEC', id, e.message); }
   }));
