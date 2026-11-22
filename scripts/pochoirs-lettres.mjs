@@ -54,6 +54,10 @@ function traiterBleu(d, w, h) {
   return { out, out2 };
 }
 
+// Mots (plaque marron) : Virages, Categorie_B6
+const MOTS = 'Handicapes:27920-350.gif PMR:27921-350.gif Reserve:19113-350.jpg Visiteurs:19114-350.jpg Acces:19123-350.jpg Carburant:19125-350.jpg Entree:19126-350.jpg Expeditions:19127-350.jpg Interdit:19128-350.jpg Lavage:19129-350.jpg Medecins:19130-350.jpg Sans-Issue:19132-350.jpg Secours:19133-350.jpg Securite:19134-350.jpg Sortie:19135-350.jpg Voie:19136-350.jpg Accueil:19124-350.jpg Payant:19070-350.jpg Livraisons:19071-350.jpg Parking:19072-350.jpg Police:19073-350.jpg Taxi:19074-350.jpg Pietons:19075-350.jpg Pompiers:19131-350.jpg 2-Caracteres:11087-350.jpg 3-Caracteres:11088-350.jpg 4-Caracteres:11089-350.jpg 5-Caracteres:11090-350.jpg 6-Caracteres:11091-350.jpg 7-Caracteres:11092-350.jpg 8-Caracteres:11093-350.jpg 9-Caracteres:11094-350.jpg 10-Caracteres:11095-350.jpg 11-Caracteres:19137-350.jpg'.split(' ').map(x => x.split(':'));
+for (const [m, f] of MOTS) liste.push([`Pochoir-Mot-${m}`, f]);
+
 const sortie = process.argv[2] || 'public/pochoirs';
 mkdirSync(sortie, { recursive: true });
 let ok = 0, echecs = 0;
