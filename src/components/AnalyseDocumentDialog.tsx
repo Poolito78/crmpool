@@ -1874,8 +1874,19 @@ const [contratOdoo, setContratOdoo] = useState<
   }, [apiKey, commandesFournisseur, fournisseurs, documentDuPlan, lirePagesEnImage]);
 
   /* ── traitement des fichiers pré-chargés depuis le dashboard ── */
+  /** Le type imposé vient d'un dépôt typé (carte Veille concurrence), pas d'un choix à la main. */
+  const typeDuDepotRef = useRef(false);
   useEffect(() => {
     if (!open || !initialFiles || initialFiles.length === 0) return;
+    /* Lâché sur la carte Veille concurrence : devis ou tarif de concurrent,
+       imposé AVANT de lancer — l'IA ne le devine jamais (il ressemble en tout
+       point à un devis fournisseur). Un dépôt ordinaire qui suit ne doit pas
+       en hériter. */
+    if (initialType) {
+      setTypeImpose(initialType); typeImposeRef.current = initialType; typeDuDepotRef.current = true;
+    } else if (typeDuDepotRef.current) {
+      setTypeImpose(''); typeImposeRef.current = ''; typeDuDepotRef.current = false;
+    }
     processFiles(initialFiles);
   }, [open, initialFiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -5974,7 +5985,9 @@ const [contratOdoo, setContratOdoo] = useState<
       }
       const clientDc = clients.find(c => c.id === dcClientId);
       const jour = result.dateDocument || new Date().toISOString().split('T')[0];
-      const ref = result.numeroDocument ? `Devis ${result.numeroDocument}` : 'Devis concurrent';
+      /* Un tarif n'a souvent pas de numéro : le nom du fichier dit d'où vient le prix. */
+      const ref = result.numeroDocument ? `Devis ${result.numeroDocument}`
+        : fichier?.name ? `Devis/tarif concurrent « ${fichier.name} »` : 'Devis concurrent';
       let faits = 0;
       for (const { l, i, prix } of lignes) {
         const odoo = choixOdoo[i];
@@ -9392,7 +9405,7 @@ const [contratOdoo, setContratOdoo] = useState<
                 {isDevisConcurrent && result && (
                   <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 sm:p-4 space-y-3">
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold">Devis d'un concurrent</p>
+                      <p className="text-sm font-semibold">Devis ou tarif d'un concurrent</p>
                       <p className="text-xs text-muted-foreground">
                         Ces prix ne sont ni les nôtres ni ceux d'un fournisseur : ils sont enregistrés
                         dans la veille concurrence. Corrigez-les si besoin, décochez ce qu'il ne faut pas garder.

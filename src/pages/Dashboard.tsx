@@ -470,7 +470,10 @@ export default function Dashboard() {
 
         {/* Veille Concurrence */}
         {isAdmin && !hidden.has('panel-veille') && (
-        <div className="bg-card rounded-xl border border-rose-200 dark:border-rose-900 p-5">
+        /* Zone de dépôt : un PDF glissé ICI est un devis ou un tarif de
+           concurrent — CRMLayout lit `data-depot-type` et impose ce type à
+           l'analyse, dont les prix retenus partent dans la veille. */
+        <div data-depot-type="devis_concurrent" className="bg-card rounded-xl border border-rose-200 dark:border-rose-900 p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
               <Eye className="w-5 h-5 text-rose-500" />
@@ -515,6 +518,9 @@ export default function Dashboard() {
               </div>
             </>
           )}
+          <p className="mt-3 rounded-lg border border-dashed border-rose-300 dark:border-rose-800 px-3 py-2 text-xs text-rose-600/80 text-center">
+            Glissez ici le PDF d'un devis ou d'un tarif concurrent : ses prix iront dans les prix concurrents.
+          </p>
         </div>
         )}
       </div>

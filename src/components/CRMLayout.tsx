@@ -53,6 +53,17 @@ const ISOFLOOR_URL = 'https://www.isofloor.fr/';
 /** Clé de « Gérer les liens… » dans le groupe Web : une action, pas une adresse. */
 const CLE_LIENS_WEB = '#liens-web';
 const TYPES_DEPOSABLES: readonly TypeDocument[] = ['demande_devis', 'commande_client', 'devis_fournisseur'];
+/**
+ * Les zones de la page qui donnent leur type au fichier qu'on y lâche
+ * (`data-depot-type` sur l'élément) : la carte « Veille concurrence » du
+ * tableau de bord reçoit devis et tarifs de concurrents.
+ */
+const TYPES_ZONE_DEPOT: readonly TypeDocument[] = ['devis_concurrent'];
+function typeDeZone(cible: EventTarget | null): TypeDocument | undefined {
+  const zone = cible instanceof Element ? cible.closest('[data-depot-type]') : null;
+  const t = zone?.getAttribute('data-depot-type');
+  return t && (TYPES_ZONE_DEPOT as readonly string[]).includes(t) ? t as TypeDocument : undefined;
+}
 
 // `external` : le lien sort de l'application (nouvel onglet) au lieu de router.
 // Un <Link> react-router sur une URL absolue produirait /https:/… — il faut un
@@ -310,6 +321,8 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
   /** Type imposé au texte reçu du Chiffrage ISOSIGN (« demande_devis »). */
   const [typeDepose, setTypeDepose] = useState<TypeDocument | undefined>(undefined);
   const [survolDepot, setSurvolDepot] = useState(false);
+  /** La zone typée survolée (carte Veille concurrence), pour le dire sur le voile. */
+  const [zoneDepot, setZoneDepot] = useState<TypeDocument | undefined>(undefined);
   /** Compteur : les enfants émettent leurs propres dragenter/dragleave. */
   const compteurDepot = useRef(0);
   const glisserInterne = useRef(false);
@@ -339,23 +352,28 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
   const depotDragOver = (e: React.DragEvent) => {
     if (glisserInterne.current || !survolDepot) return;
     e.preventDefault();
+    const z = typeDeZone(e.target);
+    if (z !== zoneDepot) setZoneDepot(z);
   };
 
   const depotDragLeave = () => {
     if (glisserInterne.current) return;
     compteurDepot.current--;
-    if (compteurDepot.current <= 0) { compteurDepot.current = 0; setSurvolDepot(false); }
+    if (compteurDepot.current <= 0) { compteurDepot.current = 0; setSurvolDepot(false); setZoneDepot(undefined); }
   };
 
   const depotDrop = (e: React.DragEvent) => {
     compteurDepot.current = 0;
     setSurvolDepot(false);
+    setZoneDepot(undefined);
     if (glisserInterne.current) return;
 
     const fichiers = Array.from(e.dataTransfer.files);
     if (fichiers.length) {
       e.preventDefault();
       setTexteDepose('');
+      /* Lâché sur la carte Veille concurrence : devis ou tarif d'un concurrent. */
+      setTypeDepose(typeDeZone(e.target));
       setFichiersDeposes(fichiers);
       setAnalyseOpen(true);
       return;
@@ -363,6 +381,7 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
     const texte = e.dataTransfer.getData('text/plain');
     if (texte?.trim()) {
       e.preventDefault();
+      setTypeDepose(typeDeZone(e.target));
       setFichiersDeposes([]);
       setTexteDepose(texte.trim());
       setAnalyseOpen(true);
@@ -673,11 +692,22 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
             <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-primary/15 flex items-center justify-center">
               <ScanText className="w-8 h-8 sm:w-10 sm:h-10 text-primary animate-bounce" />
             </div>
-            <p className="text-lg sm:text-xl font-heading font-bold">Déposez pour analyser</p>
-            <p className="text-xs sm:text-sm text-muted-foreground text-center max-w-xs">
-              PDF, e-mail, Excel ou simple texte — devis, commande, bon de livraison
-              ou tarif fournisseur.
-            </p>
+            {zoneDepot === 'devis_concurrent' ? (
+              <>
+                <p className="text-lg sm:text-xl font-heading font-bold text-rose-600">Déposez pour la veille concurrence</p>
+                <p className="text-xs sm:text-sm text-muted-foreground text-center max-w-xs">
+                  Devis ou tarif d'un concurrent : les prix retenus iront dans les prix concurrents.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-lg sm:text-xl font-heading font-bold">Déposez pour analyser</p>
+                <p className="text-xs sm:text-sm text-muted-foreground text-center max-w-xs">
+                  PDF, e-mail, Excel ou simple texte — devis, commande, bon de livraison
+                  ou tarif fournisseur.
+                </p>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -892,7 +922,7 @@ export default function CRMLayout({ pages }: { pages: React.ReactNode }) {
             }}
             initialFiles={fichiersDeposes.length ? fichiersDeposes : undefined}
             initialText={texteDepose || undefined}
-            initialType={texteDepose ? typeDepose : undefined}
+            initialType={typeDepose}
           />
         </Suspense>
       )}

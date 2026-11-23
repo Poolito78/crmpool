@@ -54,7 +54,7 @@ export const TYPE_LABELS: Record<TypeDocument, { label: string; color: string }>
   facture_client:       { label: 'Facture client',        color: 'bg-warning/10 text-warning' },
   demande_devis:        { label: 'Demande de devis',      color: 'bg-primary/10 text-primary' },
   devis_fournisseur:    { label: 'Devis fournisseur',     color: 'bg-info/10 text-info' },
-  devis_concurrent:     { label: 'Devis concurrent',      color: 'bg-destructive/10 text-destructive' },
+  devis_concurrent:     { label: 'Devis / tarif concurrent', color: 'bg-destructive/10 text-destructive' },
   offre_prix:           { label: 'Offre de prix (à comparer au CRM)', color: 'bg-warning/10 text-warning' },
   tarif_transport:      { label: 'Tarif transport fournisseur', color: 'bg-info/10 text-info' },
   autre:                { label: 'Autre document',        color: 'bg-muted text-muted-foreground' },
@@ -190,6 +190,21 @@ Extraction des lignes d'une demande de devis :
   avec le catalogue est fait ensuite par l'application.
 - « reference » reste null quand le client n'en donne pas.
 - « prixUnitaireHT » reste null : c'est le tarif du client qui décidera.
+
+Extraction d'un document CONCURRENT (devis_concurrent — jamais deviné, seulement
+imposé par l'utilisateur) : un devis ou un TARIF émis par un concurrent
+d'ISOSIGN, ses prix alimentent la veille concurrence :
+- « nomPartenaire » = la société qui ÉMET le document (en-tête, logo, pied de
+  page) — le concurrent —, jamais son client destinataire ni ISOSIGN.
+- Chaque article chiffré devient une ligne ; titres, mentions et lignes sans
+  prix sont ignorés.
+- Dans un TARIF (liste de prix sans quantités), « quantite » vaut 1.
+- « prixUnitaireHT » = le prix unitaire HT NET (remise déduite) ;
+  « prixConseille » = le prix brut / public s'il est écrit à côté ; « remise »
+  si elle est écrite.
+- Prix par paliers de quantité : retiens le premier palier et cite les autres
+  dans « description ».
+- « unite » reprend l'unité de prix écrite (u, m², ml, kg, l, seau…).
 
 Extraction des lignes d'un devis ÉMIS (devis_client) — il sera comparé ligne à
 ligne au chiffrage du CRM :
