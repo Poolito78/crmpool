@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import ConcurrentDocumentsListe from '@/components/ConcurrentDocumentsListe';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Pencil, Save, X, Building2, Package, FileText, Upload, Loader2, CheckSquare, Square, FileSpreadsheet, FileText as FilePdf } from 'lucide-react';
 import { toast } from 'sonner';
@@ -412,7 +413,7 @@ export default function ConcurrentDialog({
         </DialogHeader>
 
         <Tabs defaultValue="infos">
-          <TabsList className="grid grid-cols-3 w-full">
+          <TabsList className="grid grid-cols-4 w-full">
             <TabsTrigger value="infos" className="flex items-center gap-1">
               <Building2 className="w-4 h-4" /> Infos
             </TabsTrigger>
@@ -423,6 +424,9 @@ export default function ConcurrentDialog({
             <TabsTrigger value="notes" className="flex items-center gap-1">
               <FileText className="w-4 h-4" /> Notes
               {localNotes.length > 0 && <Badge variant="secondary" className="ml-1 h-4 text-xs px-1">{localNotes.length}</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="documents" className="flex items-center gap-1">
+              <FilePdf className="w-4 h-4" /> Documents
             </TabsTrigger>
           </TabsList>
 
@@ -707,6 +711,11 @@ export default function ConcurrentDialog({
                 </div>
               ))}
             </div>
+          </TabsContent>
+
+          {/* ── Onglet Documents : tarifs et devis classés depuis l'analyse ── */}
+          <TabsContent value="documents" className="space-y-3 pt-3">
+            <ConcurrentDocumentsListe concurrentId={concurrentId} />
           </TabsContent>
         </Tabs>
 

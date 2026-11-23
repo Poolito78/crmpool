@@ -128,7 +128,8 @@ import {
 import { useDevisFournisseur, type DevisFournisseur } from '@/lib/devisFournisseur';
 import { useConcurrents } from '@/lib/concurrents';
 import { concurrentDuDocument } from '@/lib/concurrentDuDocument';
-import { indexEquivalences, equivalentsPour, prixAuKgArticle } from '@/lib/equivalencesConcurrents';
+import { classerDocumentConcurrent } from '@/lib/concurrentDocuments';
+import { indexEquivalences, equivalentsPour, applicateurAuKg, ecartPrix } from '@/lib/equivalencesConcurrents';
 import {
   rapprocherClient, clientsParPersonne, motsFrequentsDuCatalogue, type CandidatClient,
 } from '@/lib/rapprochementClient';
@@ -1037,6 +1038,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [dcExclues, setDcExclues] = useState<Record<number, boolean>>({});
   const [dcPrix, setDcPrix] = useState<Record<number, string>>({});
   const [dcEnCours, setDcEnCours] = useState(false);
+  /** Classer le document analysé sur la fiche du concurrent (coché par défaut). */
+  const [dcJoindre, setDcJoindre] = useState(true);
+  /** Déjà classé pour cette analyse : un second enregistrement ne le double pas. */
+  const [dcDocClasse, setDcDocClasse] = useState(false);
   /** Le client chez qui ce prix concurrent a été rencontré (facultatif). */
   const [dcClientId, setDcClientId] = useState('');
   /** Création d'un client sans quitter le panneau : formulaire replié par défaut. */
@@ -1554,7 +1559,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setRegroupementPlan(regroupement);
     setClassePlan(classe);
     setMatsNeufsPlan(matsNeufs);
-    setChoixProduit({}); setChoixOdoo({}); setChoixOdooPlus({}); setRefusOdoo(new Set()); setDcClientId(''); setDcExclues({}); setDcPrix({});
+    setChoixProduit({}); setChoixOdoo({}); setChoixOdooPlus({}); setRefusOdoo(new Set()); setDcClientId(''); setDcExclues({}); setDcPrix({}); setDcDocClasse(false);
     odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({}); setLibelleManuel({});
     setResult(prev => prev ? { ...prev, lignes: documentDuPlan(planKadri.ensembles, lignes).lignes } : prev);
@@ -1663,7 +1668,7 @@ const [contratOdoo, setContratOdoo] = useState<
        client et le contact du document précédent resteraient en place. */
     setCreerDevisClientId(''); setCreerCCClientId('');
     setContactsOdoo([]); setContactRetenu('');
-    setChoixProduit({}); setChoixOdoo({}); setChoixOdooPlus({}); setRefusOdoo(new Set()); setDcClientId(''); setDcExclues({}); setDcPrix({});
+    setChoixProduit({}); setChoixOdoo({}); setChoixOdooPlus({}); setRefusOdoo(new Set()); setDcClientId(''); setDcExclues({}); setDcPrix({}); setDcDocClasse(false);
     odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({});
     setVarianteSysteme({}); setSurfaceSysteme({}); setOptionsSysteme({}); setVarianteDocument('');
@@ -6010,6 +6015,58 @@ const [contratOdoo, setContratOdoo] = useState<
     toast.success(`Client "${societe}" créé`);
   }
 
+  /** Le concurrent retenu, créé au besoin sous le nom du document ; null si impossible. */
+  async function concurrentRetenu(): Promise<string | null> {
+    if (!result) return null;
+    let concurrentId = dcConcurrentId || concurrentPressenti?.id || '';
+    if (!concurrentId || concurrentId === '__nouveau') {
+      const nom = (dcNom || result.nomPartenaire || '').trim();
+      if (!nom) { toast.error('Indiquez le nom du concurrent'); return null; }
+      const cree = await addConcurrent({ nom });
+      if (!cree) { toast.error('Création du concurrent impossible'); return null; }
+      concurrentId = cree.id;
+      setDcConcurrentId(cree.id);
+    }
+    return concurrentId;
+  }
+
+  /** Le fichier analysé : le PDF lu, à défaut le mail ou le fichier déposé. */
+  const documentAnalyse = fichier ?? fichiersOrigine[0] ?? null;
+
+  /**
+   * Classe le document analysé sur la fiche du concurrent (onglet Documents),
+   * une fois par analyse. Rend vrai si c'est fait ou déjà fait.
+   */
+  async function classerDocumentDuConcurrent(concurrentId: string): Promise<boolean> {
+    if (!result || !documentAnalyse) return false;
+    if (dcDocClasse) return true;
+    const clientDc = clients.find(c => c.id === dcClientId);
+    try {
+      await classerDocumentConcurrent(concurrentId, documentAnalyse, {
+        libelle: result.numeroDocument ? `Devis / tarif ${result.numeroDocument}` : 'Devis / tarif concurrent',
+        clientNom: clientDc ? (clientDc.societe || clientDc.nom) : undefined,
+        dateDocument: result.dateDocument || undefined,
+      });
+      setDcDocClasse(true);
+      return true;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Classement du document impossible');
+      return false;
+    }
+  }
+
+  async function handleClasserDocumentSeul() {
+    setDcEnCours(true);
+    try {
+      const id = await concurrentRetenu();
+      if (id && await classerDocumentDuConcurrent(id)) {
+        toast.success(`« ${documentAnalyse?.name} » classé sur la fiche du concurrent (onglet Documents)`);
+      }
+    } finally {
+      setDcEnCours(false);
+    }
+  }
+
   async function handleEnregistrerDevisConcurrent() {
     if (!result) return;
     const lignes = result.lignes
@@ -6019,14 +6076,11 @@ const [contratOdoo, setContratOdoo] = useState<
 
     setDcEnCours(true);
     try {
-      let concurrentId = dcConcurrentId || concurrentPressenti?.id || '';
-      if (!concurrentId || concurrentId === '__nouveau') {
-        const nom = (dcNom || result.nomPartenaire || '').trim();
-        if (!nom) { toast.error('Indiquez le nom du concurrent'); return; }
-        const cree = await addConcurrent({ nom });
-        if (!cree) { toast.error('Création du concurrent impossible'); return; }
-        concurrentId = cree.id;
-      }
+      const concurrentId = await concurrentRetenu();
+      if (!concurrentId) return;
+      /* Le document suit ses prix : on saura d'où vient chaque chiffre. */
+      const docClasse = dcJoindre && documentAnalyse && !dcDocClasse
+        ? await classerDocumentDuConcurrent(concurrentId) : false;
       const clientDc = clients.find(c => c.id === dcClientId);
       const jour = result.dateDocument || new Date().toISOString().split('T')[0];
       /* Un tarif n'a souvent pas de numéro : le nom du fichier dit d'où vient le prix. */
@@ -6055,7 +6109,8 @@ const [contratOdoo, setContratOdoo] = useState<
         /* Une ligne enregistrée se décoche : un second clic ne la double pas. */
         if (p) { faits++; setDcExclues(prev => ({ ...prev, [i]: true })); }
       }
-      if (faits === lignes.length) toast.success(`${faits} prix concurrent enregistré${faits > 1 ? 's' : ''}`);
+      if (faits === lignes.length) toast.success(`${faits} prix concurrent enregistré${faits > 1 ? 's' : ''}`
+        + (docClasse ? ' — document classé sur la fiche' : ''));
       else toast.error(`${faits}/${lignes.length} prix enregistrés — réessayez pour le reste`);
     } finally {
       setDcEnCours(false);
@@ -9550,7 +9605,13 @@ const [contratOdoo, setContratOdoo] = useState<
                                   </p>
                                   {equiv.articles.map(p => {
                                     const actif = article?.id === p.id;
-                                    const auKg = prixAuKgArticle(p);
+                                    /* Leur prix est un NET applicateur : on le compare à notre
+                                       prix applicateur (remise de gamme), jamais au public. */
+                                    const auKg = applicateurAuKg(p);
+                                    const leurKg = /^(kg|kilo)/i.test((l.unite || '').trim())
+                                      ? Number((dcPrix[i] ?? String(l.prixUnitaireHT ?? '')).replace(',', '.'))
+                                      : NaN;
+                                    const ecart = auKg && Number.isFinite(leurKg) ? ecartPrix(auKg.prix, leurKg) : undefined;
                                     return (
                                       <button
                                         key={p.id}
@@ -9564,8 +9625,20 @@ const [contratOdoo, setContratOdoo] = useState<
                                         <span className="font-mono text-[10px]">{p.reference}</span>
                                         <span className="truncate flex-1" title={designationProduit(p)}>{designationProduit(p)}</span>
                                         {auKg != null && (
-                                          <span className="shrink-0 tabular-nums text-muted-foreground">
-                                            public {auKg.toFixed(2).replace('.', ',')} €/kg
+                                          <span
+                                            className="shrink-0 tabular-nums text-muted-foreground"
+                                            title={`${auKg.libelle} : public ${auKg.public.toFixed(2)} €/kg − ${(auKg.remise * 100).toFixed(0)} %`}
+                                          >
+                                            applicateur <span className="font-medium text-foreground">{auKg.prix.toFixed(2).replace('.', ',')} €/kg</span>
+                                            {auKg.remise > 0 && <span className="text-[10px]"> ({auKg.libelle} −{(auKg.remise * 100).toFixed(0)} %)</span>}
+                                          </span>
+                                        )}
+                                        {ecart != null && (
+                                          <span
+                                            className={`shrink-0 w-12 text-right tabular-nums font-medium ${ecart > 0 ? 'text-destructive' : 'text-emerald-600'}`}
+                                            title={ecart > 0 ? 'Nous sommes plus chers que leur prix net' : 'Nous sommes moins chers que leur prix net'}
+                                          >
+                                            {ecart > 0 ? '+' : ''}{Math.round(ecart * 100)} %
                                           </span>
                                         )}
                                       </button>
@@ -9643,9 +9716,30 @@ const [contratOdoo, setContratOdoo] = useState<
                       })}
                     </div>
 
+                    {documentAnalyse && (
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <Checkbox
+                          id="dc-joindre"
+                          checked={dcJoindre || dcDocClasse}
+                          disabled={dcDocClasse}
+                          onCheckedChange={v => setDcJoindre(!!v)}
+                        />
+                        <label htmlFor="dc-joindre" className="flex-1 min-w-0 truncate cursor-pointer">
+                          {dcDocClasse
+                            ? <>« {documentAnalyse.name} » est classé sur la fiche du concurrent (onglet Documents)</>
+                            : <>Classer « {documentAnalyse.name} » sur la fiche du concurrent</>}
+                        </label>
+                        {!dcDocClasse && (
+                          <Button variant="outline" size="sm" className="h-7 text-xs" disabled={dcEnCours} onClick={handleClasserDocumentSeul}>
+                            Classer le document seul
+                          </Button>
+                        )}
+                      </div>
+                    )}
+
                     <Button onClick={handleEnregistrerDevisConcurrent} disabled={dcEnCours} className="w-full" size="sm">
                       {dcEnCours ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PlusCircle className="w-4 h-4 mr-2" />}
-                      Enregistrer les prix concurrent
+                      Enregistrer les prix concurrent{dcJoindre && documentAnalyse && !dcDocClasse ? ' et classer le document' : ''}
                     </Button>
                   </div>
                 )}

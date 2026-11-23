@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('pdfjs-dist', () => ({ GlobalWorkerOptions: {}, getDocument: vi.fn() }));
 vi.mock('./modelesIA', () => ({ appelerGemini: vi.fn(), texteGemini: vi.fn() }));
 
-import { familleConcurrente, indexEquivalences, equivalentsPour, kgDuLibelle } from './equivalencesConcurrents';
+import { familleConcurrente, indexEquivalences, equivalentsPour, kgDuLibelle, applicateurAuKg, ecartPrix } from './equivalencesConcurrents';
 import { prixDuTexte, type DocumentAnalysis } from './analyseDocument';
 import type { Produit } from './store';
 
@@ -100,5 +100,23 @@ describe('prixDuTexte (tarif GEVEKO CS ROUTE)', () => {
 
   it('une référence absente du texte garde sa lecture', () => {
     expect(prixDuTexte(doc([lu('999999', 12)]), texte).lignes[0].prixUnitaireHT).toBe(12);
+  });
+});
+
+describe('applicateurAuKg (leur net face à notre applicateur)', () => {
+  it('ISOMARK H1 : 50 % sur le public, ramené au kg', () => {
+    const r = applicateurAuKg(catalogue[0])!; // 312,86 € public, 25 kg, H1
+    expect(r.public).toBeCloseTo(12.51, 2);
+    expect(r.prix).toBeCloseTo(6.26, 2);
+    expect(r.libelle).toBe('ISOMARK H1');
+  });
+
+  it('écart à leur net : 6,26 €/kg contre 4,77 €/kg = +31 %', () => {
+    expect(Math.round(ecartPrix(6.26, 4.77)! * 100)).toBe(31);
+    expect(ecartPrix(6.26, 0)).toBeUndefined();
+  });
+
+  it('sans poids connu, pas de prix au kg', () => {
+    expect(applicateurAuKg(catalogue[9])).toBeUndefined(); // DILACETYL5, 5 L sans poids
   });
 });

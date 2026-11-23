@@ -21,6 +21,7 @@
  * Fonctions PURES.
  */
 import { designationProduit, type Produit } from './store';
+import { prixApplicateur, publicPourQuantite } from './remiseGammes';
 
 interface Famille {
   cle: string;
@@ -184,8 +185,23 @@ export function equivalentsPour(
   return { famille: f.libelle, articles: articles.slice(0, max) };
 }
 
-/** Prix au kg d'un article, quand son poids est connu (fiche, sinon libellé). */
-export function prixAuKgArticle(p: Produit): number | undefined {
+/**
+ * NOTRE PRIX APPLICATEUR AU KG, face au prix NET du concurrent.
+ *
+ * Le tarif d'un concurrent à un applicateur est un prix net, remise déduite :
+ * le comparer à notre public le flattait de moitié (ISOMARK TEMPORAIRE à
+ * 12,51 €/kg public, 6,26 €/kg applicateur). La remise est celle de la gamme
+ * (`prixApplicateur`, `remiseGammes.ts` : H1 50 %, H2 et ISOFLOOR 30 %), sur
+ * le public du premier palier. Poids : fiche, sinon libellé (« 25KG »).
+ */
+export function applicateurAuKg(p: Produit): { prix: number; public: number; libelle: string; remise: number } | undefined {
   const kg = (p.poids && p.poids > 0 ? p.poids : undefined) ?? kgDuLibelle(designationProduit(p));
-  return kg && p.prixHT > 0 ? p.prixHT / kg : undefined;
+  const app = prixApplicateur(publicPourQuantite(p), p.categorie, p.catalogue);
+  if (!kg || !app) return undefined;
+  return { prix: app.prix / kg, public: app.public / kg, libelle: app.libelle, remise: app.remise };
+}
+
+/** Écart de notre prix au leur, en % de leur prix (+ = nous sommes plus chers). */
+export function ecartPrix(notre: number, leur: number): number | undefined {
+  return leur > 0 && notre > 0 ? (notre - leur) / leur : undefined;
 }
