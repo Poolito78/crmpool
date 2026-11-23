@@ -25,16 +25,44 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const SALESPERSON_ID = 642; // François MOUHOT côté Odoo
 
-/** Réel connu (rapport commercial), STI 2025 du 01/01 au 30/09. */
-const STI_YTD_2025_REEL = 749776.0;
+/**
+ * STI 2025 RÉEL du 01/01 au même jour 2025 : les mois complets du rapport
+ * commercial (`CA_2025_MENSUEL_REEL`) + le mois en cours au prorata des jours.
+ *
+ * ⚠️ Ce fut une constante, 749 776 € = STI du 01/01 au 30/09. Passé septembre,
+ * le « à date » restait figé au 30/09 alors que l'année pleine, elle, comptait
+ * octobre : 126 720 € de STI d'octobre (et la part de novembre) passaient pour
+ * un reste à courir. Au 20/11/2026, la projection en était gonflée de ~86 k€
+ * et l'évolution annoncée à −0,7 % pour −6,3 % réels. Le « à date » DOIT
+ * suivre la date d'arrêté.
+ *
+ * Le prorata du mois en cours est la seule supposition : le fichier ne donne
+ * que des montants mensuels (voir `CA_2025_MENSUEL_REEL`).
+ */
+function sti2025AuJour(cutoff2025: string): number {
+  const mois = Number(cutoff2025.slice(5, 7));
+  const jour = Number(cutoff2025.slice(8, 10));
+  const joursDuMois = new Date(Date.UTC(2025, mois, 0)).getUTCDate();
+  let total = 0;
+  for (let m = 1; m < mois; m++) total += CA_2025_MENSUEL_REEL[m - 1].sti;
+  total += CA_2025_MENSUEL_REEL[mois - 1].sti * Math.min(jour / joursDuMois, 1);
+  return r2(total);
+}
+
+/** STI 2025 RÉEL du 01/01 à la fin du mois `mois` (rapport commercial). */
+function sti2025FinMois(mois: number): number {
+  let total = 0;
+  for (let m = 1; m <= mois; m++) total += CA_2025_MENSUEL_REEL[m - 1].sti;
+  return r2(total);
+}
 
 /**
  * CA 2025 RÉEL, mois par mois (janvier → décembre), portefeuille François
  * MOUHOT. Source : « 12 CA ISOSIGN 2025 y compris STI.xlsx », onglet
  * « CA 2025 - N-1 », ligne « François Mouhot » de chaque mois, bloc « Réel CA
  * 2025 » : SV+Service+Divers, SH, STI. Le total du fichier (ISO + STI) est
- * leur somme. Le STI de janvier → septembre retombe exactement sur
- * STI_YTD_2025_REEL (749 776 €) : c'est la même source.
+ * leur somme. Le STI de janvier → septembre retombe exactement sur les
+ * 749 776 € du « à date » d'origine : c'est la même source.
  *
  * ⚠️ C'EST LE FICHIER QUI FAIT FOI pour chaque mois 2025 complet, pas Odoo
  * (dont le STI 2025 est faux). SH = ISOMARK ; ISOSIGN = SV + STI. Le fichier
@@ -185,6 +213,8 @@ function ligneVide(client: string): Row {
   return {
     client,
     t26: 0, t25ytd: 0, t25full: 0,
+    // 2025 du 01/01 à la FIN du mois en cours (voir `projeter`).
+    t25finmois: 0, sti25finmois: 0,
     isosign_sv26: 0, isosign_sv25: 0,
     isomark26: 0, isomark25: 0,
     isofloor26: 0, isofloor25: 0,
@@ -339,6 +369,8 @@ async function extraireOdoo(journal: string[]) {
   // comme un réel — ISOSIGN et le total s'y comparent HORS STI.
   const moisCourant = Number(today.slice(5, 7));
   const debutMois25 = "2025-" + today.slice(5, 7) + "-01";
+  const finMois25 = "2025-" + today.slice(5, 7) + "-" +
+    String(new Date(Date.UTC(2025, moisCourant, 0)).getUTCDate()).padStart(2, "0");
   const mtd25 = moisVide(moisCourant);
   // Facturé du jour : les mêmes lignes, datées d'aujourd'hui — avoirs déduits.
   const jourFacture = moisVide(moisCourant);
@@ -385,6 +417,10 @@ async function extraireOdoo(journal: string[]) {
       if (precision === "isofloor") add(row, "isofloor25full", montant);
       else if (precision === "transport") add(row, "exclu25full", montant);
       if (d >= debutMois25 && d <= cutoff2025) ventilerMois(mtd25, brand, precision, montant);
+      if (d <= finMois25) {
+        add(row, "t25finmois", montant);
+        if (brand === "sti") add(row, "sti25finmois", montant);
+      }
       if (d <= cutoff2025) {
         add(row, "t25ytd", montant);
         add(row, `${brand}25`, montant);
@@ -541,6 +577,36 @@ async function estimerFinDeMois(ctx: CtxOdoo, today: string, mtd26: Mois, journa
   }) as Cde[];
   journal.push(`${commandes.length} commandes en cours (non entièrement facturées)`);
 
+  // Le client d'une commande, nommé comme sur les lignes de facture : la
+  // SOCIÉTÉ (partenaire commercial), pas le contact « SOCIÉTÉ, M. X » que la
+  // commande porte souvent. C'est la clé qui relie le carnet à la ligne client
+  // de la projection (`projeter`).
+  const partenaires = [...new Set(commandes.filter((c) => c.partner_id).map((c) => (c.partner_id as [number, string])[0]))];
+  const societeDe = new Map<number, string>();
+  for (let i = 0; i < partenaires.length; i += 1000) {
+    const lus = await odoo.kw("res.partner", "read", [partenaires.slice(i, i + 1000)], {
+      fields: ["id", "commercial_partner_id"],
+    }) as { id: number; commercial_partner_id: [number, string] | false }[];
+    for (const p of lus) if (p.commercial_partner_id) societeDe.set(p.id, p.commercial_partner_id[1]);
+  }
+  const societeCde = new Map<number, string>(commandes.map((c) => [
+    c.id,
+    c.partner_id ? societeDe.get(c.partner_id[0]) ?? c.partner_id[1] : "—",
+  ]));
+  /** Carnet du mois PAR CLIENT (prêt à facturer + à livrer dans le mois), par marque. */
+  const carnetParClient = new Map<string, Row>();
+  const carnetDe = (client: string) => {
+    if (!carnetParClient.has(client)) carnetParClient.set(client, ligneVide(client));
+    return carnetParClient.get(client)!;
+  };
+  const ajouterCarnet = (oid: number, brand: string, precision: string | null, montant: number) => {
+    if (!montant) return;
+    const c = carnetDe(societeCde.get(oid) ?? "—");
+    add(c, "total", montant);
+    add(c, brand, montant);
+    if (precision === "isofloor") add(c, "isofloor", montant);
+  };
+
   const pret = moisVide(moisCourant);
   const aLivrer = moisVide(moisCourant);
   const horsEstimation = { sans_date: 0, au_dela_du_mois: 0, retard_ancien: 0 };
@@ -618,10 +684,12 @@ async function estimerFinDeMois(ctx: CtxOdoo, today: string, mtd26: Mois, journa
       }
       ventilerMois(pret, brand, precision, p);
       det.pret += p;
+      ajouterCarnet(oid, brand, precision, p);
 
       if (statut === "dans_le_mois" || statut === "retard") {
         ventilerMois(aLivrer, brand, precision, reste);
         det.a_livrer += reste;
+        ajouterCarnet(oid, brand, precision, reste);
         if (statut === "retard") dontRetard += reste;
       } else {
         if (statut === "sans_date") horsEstimation.sans_date += reste;
@@ -642,7 +710,9 @@ async function estimerFinDeMois(ctx: CtxOdoo, today: string, mtd26: Mois, journa
     .sort((a, b) => (b.pret + b.a_livrer) - (a.pret + a.a_livrer) || b.reste - a.reste)
     .slice(0, 60);
 
-  return {
+  // Le carnet par client ne se publie pas tel quel (il sert à `projeter`),
+  // d'où une propriété à part, retirée avant l'écriture du jeu.
+  const publie = {
     fin_mois: finMois,
     pret_a_facturer: arrondirMois(pret),
     a_livrer_fin_mois: arrondirMois(aLivrer),
@@ -657,6 +727,7 @@ async function estimerFinDeMois(ctx: CtxOdoo, today: string, mtd26: Mois, journa
     nb_commandes: commandes.length,
     commandes: liste,
   };
+  return { publie, carnetParClient };
 }
 
 // ─────────────────────── 1ter. Flooring & Quartz, tous commerciaux confondus
@@ -870,7 +941,13 @@ async function extraireFlooringQuartz(ctx: Pick<CtxOdoo, "odoo" | "categName">, 
 
 // ──────────────────────────────────── 2. correction STI 2025 (figée) + totaux
 
-async function appliquerCorrectionSti(rows: Row[], journal: string[]) {
+async function appliquerCorrectionSti(rows: Row[], cutoff2025: string, journal: string[]) {
+  // Cibles « à date » et « fin du mois en cours », lues dans le rapport
+  // commercial à la date d'arrêté — jamais une constante (voir `sti2025AuJour`).
+  const stiYtdReel = sti2025AuJour(cutoff2025);
+  const stiFinMoisReel = sti2025FinMois(Number(cutoff2025.slice(5, 7)));
+  journal.push(`STI 2025 réel : ${stiYtdReel} € au ${cutoff2025}, ${stiFinMoisReel} € à fin de mois`);
+
   const rep = await fetch(`${SUPABASE_URL}/rest/v1/ca_sti_2025_fige?select=client,montant`, {
     headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
   });
@@ -922,30 +999,40 @@ async function appliquerCorrectionSti(rows: Row[], journal: string[]) {
   rows.push(...nouvelles);
   journal.push(`STI année pleine : ${corriges} clients corrigés, ${crees} créés`);
 
-  // 2. « à date » : le réel connu (749 776 €) réparti au prorata du poids de
-  //    chaque client dans la correction année pleine.
+  // 2. « à date » et « fin du mois en cours » : le réel du rapport commercial
+  //    à ces deux dates, réparti au prorata du STI 2025 RÉEL de chaque client.
+  //    ⚠️ Pas au prorata de la correction (réel − Odoo) : un client où Odoo
+  //    dépasse le réel aurait reçu une part négative, et un « à date » pouvait
+  //    dépasser l'année pleine du client. Au prorata du réel, le « à date »
+  //    reste toujours sous l'année pleine (la cible l'est au total).
   const poidsTotal = r2([...corrections.values()].reduce((a, b) => a + b, 0));
-  let alloue = 0;
-  for (const [cle, poids] of corrections) {
-    const r = parClient.get(cle)!;
-    const part = poidsTotal ? poids / poidsTotal : 0;
-    const alloc = r2(part * STI_YTD_2025_REEL);
-    const odooYtd = num(r, "sti25");
-    r.sti25 = alloc;
-    r.t25ytd = r2(num(r, "t25ytd") - odooYtd + alloc);
-    r.sti25ytd_correction = r2(alloc - odooYtd);
-    r.sti_ytd_corrected = true;
-    alloue += alloc;
-  }
-  // Le reliquat d'arrondi va au plus gros, pour tomber exactement sur la cible.
-  const reliquat = r2(STI_YTD_2025_REEL - alloue);
-  if (Math.abs(reliquat) >= 0.01) {
-    let plusGros = "", max = -Infinity;
-    for (const [cle, poids] of corrections) if (poids > max) { max = poids; plusGros = cle; }
-    const r = parClient.get(plusGros)!;
-    r.sti25 = r2(num(r, "sti25") + reliquat);
-    r.t25ytd = r2(num(r, "t25ytd") + reliquat);
-  }
+  const reelDe = (cle: string) => num(parClient.get(cle)!, "sti25full");
+  const reelTotal = [...corrections.keys()].reduce((s, cle) => s + reelDe(cle), 0);
+  const allouer = (cible: number, champSti: string, champTotal: string, marque?: string) => {
+    let alloue = 0, plusGros = "", max = -Infinity;
+    for (const cle of corrections.keys()) {
+      const r = parClient.get(cle)!;
+      const reel = reelDe(cle);
+      const alloc = r2(reelTotal ? (reel / reelTotal) * cible : 0);
+      const odoo = num(r, champSti);
+      r[champSti] = alloc;
+      r[champTotal] = r2(num(r, champTotal) - odoo + alloc);
+      if (marque) r[marque] = r2(alloc - odoo);
+      alloue += alloc;
+      if (reel > max) { max = reel; plusGros = cle; }
+    }
+    // Le reliquat d'arrondi va au plus gros, pour tomber exactement sur la cible.
+    const reliquat = r2(cible - alloue);
+    if (plusGros && Math.abs(reliquat) >= 0.01) {
+      const r = parClient.get(plusGros)!;
+      r[champSti] = r2(num(r, champSti) + reliquat);
+      r[champTotal] = r2(num(r, champTotal) + reliquat);
+    }
+    return r2(alloue + reliquat);
+  };
+  const stiYtdAlloue = allouer(stiYtdReel, "sti25", "t25ytd", "sti25ytd_correction");
+  allouer(stiFinMoisReel, "sti25finmois", "t25finmois");
+  for (const cle of corrections.keys()) parClient.get(cle)!.sti_ytd_corrected = true;
 
   return {
     stiYtdOdooTotal,
@@ -956,13 +1043,42 @@ async function appliquerCorrectionSti(rows: Row[], journal: string[]) {
     crees,
     montantExistants: r2([...corrections.entries()].filter(([c]) => !nouvelles.some((n) => String(n.client).trim().toUpperCase() === c)).reduce((s, [, v]) => s + v, 0)),
     montantNouveaux: r2(nouvelles.reduce((s, n) => s + num(n, "sti25full"), 0)),
-    stiYtdAlloue: r2(alloue + reliquat),
+    stiYtdAlloue,
+    stiYtdReel,
+    stiFinMoisReel,
   };
 }
 
 // ───────────────────────────────────────────────── 3. projection fin d'année
 
-function projeter(rows: Row[]) {
+/** Marques d'une ligne client, dans l'ordre de `brandFullYearVsProjection`. */
+const MARQUES_PROJ = ["isosign_sv", "isomark", "sti", "rte"] as const;
+
+/**
+ * Projection fin d'année, client par client :
+ *
+ *   CA 2026 à date
+ * + reste du MOIS EN COURS  = p × carnet + (1 − p) × statistique
+ * + mois suivants           = CA 2025 après la fin du mois × (1 + taux mixte)
+ *
+ * - carnet : prêt à facturer + à livrer d'ici la fin du mois (le même que
+ *   l'estimation de fin de mois, `estimerFinDeMois`), pour CE client ;
+ * - statistique : CA 2025 du client entre la date d'arrêté et la fin du mois,
+ *   × (1 + taux mixte) — l'ancienne règle, appliquée au seul reste du mois ;
+ * - p = jour / jours du mois. Le carnet ne voit que ce qui est déjà commandé :
+ *   le 2 du mois il ne dit presque rien du mois, le 25 il dit presque tout.
+ *   Le poids glisse donc de la statistique vers le carnet au fil du mois, et
+ *   l'estimation affine la projection à chaque actualisation.
+ *
+ * Sans estimation lisible (`carnet` nul), p = 0 : on retombe sur la règle
+ * statistique seule, sans rien deviner.
+ *
+ * Chaque ligne reçoit aussi sa projection PAR MARQUE (`proj_<marque>`), dont
+ * la somme fait exactement `proj26` : le carnet se ventile par sa propre marque
+ * (un client sans reste 2025 n'avait aucune clé de répartition), le reste au
+ * prorata du reste à courir 2025 de chaque marque, comme avant.
+ */
+function projeter(rows: Row[], carnet: Map<string, Row> | null, cutoff2026: string) {
   const overall26 = r2(rows.reduce((s, r) => s + num(r, "t26"), 0));
   const overall25ytd = r2(rows.reduce((s, r) => s + num(r, "t25ytd"), 0));
   const overall25full = r2(rows.reduce((s, r) => s + num(r, "t25full"), 0));
@@ -972,15 +1088,40 @@ function projeter(rows: Row[]) {
     ? Math.round(((overall26 - overall25ytd) / overall25ytd) * 10000) / 10000
     : 0;
 
+  const jour = Number(cutoff2026.slice(8, 10));
+  const joursDuMois = new Date(Date.UTC(Number(cutoff2026.slice(0, 4)), Number(cutoff2026.slice(5, 7)), 0)).getUTCDate();
+  const poidsCarnet = carnet ? Math.round(Math.min(jour / joursDuMois, 1) * 10000) / 10000 : 0;
+
+  // Carnet d'un client sans facture (aucune ligne) : il entre quand même.
+  const parNom = new Map<string, Row>(rows.map((r) => [String(r.client), r]));
+  if (carnet) {
+    for (const [client] of carnet) {
+      if (!parNom.has(client) && client !== "—") {
+        const nr = ligneVide(client);
+        nr.carnet_sans_historique = true;
+        rows.push(nr);
+        parNom.set(client, nr);
+      }
+    }
+  }
+
+  const detail = { carnet_mois: 0, carnet_retenu: 0, statistique_mois: 0, statistique_retenue: 0, mois_suivants: 0 };
+
   for (const r of rows) {
     const t26 = num(r, "t26");
     const t25ytd = num(r, "t25ytd");
     const t25full = num(r, "t25full");
+    const t25finmois = Math.max(num(r, "t25finmois"), t25ytd);
     const override = MANUAL_OVERRIDES[String(r.client)];
+    const c = carnet?.get(String(r.client)) ?? null;
+    const carnetClient = Math.max(c ? num(c, "total") : 0, 0);
 
     // Reste à courir saisonnier PROPRE au client : la part de son CA 2025
-    // réalisée après la date de coupure. Jamais négatif.
+    // réalisée après la date de coupure, coupée en deux à la fin du mois en
+    // cours. Jamais négatif.
     const reste25 = Math.max(t25full - t25ytd, 0);
+    const reste25Mois = Math.max(Math.min(t25finmois, t25full) - t25ytd, 0);
+    const reste25Apres = Math.max(reste25 - reste25Mois, 0);
 
     let tauxClient: number, credibilite: number;
     if (t25ytd > 0) {
@@ -995,23 +1136,74 @@ function projeter(rows: Row[]) {
     let tauxMixte = credibilite * tauxClient + (1 - credibilite) * tauxGlobal;
     tauxMixte = Math.max(CLIP_MIN, Math.min(CLIP_MAX, tauxMixte));
 
-    const resteEstime = Math.max(reste25 * (1 + tauxMixte), 0);
+    const statMois = Math.max(reste25Mois * (1 + tauxMixte), 0);
+    const apres = Math.max(reste25Apres * (1 + tauxMixte), 0);
+    const carnetRetenu = poidsCarnet * carnetClient;
+    const statRetenue = (1 - poidsCarnet) * statMois;
 
+    // Part ventilée par la marque du carnet, et part ventilée au prorata du
+    // reste à courir 2025 de chaque marque (`statistique`).
+    let partCarnet = 0, partStat = 0;
     if (override !== undefined) {
       r.proj26 = r2(t26 * (1 + override));
+      partStat = num(r, "proj26") - t26;
       r.proj_override_growth = override;
       r.proj_client_growth = null;
       r.proj_blended_growth = null;
     } else {
-      r.proj26 = r2(t26 + resteEstime);
+      partCarnet = carnetRetenu;
+      partStat = statRetenue + apres;
+      r.proj26 = r2(t26 + partCarnet + partStat);
       r.proj_override_growth = null;
       r.proj_client_growth = t25ytd > 0 ? Math.round(tauxClient * 10000) / 10000 : null;
       r.proj_blended_growth = Math.round(tauxMixte * 10000) / 10000;
+      detail.carnet_mois += carnetClient;
+      detail.carnet_retenu += carnetRetenu;
+      detail.statistique_mois += statMois;
+      detail.statistique_retenue += statRetenue;
+      detail.mois_suivants += apres;
     }
+    r.proj_carnet_mois = r2(carnetClient);
+    r.proj_reste_mois = r2(partCarnet + (override !== undefined ? 0 : statRetenue));
+    r.proj_mois_suivants = r2(override !== undefined ? 0 : apres);
+
+    // ── Projection par marque : la somme retombe exactement sur proj26.
+    const resteM: Record<string, number> = {};
+    for (const m of MARQUES_PROJ) resteM[m] = Math.max(num(r, `${m}25full`) - num(r, `${m}25`), 0);
+    let poids = { ...resteM };
+    let somme = MARQUES_PROJ.reduce((s, m) => s + poids[m], 0);
+    if (!(somme > 0)) {
+      // Aucun reste 2025 : la répartition du CA 2026 du client, à défaut la SV.
+      poids = Object.fromEntries(MARQUES_PROJ.map((m) => [m, Math.max(num(r, `${m}26`), 0)]));
+      somme = MARQUES_PROJ.reduce((s, m) => s + poids[m], 0);
+      if (!(somme > 0)) { poids = { isosign_sv: 1, isomark: 0, sti: 0, rte: 0 }; somme = 1; }
+    }
+    const carnetM = (m: string) => (c && carnetClient > 0 ? (num(c, m) / num(c, "total")) * partCarnet : 0);
+    let exMark = 0;
+    for (const m of MARQUES_PROJ) {
+      const ex = partStat * (poids[m] / somme);
+      if (m === "isomark") exMark = ex;
+      r[`proj_${m}`] = r2(num(r, `${m}26`) + carnetM(m) + ex);
+    }
+    // ISOFLOOR : dans ISOMARK — sa part du carnet, puis sa part du reste ISOMARK.
+    const resteFloor = Math.max(num(r, "isofloor25full") - num(r, "isofloor25"), 0);
+    const exFloor = resteM.isomark > 0 ? exMark * (resteFloor / resteM.isomark) : 0;
+    const carnetFloor = c && carnetClient > 0 ? (num(c, "isofloor") / num(c, "total")) * partCarnet : 0;
+    r.proj_isofloor = r2(num(r, "isofloor26") + carnetFloor + exFloor);
   }
 
   const projection = r2(rows.reduce((s, r) => s + num(r, "proj26"), 0));
-  return { overall26, overall25ytd, overall25full, tauxGlobal, projection };
+  const projectionDetail = {
+    poids_carnet: poidsCarnet,
+    jour,
+    jours_du_mois: joursDuMois,
+    carnet_mois: r2(detail.carnet_mois),
+    carnet_retenu: r2(detail.carnet_retenu),
+    statistique_mois: r2(detail.statistique_mois),
+    statistique_retenue: r2(detail.statistique_retenue),
+    mois_suivants: r2(detail.mois_suivants),
+  };
+  return { overall26, overall25ytd, overall25full, tauxGlobal, projection, projectionDetail };
 }
 
 // ─────────────────────────────────────────────────────────────── autorisation
@@ -1101,8 +1293,11 @@ Deno.serve(async (req: Request) => {
     const moisCourant = Number(cutoff2026.slice(5, 7));
     const mtd26 = monthly.find((m) => m.mois === moisCourant) ?? moisVide(moisCourant);
     let estimation: Record<string, unknown>;
+    let carnet: Map<string, Row> | null = null;
     try {
-      estimation = await estimerFinDeMois({ odoo, categName, prodCateg }, cutoff2026, mtd26, journal);
+      const est = await estimerFinDeMois({ odoo, categName, prodCateg }, cutoff2026, mtd26, journal);
+      estimation = est.publie;
+      carnet = est.carnetParClient;
     } catch (e) {
       estimation = { erreur: e instanceof Error ? e.message : String(e) };
       journal.push(`Estimation de fin de mois impossible : ${estimation.erreur}`);
@@ -1128,8 +1323,13 @@ Deno.serve(async (req: Request) => {
       mois25_complet: mois2025Reel(moisCourant),
       estimation,
     };
-    const sti = await appliquerCorrectionSti(rows, journal);
-    const { overall26, overall25ytd, overall25full, tauxGlobal, projection } = projeter(rows);
+    const sti = await appliquerCorrectionSti(rows, cutoff2025, journal);
+    const { overall26, overall25ytd, overall25full, tauxGlobal, projection, projectionDetail } =
+      projeter(rows, carnet, cutoff2026);
+    journal.push(
+      `Projection : carnet du mois ${projectionDetail.carnet_mois} € (poids ${projectionDetail.poids_carnet}), ` +
+      `mois suivants ${projectionDetail.mois_suivants} €`,
+    );
 
     const marques = ["isosign_sv", "isomark", "sti", "rte"] as const;
     const libelles: Record<string, string> = {
@@ -1150,13 +1350,17 @@ Deno.serve(async (req: Request) => {
       overall_ratio: tauxGlobal,
       fallback_ratio: tauxGlobal,
       overall_projection: projection,
+      // Décomposition du reste à faire : carnet / statistique du mois en cours,
+      // mois suivants (voir `projeter`).
+      projection_detail: projectionDetail,
       k_credibilite: K_CREDIBILITE,
       clip_min: CLIP_MIN,
       clip_max: CLIP_MAX,
       brand_totals_26: totauxMarque("26"),
       brand_totals_25: totauxMarque("25"),
       sti25ytd_correction_total: sti.stiYtdAlloue,
-      sti25ytd_real_total: STI_YTD_2025_REEL,
+      sti25ytd_real_total: sti.stiYtdReel,
+      sti25finmois_real_total: sti.stiFinMoisReel,
       sti25ytd_odoo_total: sti.stiYtdOdooTotal,
       sti25full_correction_total: sti.poidsTotal,
       sti25full_real_total: sti.stiFullReelTotal,
@@ -1181,8 +1385,11 @@ Deno.serve(async (req: Request) => {
       // Flooring & Quartz, tous commerciaux, et hors FM (national hors IDF Nord).
       flooring_quartz: flooringQuartz,
       projection_method:
-        "Par client : CA 2026 à date + MAX(CA 2025 année pleine − CA 2025 à date, 0) × (1 + taux de " +
-        "croissance appliqué au reste à courir). Ce taux combine (i) l'évolution propre du client à date " +
+        "Par client : CA 2026 à date + reste du mois en cours + mois suivants. Reste du mois = p × carnet " +
+        "(prêt à facturer + à livrer d'ici la fin du mois) + (1 − p) × CA 2025 du client sur les mêmes jours " +
+        `× (1 + taux), avec p = jour / jours du mois (${projectionDetail.poids_carnet}). Mois suivants = ` +
+        "CA 2025 du client après la fin du mois × (1 + taux de croissance appliqué au reste à courir). " +
+        "Ce taux combine (i) l'évolution propre du client à date " +
         "quand son historique 2025 à date est suffisant, et (ii) le taux de croissance global observé " +
         `(${(tauxGlobal * 100).toFixed(2)} %) en repli pour les clients à faible historique — poids ` +
         `proportionnel au CA 2025 à date, jusqu'à ${K_CREDIBILITE} € pour une confiance totale au taux ` +

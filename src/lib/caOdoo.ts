@@ -18,7 +18,10 @@ import { supabase } from '@/integrations/supabase/client';
 // pas d'erreur. C'est le signal qu'on utilise pour masquer la tuile : un compte
 // non autorisé ne doit pas même apprendre l'existence des montants.
 //
-// ⚠️ La ventilation de la PROJECTION par marque reprend, à l'identique, celle du
+// ⚠️ Depuis le 23/11/2026 la projection par marque vient de `ca-refresh`
+// (`proj_<marque>` sur chaque ligne) : on ne la recalcule plus. La règle
+// ci-dessous ne sert plus qu'aux jeux publiés avant.
+// La ventilation de la PROJECTION par marque reprenait, à l'identique, celle du
 // tableau de bord CA (`brandFullYearVsProjection`) : la projection d'un client
 // est un total, et le reste à courir se répartit entre ses marques au prorata de
 // leur reste à courir 2025 (année pleine − à date, jamais négatif). C'est la
@@ -33,6 +36,8 @@ type CaRow = {
   isofloor26?: number; isofloor25?: number; isofloor25full?: number;
   sti26?: number; sti25?: number; sti25full?: number;
   rte26?: number; rte25?: number; rte25full?: number;
+  /** Projection par marque calculée par `ca-refresh` (carnet du mois compris). Absente des jeux antérieurs au 23/11/2026. */
+  proj_isosign_sv?: number; proj_isomark?: number; proj_isofloor?: number; proj_sti?: number; proj_rte?: number;
 };
 
 /**
@@ -153,7 +158,24 @@ export type CaJour = {
   erreur?: string;
 };
 
+/**
+ * Décomposition du reste à faire de la projection (`projeter`, `ca-refresh`) :
+ * reste du mois = `poids_carnet` × carnet + (1 − poids) × statistique, puis
+ * mois suivants. Absente des jeux antérieurs au 23/11/2026.
+ */
+export type CaProjectionDetail = {
+  poids_carnet: number;
+  jour: number;
+  jours_du_mois: number;
+  carnet_mois: number;
+  carnet_retenu: number;
+  statistique_mois: number;
+  statistique_retenue: number;
+  mois_suivants: number;
+};
+
 type CaSummary = {
+  projection_detail?: CaProjectionDetail;
   cutoff_2026?: string;
   generated_at_odoo?: string;
   overall_26?: number;
@@ -195,6 +217,8 @@ export type CaOdooData = {
   ca25ytd: number;
   ca25full: number;
   projection: number;
+  /** Décomposition du reste à faire. Absente avant l'actualisation qui la produit. */
+  projectionDetail: CaProjectionDetail | null;
   tauxCroissance: number;
   nbClients: number;
   marques: CaMarque[];
@@ -229,7 +253,20 @@ function ventiler(rows: CaRow[]) {
     a26.sti += n(r.sti26);               a25.sti += n(r.sti25);
     a26.rte += n(r.rte26);               a25.rte += n(r.rte25);
 
-    // Reste à courir déjà projeté par le calcul officiel, au niveau du client.
+    // Depuis le 23/11/2026, `ca-refresh` publie la projection par marque : le
+    // carnet du mois en cours s'y ventile par SA marque (un client sans reste
+    // 2025 n'avait aucune clé de répartition, et la somme des marques ne
+    // retombait plus sur la projection). On la prend telle quelle.
+    if (typeof r.proj_isosign_sv === 'number') {
+      proj.isosign_sv += n(r.proj_isosign_sv);
+      proj.isomark += n(r.proj_isomark);
+      proj.isofloor += n(r.proj_isofloor);
+      proj.sti += n(r.proj_sti);
+      proj.rte += n(r.proj_rte);
+      continue;
+    }
+
+    // Jeu plus ancien : reste à courir déjà projeté par le calcul officiel, au niveau du client.
     const extra = n(r.proj26) - n(r.t26);
     const reste = {
       isosign_sv: Math.max(n(r.isosign_sv25full) - n(r.isosign_sv25), 0),
@@ -304,6 +341,7 @@ function construire(payload: CaPayload): CaOdooData {
     ca25ytd: n(s.overall_25ytd),
     ca25full: n(s.overall_25full),
     projection: n(s.overall_projection),
+    projectionDetail: s.projection_detail && typeof s.projection_detail.poids_carnet === 'number' ? s.projection_detail : null,
     tauxCroissance: n(s.overall_growth_rate),
     nbClients: rows.length,
     marques,

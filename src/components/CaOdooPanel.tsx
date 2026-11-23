@@ -820,6 +820,13 @@ export default function CaOdooPanel() {
           <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Projection fin 2026</p>
           <p className="text-xl font-semibold tabular-nums mt-1 text-primary">{formatMontant(data.projection)}</p>
           <p className="text-xs mt-0.5"><Evolution avant={data.ca25full} apres={data.projection} /> vs 2025 pleine</p>
+          {data.projectionDetail && (
+            <p className="text-[11px] mt-1 text-muted-foreground leading-snug">
+              dont reste du mois {formatMontant(data.projectionDetail.carnet_retenu + data.projectionDetail.statistique_retenue)}
+              {' '}(carnet {formatMontant(data.projectionDetail.carnet_mois)} pesé à {Math.round(data.projectionDetail.poids_carnet * 100)} %)
+              {data.projectionDetail.mois_suivants > 0 && <> · mois suivants {formatMontant(data.projectionDetail.mois_suivants)}</>}
+            </p>
+          )}
         </div>
       </div>
 
@@ -897,14 +904,24 @@ export default function CaOdooPanel() {
               marque — ne pas les additionner : signalisation verticale + STI + RTE = ISOSIGN.
             </p>
             <p>
-              <b className="text-foreground">Projection.</b> Calculée par client : CA 2026 à date + reste à
-              courir estimé (CA 2025 année pleine − CA 2025 à date, jamais négatif, avec la pondération
-              mensuelle propre à chaque client), ajusté par un taux de croissance mixte combinant
-              l'évolution du client à date — pondérée par sa crédibilité selon son historique 2025 — et le
-              taux de croissance global observé ({formatPct(data.tauxCroissance)}), borné pour rester
-              réaliste. Jamais en-dessous du CA déjà facturé. La projection par marque répartit le reste à
-              courir du client au prorata de celui de chaque marque, pour que la somme retombe exactement
-              sur la projection globale.
+              <b className="text-foreground">Projection.</b> Calculée par client : CA 2026 à date + reste du
+              mois en cours + mois suivants. Le <b className="text-foreground">reste du mois</b> mêle le carnet
+              (prêt à facturer + à livrer d'ici la fin du mois, comme l'estimation de fin de mois) et la
+              statistique (CA 2025 du client sur les mêmes jours) ; le poids du carnet suit le mois — jour ÷
+              jours du mois{data.projectionDetail ? `, soit ${Math.round(data.projectionDetail.poids_carnet * 100)} % au ${data.projectionDetail.jour}` : ''} —
+              car en début de mois il ne voit pas encore les commandes à venir. Chaque actualisation
+              tient donc compte des nouvelles commandes. Les <b className="text-foreground">mois suivants</b>{' '}
+              reprennent le CA 2025 du client après la fin du mois. Statistique et mois suivants sont
+              ajustés par un taux de croissance mixte combinant l'évolution du client à date — pondérée par
+              sa crédibilité selon son historique 2025 — et le taux de croissance global observé
+              ({formatPct(data.tauxCroissance)}), borné pour rester réaliste. Jamais en-dessous du CA déjà
+              facturé. La projection par marque ventile le carnet par sa marque et le reste au prorata du
+              reste à courir de chaque marque : la somme retombe exactement sur la projection globale.
+            </p>
+            <p>
+              <b className="text-foreground">STI 2025 à date.</b> Mois complets du rapport commercial + le mois
+              en cours au prorata des jours, à la date d'arrêté. (Jusqu'au 23/11/2026, il restait figé au
+              30/09 : le STI d'octobre passait pour un reste à courir et gonflait la projection.)
             </p>
             <p>
               <b className="text-foreground">Actualisation.</b> Les chiffres proviennent de la dernière
