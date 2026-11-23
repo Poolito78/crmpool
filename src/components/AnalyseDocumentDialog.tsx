@@ -127,6 +127,7 @@ import {
 } from '@/lib/odooAchat';
 import { useDevisFournisseur, type DevisFournisseur } from '@/lib/devisFournisseur';
 import { useConcurrents } from '@/lib/concurrents';
+import { concurrentDuDocument } from '@/lib/concurrentDuDocument';
 import {
   rapprocherClient, clientsParPersonne, motsFrequentsDuCatalogue, type CandidatClient,
 } from '@/lib/rapprochementClient';
@@ -1018,6 +1019,18 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const { concurrents: concurrentsVeille, addConcurrent, addProduit: addProduitConcurrent } = useConcurrents();
   /** Concurrent choisi ; '' = à choisir, '__nouveau' = créé sous le nom du document. */
   const [dcConcurrentId, setDcConcurrentId] = useState('');
+  /* Lus par l'analyse (useCallback) : toujours la liste du moment. */
+  const concurrentsRef = useRef(concurrentsVeille);
+  concurrentsRef.current = concurrentsVeille;
+  const fournisseursRef = useRef(fournisseurs);
+  fournisseursRef.current = fournisseurs;
+  /**
+   * Un devis ou un tarif glissé AILLEURS que sur la carte Veille concurrence :
+   * son émetteur est-il un concurrent suivi ? Alors il part à la veille
+   * (`concurrentDuDocument` : nom lu, sinon en-tête ; jamais un fournisseur).
+   */
+  const concurrentReconnu = (texte: string, nom?: string) =>
+    concurrentDuDocument(texte, nom, concurrentsRef.current, fournisseursRef.current);
   const [dcNom, setDcNom] = useState('');
   /** Lignes décochées (rang) ; prix corrigés à la main (rang → texte). */
   const [dcExclues, setDcExclues] = useState<Record<number, boolean>>({});
@@ -1671,7 +1684,10 @@ const [contratOdoo, setContratOdoo] = useState<
     dfTouche.current = false;
     chercheFaitePour.current = null;
     setOdooCible(null); setOdooResultats(null); setOdooTerme('');
-    const impose = typeImposeRef.current || undefined;
+    let impose = typeImposeRef.current || undefined;
+    /** Concurrent reconnu par son nom : le document a été classé en devis concurrent. */
+    let concurrentDetecte: { id: string; nom: string } | undefined;
+    setDcConcurrentId('');
     signaturesRef.current = []; souvenirRef.current = undefined; texteSourceRef.current = '';
     try {
       let analysis: DocumentAnalysis;
@@ -1787,7 +1803,18 @@ const [contratOdoo, setContratOdoo] = useState<
             grille?.size ? (c: string) => grille.has(c.toUpperCase()) : undefined, 'ensemble'));
         } else {
           const indice = await rappelerEmetteur([texteCtx, ...pages].join('\n'));
-          analysis = await analyserDocument({ type: 'pdf', buffer: await principal.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, openrouterKey, impose, indice);
+          /* L'en-tête du PDF nomme un concurrent suivi : devis ou tarif
+             concurrent, imposé AVANT l'IA — elle extrait alors selon ce type
+             (prix nets, tarif sans quantité) et découpe un long document. */
+          if (!impose) {
+            concurrentDetecte = concurrentReconnu(pages[0] ?? '');
+            if (concurrentDetecte) impose = 'devis_concurrent';
+          }
+          analysis = await analyserDocument({ type: 'pdf', buffer: await principal.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, openrouterKey, impose, indice,
+            /* Long devis/tarif concurrent lu en morceaux : on montre où en est la lecture. */
+            (fait, total) => fait < total
+              ? toast.loading(`Document long découpé : morceau ${fait + 1}/${total} en lecture…`, { id: 'analyse-morceaux' })
+              : toast.success(`Document long lu en ${total} morceaux`, { id: 'analyse-morceaux' }));
           /* PLAN DE VOIRIE EN IMAGE. Un « Print To PDF » de plan d'exécution
              n'a ni texte ni calque : l'IA n'y lisait que le mail (« voici les
              7 panneaux ») et rendait une demande sans ligne. Les panneaux se
@@ -1850,6 +1877,17 @@ const [contratOdoo, setContratOdoo] = useState<
         toast.error('Glissez un PDF ou collez du texte'); return;
       }
       analysis = redresserAnalyse(analysis, impose);
+      /* Après coup : l'émetteur lu par l'IA est un concurrent suivi. Le
+         document passe à la veille ; un texte (mail du client) ne se juge
+         que sur ce nom, jamais sur un concurrent simplement cité. */
+      if (!impose && (['devis_fournisseur', 'devis_client', 'autre'] as TypeDocument[]).includes(analysis.typeDocument)) {
+        concurrentDetecte = concurrentReconnu('', analysis.nomPartenaire);
+        if (concurrentDetecte) analysis = { ...analysis, typeDocument: 'devis_concurrent' };
+      }
+      if (concurrentDetecte && analysis.typeDocument === 'devis_concurrent') {
+        setDcConcurrentId(concurrentDetecte.id);
+        toast.info(`Document de ${concurrentDetecte.nom}, concurrent suivi : ses prix vont à la veille concurrence. « Corriger le type » sinon.`);
+      }
       /* « 1 160,57 € » lu 160,57 : le texte source rend le millier perdu. */
       const milliers = redresserMilliers(analysis, texteSourceRef.current || texteCtx);
       if (milliers) toast.info(`${milliers} prix relu${milliers > 1 ? 's' : ''} sur le document : millier oublié par la lecture.`);

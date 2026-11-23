@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('pdfjs-dist', () => ({ GlobalWorkerOptions: {}, getDocument: vi.fn() }));
 vi.mock('./modelesIA', () => ({ appelerGemini: vi.fn(), texteGemini: vi.fn() }));
 
-import { verifierTotaux, nombreLu, sansFauxConseille, redresserMilliers, lignesParPosition, avecKits, type DocumentAnalysis } from './analyseDocument';
+import { verifierTotaux, nombreLu, sansFauxConseille, redresserMilliers, lignesParPosition, avecKits, decouperTexte, fusionnerAnalyses, type DocumentAnalysis } from './analyseDocument';
 
 const doc = (a: Partial<DocumentAnalysis>): DocumentAnalysis =>
   ({ typeDocument: 'devis_fournisseur', lignes: [], ...a });
@@ -142,5 +142,38 @@ describe('avecKits — seul un devis reçu se regroupe', () => {
 
   it('laisse les autres documents tels quels', () => {
     expect(avecKits(doc({ typeDocument: 'commande_client', lignes })).lignes).toHaveLength(2);
+  });
+});
+
+describe('decouperTexte', () => {
+  it('coupe à la fin d’une ligne, sans rien perdre', () => {
+    const lignes = Array.from({ length: 300 }, (_, i) => `Article ${i} — prix ${i},00 €`);
+    const morceaux = decouperTexte(lignes.join('\n'), 1000);
+    expect(morceaux.length).toBeGreaterThan(5);
+    expect(morceaux.every(m => m.length <= 1000)).toBe(true);
+    expect(morceaux.join('\n')).toBe(lignes.join('\n'));
+  });
+
+  it('coupe net une ligne plus longue qu’un morceau', () => {
+    const morceaux = decouperTexte('x'.repeat(2500), 1000);
+    expect(morceaux.map(m => m.length)).toEqual([1000, 1000, 500]);
+  });
+
+  it('un texte court reste entier', () => {
+    expect(decouperTexte('a\nb', 1000)).toEqual(['a\nb']);
+  });
+});
+
+describe('fusionnerAnalyses', () => {
+  it('en-tête du premier morceau, total du dernier, ligne à cheval gardée une fois', () => {
+    const l = (reference: string, prix: number) => ({ reference, description: `Art ${reference}`, quantite: 1, prixUnitaireHT: prix });
+    const r = fusionnerAnalyses([
+      doc({ typeDocument: 'devis_concurrent', nomPartenaire: 'LACROIX', numeroDocument: 'T-2026', lignes: [l('A1', 10), l('A2', 20)] }),
+      doc({ typeDocument: 'devis_concurrent', lignes: [l('A2', 20), l('A3', 30)], totalHT: 60 }),
+    ]);
+    expect(r.nomPartenaire).toBe('LACROIX');
+    expect(r.numeroDocument).toBe('T-2026');
+    expect(r.totalHT).toBe(60);
+    expect(r.lignes.map(x => x.reference)).toEqual(['A1', 'A2', 'A3']);
   });
 });

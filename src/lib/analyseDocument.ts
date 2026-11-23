@@ -564,9 +564,125 @@ export async function analyserDocument(
   typeImpose?: TypeDocument,
   /** Ce que la mémoire sait de l'émetteur (`memoireDocuments.ts`), dit au modèle. */
   indice?: string,
+  /** Document découpé : appelé après chaque morceau lu (fait, total). */
+  onMorceau?: (fait: number, total: number) => void,
 ): Promise<DocumentAnalysis> {
+  if (typeImpose === 'devis_concurrent') {
+    const decoupe = await analyserEnMorceaux(input, apiKey, openrouterKey, typeImpose, indice, onMorceau);
+    if (decoupe) return decoupe;
+  }
   const analyse = await analyserSansType(input, apiKey, openrouterKey, typeImpose, indice);
   return avecKits(typeImpose ? { ...analyse, typeDocument: typeImpose } : analyse);
+}
+
+/* ── DOCUMENT LONG : LU EN MORCEAUX ───────────────────────────────────────
+   Un tarif concurrent de vingt pages dépasse de loin les 6 000 signes que
+   le modèle reçoit : tout ce qui suivait était tronqué, et les prix des
+   dernières pages n'arrivaient jamais dans la veille. Le texte se découpe
+   donc à la ligne, chaque morceau est lu seul, et les lignes se rejoignent. */
+
+/** Taille d'un morceau : laisse la place à la consigne, au type et au mail. */
+export const TAILLE_MORCEAU = 4500;
+/** Au-delà, le reste du document est signalé, pas lu (≈ 45 pages de tarif). */
+export const MORCEAUX_MAX = 20;
+
+/** Coupe un texte en morceaux d'au plus `max` signes, à la fin d'une ligne. Fonction PURE. */
+export function decouperTexte(texte: string, max = TAILLE_MORCEAU): string[] {
+  const morceaux: string[] = [];
+  let courant = '';
+  const pousser = () => { if (courant.trim()) morceaux.push(courant); courant = ''; };
+  for (const ligne of texte.split('\n')) {
+    /* Une ligne plus longue qu'un morceau (texte sans retour) : coupée net. */
+    for (let i = 0; i < Math.max(ligne.length, 1); i += max) {
+      const bout = ligne.slice(i, i + max);
+      if (courant && courant.length + 1 + bout.length > max) pousser();
+      courant = courant ? `${courant}\n${bout}` : bout;
+    }
+  }
+  pousser();
+  return morceaux;
+}
+
+/**
+ * Rassemble les lectures des morceaux d'un même document. Fonction PURE.
+ * L'en-tête (numéro, émetteur, dates) vient du premier morceau qui le donne ;
+ * les totaux, écrits en fin de document, du dernier. Une ligne lue deux fois
+ * — à cheval sur deux morceaux — n'est gardée qu'une fois.
+ */
+export function fusionnerAnalyses(parts: DocumentAnalysis[]): DocumentAnalysis {
+  const premier = <K extends keyof DocumentAnalysis>(k: K) => parts.find(p => p[k] != null && p[k] !== '')?.[k];
+  const dernier = <K extends keyof DocumentAnalysis>(k: K) => [...parts].reverse().find(p => p[k] != null)?.[k];
+  const vues = new Set<string>();
+  const lignes: LigneAnalysee[] = [];
+  for (const l of parts.flatMap(p => p.lignes)) {
+    const cle = [l.reference, l.description, l.prixUnitaireHT]
+      .map(v => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ')).join('|');
+    if (vues.has(cle)) continue;
+    vues.add(cle);
+    lignes.push(l);
+  }
+  const notes = parts.map(p => p.notes?.trim()).filter((n): n is string => !!n);
+  return {
+    typeDocument: parts[0]?.typeDocument ?? 'autre',
+    numeroDocument: premier('numeroDocument'),
+    nomPartenaire: premier('nomPartenaire'),
+    referencePartenaire: premier('referencePartenaire'),
+    dateDocument: premier('dateDocument'),
+    dateLivraisonPrevue: premier('dateLivraisonPrevue'),
+    dateEcheance: premier('dateEcheance'),
+    totalHT: dernier('totalHT'),
+    totalTTC: dernier('totalTTC'),
+    fraisPortHT: dernier('fraisPortHT'),
+    poidsTotalKg: dernier('poidsTotalKg'),
+    notes: notes.length ? [...new Set(notes)].join(' · ') : undefined,
+    lignes,
+  };
+}
+
+/** Lit un document trop long morceau par morceau ; null s'il tient en un seul appel. */
+async function analyserEnMorceaux(
+  input:
+    | { type: 'pdf'; buffer: ArrayBuffer; texteSupplementaire?: string }
+    | { type: 'text'; texte: string },
+  apiKey: string,
+  openrouterKey: string | undefined,
+  typeImpose: TypeDocument,
+  indice: string | undefined,
+  onMorceau?: (fait: number, total: number) => void,
+): Promise<DocumentAnalysis | null> {
+  const texte = input.type === 'pdf' ? await extraireTextePDF(input.buffer) : input.texte;
+  if (texte.length <= 6000) return null;
+  const tous = decouperTexte(texte);
+  const morceaux = tous.slice(0, MORCEAUX_MAX);
+  const mail = input.type === 'pdf' && input.texteSupplementaire
+    ? `=== EMAIL ===\n${tronquer(input.texteSupplementaire, 1200)}\n\n=== PDF ===\n` : '';
+  const parts: DocumentAnalysis[] = [];
+  const rates: number[] = [];
+  for (let i = 0; i < morceaux.length; i++) {
+    const consigne = `MORCEAU ${i + 1}/${morceaux.length} d'un long document découpé : extrais `
+      + `uniquement les lignes de ce morceau. L'en-tête (émetteur, numéro, date) peut se trouver `
+      + `dans un autre morceau : mets null si tu ne le vois pas.`;
+    try {
+      parts.push(await analyserSansType(
+        { type: 'text', texte: `${consigne}\n\n${i === 0 ? mail : ''}${morceaux[i]}` },
+        apiKey, openrouterKey, typeImpose, indice));
+    } catch (e) {
+      console.warn(`[analyse] morceau ${i + 1}/${morceaux.length} illisible :`, e);
+      rates.push(i + 1);
+    }
+    onMorceau?.(i + 1, morceaux.length);
+  }
+  if (!parts.length) throw new Error("Aucun morceau du document n'a pu être lu. Réessayez plus tard.");
+  const fusion = fusionnerAnalyses(parts);
+  const avertissements = [
+    rates.length ? `Morceau${rates.length > 1 ? 'x' : ''} ${rates.join(', ')}/${morceaux.length} non lu${rates.length > 1 ? 's' : ''} (IA indisponible) : lignes manquantes possibles.` : '',
+    tous.length > morceaux.length ? `Document très long : seuls les ${morceaux.length} premiers morceaux sur ${tous.length} ont été lus.` : '',
+  ].filter(Boolean);
+  return {
+    ...fusion,
+    typeDocument: typeImpose,
+    notes: [fusion.notes, ...avertissements].filter(Boolean).join(' · ') || undefined,
+  };
 }
 
 /** Devis reçu : les lignes sans prix rejoignent le kit qui les précède (`kitFournisseur.ts`). */
