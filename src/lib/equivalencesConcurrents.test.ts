@@ -124,7 +124,7 @@ describe('applicateurPour (tarif net applicateur ISOMARK du 15/07/2026)', () => 
   it('unités du concurrent ramenées à celles du tarif', () => {
     expect(uniteComparable('Kg')).toBe('kg');
     expect(uniteComparable('Ltr')).toBe('L');
-    expect(uniteComparable('u')).toBeUndefined();
+    expect(uniteComparable('seau')).toBeUndefined();
   });
 
   it('écart : NEVA 2,85 €/kg face à SANCY 2,95 €/kg = +4 %', () => {
@@ -135,5 +135,52 @@ describe('applicateurPour (tarif net applicateur ISOMARK du 15/07/2026)', () => 
   it('les articles au tarif passent devant ceux qui n’y sont pas', () => {
     const refs = equivalentsPour('3SRoute™ Quasar 25.00KG', index)!.articles.map(a => a.reference);
     expect(refs.indexOf('PSTSANCY25')).toBeLessThan(refs.indexOf('PSTTEMPO25P ISO'));
+  });
+});
+
+describe('tarif H2 (préfabriqués, BEV, BAO, pavés)', () => {
+  const h2 = [
+    art('THERMOCDP500500', 'LIGNES "CEDEZ LE PASSAGE" 500x500 THERMOPLASTIQUE (LOT DE 10)', 'ISOMARK / H2'),
+    art('THERMOFLE1600300', 'FLECHES TOUT DROIT 1600x300 THERMOPLASTIQUE (LOT DE 5)', 'ISOMARK / H2'),
+    art('THERMOLASER', 'THERMOMETRE LASER (1599562)', 'ISOMARK / FLOORING / ACCESSOIRES'),
+    art('BEVGRANITE', 'BEV GRANITE 600x400  BLANCHE', 'ISOMARK / H2'),
+    art('GUIDGRIP4BLANC', "GUID'GRIP4 BLANC 1000x215 A COLLER (PAR 15)", 'ISOMARK / H2'),
+    art('CLOUBRI100', 'CLOUS INOX ASPECT BRILLANT DIA 100', 'ISOMARK / H2'),
+    art('CLOUACIERZB', 'CLOUS PODOTACTILES ACIER ZINGUE BLANC A SCELLER Ø25 (BOITE DE 250)', 'ISOMARK / H2'),
+    art('PAVPREF152030', 'm² Pavés préfabriqués à coller 15x20 (<30m²)', 'ISOMARK / H2'),
+  ];
+  const idx = indexEquivalences(h2);
+
+  it('cédez-le-passage 500 x 500 : 5,95 € l’unité, carton de 10 à 59,50 €', () => {
+    const r = applicateurPour(h2[0])!;
+    expect([r.prixUnite, r.prixConditionnement, r.unite, r.code]).toEqual([5.95, 59.5, 'u', '73351']);
+  });
+
+  it('un PREMARK se compare à nos préfabriqués thermo, jamais au thermomètre laser', () => {
+    const refs = equivalentsPour('PREMARK™ Cédez-le-passage 500x500', idx)!.articles.map(a => a.reference);
+    expect(refs).toContain('THERMOCDP500500');
+    expect(refs).not.toContain('THERMOLASER');
+  });
+
+  it('TacPad / BEV → BEV, BAO, clous podotactiles ; pas les clous de chaussée', () => {
+    const refs = equivalentsPour('TacPad™ BEV 600x400', idx)!.articles.map(a => a.reference);
+    expect(refs).toEqual(expect.arrayContaining(['BEVGRANITE', 'GUIDGRIP4BLANC', 'CLOUACIERZB']));
+    expect(refs).not.toContain('CLOUBRI100');
+  });
+
+  it('pavés synthétiques au m²', () => {
+    expect(familleConcurrente('PaveSmart™ pavés à coller 15x20')?.libelle).toBe('Pavés synthétiques à coller');
+    expect(applicateurPour(h2[7])).toMatchObject({ prixUnite: 47.5, unite: 'm²' });
+  });
+
+  it('lettres de 250 : les 36 références au même prix', () => {
+    expect(applicateurPour(art('THERMO250Q', 'LETTRE Q', 'ISOMARK / H2'))?.prixUnite).toBe(9.3);
+    expect(applicateurPour(art('THERMO250C7', 'CHIFFRE 7', 'ISOMARK / H2'))?.prixUnite).toBe(9.3);
+  });
+
+  it('unités « U », « pce », « m2 »', () => {
+    expect(uniteComparable('U')).toBe('u');
+    expect(uniteComparable('pce')).toBe('u');
+    expect(uniteComparable('m2')).toBe('m²');
   });
 });

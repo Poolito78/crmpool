@@ -21,7 +21,7 @@
  * Fonctions PURES.
  */
 import { designationProduit, type Produit } from './store';
-import { tarifApplicateurDe, DATE_TARIF_ISOMARK, type PrixTarifApplicateur } from './tarifIsomarkApplicateur.donnees';
+import { tarifApplicateurDe, DATE_TARIF_ISOMARK, type PrixTarifApplicateur, type UniteTarif } from './tarifIsomarkApplicateur.donnees';
 
 interface Famille {
   cle: string;
@@ -68,12 +68,22 @@ const FAMILLES: Famille[] = [
   {
     cle: 'prefa', libelle: 'Préfabriqué thermocollé',
     concurrent: /\b(premark|t ?sign|decomark|advia|ribline|stamark|prefabrique\w*|thermocoll\w*)\b/,
-    notre: (ref, d, cat) => /PREFA THERMO/.test(cat) || /^(MARQT|LIGNE)/.test(ref) || /THERMOCOLL/.test(d),
+    /* Lignes, rouleaux, flèches, lettres, sigles et signaux thermo du tarif H2.
+       THERMOLASER (un thermomètre, FLOORING) n'en est pas : la catégorie H2 tranche. */
+    notre: (ref, d, cat) => /PREFA THERMO/.test(cat) || /THERMOCOLL/.test(d)
+      || (/\bH2\b/.test(cat) && /^(MARQT|LIGNE|THERMO|ROULEAU|PT)/.test(ref)),
   },
   {
     cle: 'podotactile', libelle: 'Bande podotactile / guidage',
-    concurrent: /\b(tacpad|tac ?guide?|podotactile\w*|eveil de vigilance|bande de guidage)\b/,
-    notre: ref => /^(BEV|GUIDGRIP|CLOU)/.test(ref),
+    concurrent: /\b(tacpad|tac ?guide?|podotactile\w*|eveil de vigilance|bande de guidage|bev|bao)\b/,
+    /* BEV, BAO, Guid'MARK / Guid'GRIP, Iso'GUIDE / Iso'CLOU, clous podotactiles —
+       pas les clous de chaussée Ø 80 à 200. */
+    notre: (ref, d) => /^(BEV|BAO|GUID|IZI)/.test(ref) || (/^CLOU/.test(ref) && /PODOTACT|ACIER|A2|A4/.test(`${ref} ${d}`)),
+  },
+  {
+    cle: 'paves', libelle: 'Pavés synthétiques à coller',
+    concurrent: /\b(pave ?smart|paves? (synthetiques?|prefabriques?|a coller|resine)|bordures? (en )?resine)\b/,
+    notre: (ref, d) => /^PAVPREF/.test(ref) || /^ECLIPSE/.test(ref) || /BORDURE.*RESINE/.test(d),
   },
   {
     cle: 'gravillonnee', libelle: 'Résine gravillonnée',
@@ -204,10 +214,12 @@ export function applicateurPour(p: Produit): (PrixTarifApplicateur & { source: s
 }
 
 /** L'unité d'un prix concurrent ramenée à celle du tarif (« Kg » → kg, « Ltr » → L). */
-export function uniteComparable(unite?: string): 'kg' | 'L' | undefined {
-  const u = (unite || '').trim().toLowerCase();
+export function uniteComparable(unite?: string): UniteTarif | undefined {
+  const u = (unite || '').trim().toLowerCase().replace(/\.$/, '');
   if (/^(kg|kilo)/.test(u)) return 'kg';
   if (/^(l|ltr|lt|litre|liter)s?$/.test(u)) return 'L';
+  if (/^(m2|m²|m\^2)$/.test(u)) return 'm²';
+  if (/^(u|un|unit[ée]?|pce|pi[eè]ce|pc|ex)s?$/.test(u)) return 'u';
   return undefined;
 }
 
