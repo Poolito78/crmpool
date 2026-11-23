@@ -1,12 +1,14 @@
 import * as XLSX from 'xlsx';
 import type { CaOdooData, CaMois, CaFlooringQuartz } from '@/lib/caOdoo';
+import { lignesVariable, moisVariable, TAUX_ISOSIGN, TAUX_ISOMARK, TAUX_REMUNERATION_FM } from '@/lib/remunerationFM';
 
 // ─── Extraction Excel de la tuile « CA Odoo » ───────────────────────────────
 //
 // Reprend, onglet par onglet, ce que la tuile affiche : marques, réalisé
 // mensuel, puis « CA ISOFLOOR » — le tableau croisé Flooring & Quartz d'Odoo
 // (commerciaux × mois) suivi du CA national hors FM — et « Rémunération FM »
-// (hors FM × TAUX_REMUNERATION_FM, en formule).
+// (ISOSIGN 0,5 %, ISOMARK 1 %, Flooring hors FM 1 %, en formules — taux dans
+// `remunerationFM.ts`).
 //
 // ⚠️ ON NE RECALCULE RIEN. Les montants sont ceux du jeu publié par
 // `ca-refresh` ; seuls les cumuls de colonnes sont refaits, par simple somme
@@ -110,36 +112,70 @@ function ongletIsofloor(fq: CaFlooringQuartz | null) {
 }
 
 /**
- * Taux de rémunération de François MOUHOT sur le CA Flooring & Quartz national
- * hors FM : 2 % (règle du 11/10/2026, confirmée après un passage à 1 % —
- * 5 910,51 € en septembre → 118,21 €).
+ * Rémunération variable, comme le classeur de l'utilisateur : par mois, le
+ * récap Flooring & Quartz (Total, part F. MOUHOT, hors FM × taux Flooring),
+ * puis CA ISOSIGN × 0,5 % et CA ISOMARK × 1 % du portefeuille FM, et le total
+ * variable. Sous le tableau, le bloc « Total Variable {mois} » du dernier mois
+ * complet, avec les TAUX dans la colonne F : toutes les rémunérations sont des
+ * FORMULES qui les lisent — changer un taux ou un montant recalcule tout.
+ * Un mois au hors FM négatif (avoirs) donne une part négative : on ne la
+ * plafonne pas, c'est au lecteur d'en décider.
  */
-export const TAUX_REMUNERATION_FM = 0.02;
-
-/**
- * Récap mensuel : Total Flooring & Quartz, part F. MOUHOT, CA national hors FM
- * et rémunération brute = hors FM × TAUX_REMUNERATION_FM. La rémunération part en FORMULE
- * (`=D×taux`) : corriger un montant dans l'Excel la recalcule. Un mois au hors
- * FM négatif (avoirs) donne une rémunération négative — on ne la plafonne pas,
- * c'est au lecteur d'en décider.
- */
-function ongletRemuneration(fq: CaFlooringQuartz | null) {
-  if (!fq || 'erreur' in fq) {
-    const raison = fq && 'erreur' in fq ? fq.erreur : 'relancer l\'actualisation.';
-    return feuille([['Rémunération FM — Flooring & Quartz'], [`Récap indisponible : ${raison}`]], [90]);
+function ongletRemuneration(d: CaOdooData) {
+  const fq = d.flooringQuartz;
+  const fqOk = fq && !('erreur' in fq) ? fq : null;
+  const lignesV = lignesVariable(d.mois, fq);
+  const fqParMois = new Map((fqOk?.mois ?? []).map(m => [m.mois, m]));
+  if (!lignesV.length) {
+    return feuille([['Rémunération variable FM'], ['Réalisé mensuel indisponible : relancer l\'actualisation.']], [90]);
   }
   const debut = 4; // première ligne de mois (numérotation Excel)
-  const fin = debut + fq.mois.length - 1;
+  const fin = debut + lignesV.length - 1;
+  const cumul = fin + 1;
+  const tIsosign = cumul + 2, tIsomark = tIsosign + 1, tFlooring = tIsomark + 1, tTotal = tFlooring + 1;
+  const moisV = moisVariable(d.cutoff);
+  const ligneMoisV = moisV ? lignesV.findIndex(l => l.mois === moisV) : -1;
+  const rV = ligneMoisV >= 0 ? debut + ligneMoisV : null;
+  const lv = ligneMoisV >= 0 ? lignesV[ligneMoisV] : null;
+  const arrete = d.cutoff ? d.cutoff.split('-').reverse().join('/') : '—';
+
   const lignes: Cellule[][] = [
-    [`Détail ISOFLOOR / quartz & granit par mois — ${fq.annee}, du 01/01 au ${fq.cutoff.split('-').reverse().join('/')}`],
+    [`Rémunération variable FM — ${d.cutoff?.slice(0, 4) ?? ''}, du 01/01 au ${arrete}`],
     [],
-    ['Mois', 'Total isofloor', 'F. MOUHOT', 'Hors FM CA NATIONAL', `RÉMUNÉRATION BRUT FM (${TAUX_REMUNERATION_FM * 100} %)`],
-    ...fq.mois.map(m => [NOMS_MOIS[m.mois - 1], m.total, m.fm, m.hors_fm, m.hors_fm * TAUX_REMUNERATION_FM] as Cellule[]),
-    ['Cumul', ...[1, 2, 3, 4].map(j => fq.mois.reduce((a, m) => a + [m.total, m.fm, m.hors_fm, m.hors_fm * TAUX_REMUNERATION_FM][j - 1], 0))],
+    ['Mois', 'Total isofloor', 'F. MOUHOT', 'Hors FM CA NATIONAL', 'RÉMUNÉRATION BRUT FM', 'CA ISOSIGN', '% ISOSIGN', 'CA ISOMARK', '% ISOMARK', 'TOTAL VARIABLE'],
+    ...lignesV.map(l => {
+      const f = fqParMois.get(l.mois);
+      return [NOMS_MOIS[l.mois - 1], f?.total ?? null, f?.fm ?? null, l.horsFm, l.varFlooring, l.isosign, l.varIsosign, l.isomark, l.varIsomark, l.total] as Cellule[];
+    }),
+    ['Cumul', ...(['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'] as const).map(() => 0)],
+    [],
+    [null, null, null, '% ISOSIGN', lv?.varIsosign ?? null, TAUX_ISOSIGN],
+    [null, null, null, '% ISOMARK', lv?.varIsomark ?? null, TAUX_ISOMARK],
+    [null, null, null, '% Flooring Hors secteur (National)', lv?.varFlooring ?? null, TAUX_REMUNERATION_FM],
+    [null, null, null, `Total Variable ${moisV ? NOMS_MOIS[moisV - 1].toUpperCase() : '—'}`, lv?.total ?? null],
   ];
-  const ws = feuille(lignes, [14, 18, 18, 22, 30]);
-  for (let r = debut; r <= fin; r++) (ws[`E${r}`] as XLSX.CellObject).f = `D${r}*${TAUX_REMUNERATION_FM}`;
-  for (const col of ['B', 'C', 'D', 'E']) (ws[`${col}${fin + 1}`] as XLSX.CellObject).f = `SUM(${col}${debut}:${col}${fin})`;
+  if (!fqOk) lignes.push([], [`Récap Flooring & Quartz indisponible : ${fq && 'erreur' in fq ? fq.erreur : 'relancer l\'actualisation.'} — part Flooring comptée à 0.`]);
+
+  const pct = new Set([`F${tIsosign}`, `F${tIsomark}`, `F${tFlooring}`]);
+  const ws = feuille(lignes, [14, 16, 16, 34, 16, 16, 14, 16, 14, 16], pct);
+  const formule = (adr: string, f: string) => { const c = ws[adr] as XLSX.CellObject | undefined; if (c) c.f = f; };
+  for (let r = debut; r <= fin; r++) {
+    formule(`E${r}`, `D${r}*$F$${tFlooring}`);
+    formule(`G${r}`, `F${r}*$F$${tIsosign}`);
+    formule(`I${r}`, `H${r}*$F$${tIsomark}`);
+    formule(`J${r}`, `E${r}+G${r}+I${r}`);
+  }
+  for (const col of ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']) {
+    const c = ws[`${col}${cumul}`] as XLSX.CellObject;
+    c.v = lignes.slice(debut - 1, fin).reduce((a, l) => a + (typeof l['ABCDEFGHIJ'.indexOf(col)] === 'number' ? (l['ABCDEFGHIJ'.indexOf(col)] as number) : 0), 0);
+    c.f = `SUM(${col}${debut}:${col}${fin})`;
+  }
+  if (rV) {
+    formule(`E${tIsosign}`, `G${rV}`);
+    formule(`E${tIsomark}`, `I${rV}`);
+    formule(`E${tFlooring}`, `E${rV}`);
+    formule(`E${tTotal}`, `SUM(E${tIsosign}:E${tFlooring})`);
+  }
   return ws;
 }
 
@@ -149,6 +185,6 @@ export function exporterCaOdoo(d: CaOdooData) {
   XLSX.utils.book_append_sheet(wb, ongletMarques(d), 'Marques');
   XLSX.utils.book_append_sheet(wb, ongletMensuel(d), 'Réalisé mensuel');
   XLSX.utils.book_append_sheet(wb, ongletIsofloor(d.flooringQuartz), 'CA ISOFLOOR');
-  XLSX.utils.book_append_sheet(wb, ongletRemuneration(d.flooringQuartz), 'Rémunération FM');
+  XLSX.utils.book_append_sheet(wb, ongletRemuneration(d), 'Rémunération FM');
   XLSX.writeFile(wb, `CA_Odoo_${d.cutoff ?? new Date().toISOString().slice(0, 10)}.xlsx`);
 }

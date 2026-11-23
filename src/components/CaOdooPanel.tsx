@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Loader2, Download } from 'lucide-react';
 import { exporterCaOdoo } from '@/lib/exportCaOdoo';
+import { lignesVariable, moisVariable, TAUX_ISOSIGN, TAUX_ISOMARK, TAUX_REMUNERATION_FM } from '@/lib/remunerationFM';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { formatMontant } from '@/lib/store';
@@ -553,6 +554,93 @@ function RecapFlooringQuartz({ fq }: { fq: CaFlooringQuartz | null }) {
   );
 }
 
+const tauxTexte = (t: number) => `${(t * 100).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} %`;
+
+/**
+ * Rémunération variable FM, comme le classeur « Total Variable » : CA ISOSIGN
+ * × 0,5 %, CA ISOMARK × 1 % (portefeuille FM), CA Flooring national hors FM
+ * × 1 %. Taux et calcul dans `remunerationFM.ts` ; on ne recalcule aucun CA.
+ */
+function RemunerationVariable({ mois, fq, cutoff }: { mois: CaMois[]; fq: CaFlooringQuartz | null; cutoff: string | null }) {
+  const lignes = lignesVariable(mois, fq);
+  if (!lignes.length) return null;
+  const moisV = moisVariable(cutoff);
+  const lv = lignes.find(l => l.mois === moisV) ?? null;
+  const s = (k: 'isosign' | 'varIsosign' | 'isomark' | 'varIsomark' | 'varFlooring' | 'total') => lignes.reduce((a, l) => a + l[k], 0);
+  const horsFmCumul = lignes.reduce((a, l) => a + (l.horsFm ?? 0), 0);
+  const fqKo = !fq || 'erreur' in fq;
+  const td = 'py-1.5 px-2 text-right tabular-nums whitespace-nowrap';
+  const taux = `${td} text-primary`;
+
+  return (
+    <section className="space-y-3 border-t border-border pt-4">
+      <h3 className="text-sm font-semibold">
+        Rémunération variable FM{' '}
+        <span className="font-normal text-muted-foreground text-xs">
+          — ISOSIGN {tauxTexte(TAUX_ISOSIGN)}, ISOMARK {tauxTexte(TAUX_ISOMARK)}, Flooring hors secteur (national) {tauxTexte(TAUX_REMUNERATION_FM)}
+        </span>
+      </h3>
+      {lv && moisV && (
+        <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div><div className="text-xs text-muted-foreground">% ISOSIGN ({tauxTexte(TAUX_ISOSIGN)})</div><div className="font-semibold tabular-nums">{formatMontant(lv.varIsosign)}</div></div>
+          <div><div className="text-xs text-muted-foreground">% ISOMARK ({tauxTexte(TAUX_ISOMARK)})</div><div className="font-semibold tabular-nums">{formatMontant(lv.varIsomark)}</div></div>
+          <div><div className="text-xs text-muted-foreground">% Flooring hors secteur ({tauxTexte(TAUX_REMUNERATION_FM)})</div><div className="font-semibold tabular-nums">{lv.horsFm === null ? 'n.c.' : formatMontant(lv.varFlooring)}</div></div>
+          <div><div className="text-xs text-muted-foreground">Total variable {NOM_MOIS[moisV - 1]?.toLowerCase()}</div><div className="font-bold text-primary tabular-nums">{formatMontant(lv.total)}</div></div>
+        </div>
+      )}
+      <details className="text-xs">
+        <summary className="cursor-pointer font-medium py-1">Détail par mois</summary>
+        <div className="overflow-x-auto mt-1">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-muted-foreground text-left">
+                <th className="py-2 pr-3 font-medium">Mois</th>
+                <th className="py-2 px-2 font-medium text-right">CA ISOSIGN</th>
+                <th className="py-2 px-2 font-medium text-right">{tauxTexte(TAUX_ISOSIGN)}</th>
+                <th className="py-2 px-2 font-medium text-right">CA ISOMARK</th>
+                <th className="py-2 px-2 font-medium text-right">{tauxTexte(TAUX_ISOMARK)}</th>
+                <th className="py-2 px-2 font-medium text-right">Flooring hors FM</th>
+                <th className="py-2 px-2 font-medium text-right">{tauxTexte(TAUX_REMUNERATION_FM)}</th>
+                <th className="py-2 pl-2 font-medium text-right">Total variable</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lignes.map(l => (
+                <tr key={l.mois} className={`border-b border-border/50 ${l.mois === moisV ? 'bg-primary/5 font-medium' : ''}`}>
+                  <td className="py-1.5 pr-3 whitespace-nowrap">{NOM_MOIS[l.mois - 1] ?? l.mois}</td>
+                  <td className={td}>{formatMontant(l.isosign)}</td>
+                  <td className={taux}>{formatMontant(l.varIsosign)}</td>
+                  <td className={td}>{formatMontant(l.isomark)}</td>
+                  <td className={taux}>{formatMontant(l.varIsomark)}</td>
+                  <td className={td}>{l.horsFm === null ? 'n.c.' : formatMontant(l.horsFm)}</td>
+                  <td className={taux}>{l.horsFm === null ? '' : formatMontant(l.varFlooring)}</td>
+                  <td className={`${td} !pr-0 font-semibold`}>{formatMontant(l.total)}</td>
+                </tr>
+              ))}
+              <tr className="font-semibold">
+                <td className="py-2 pr-3">Cumul</td>
+                <td className={td}>{formatMontant(s('isosign'))}</td>
+                <td className={taux}>{formatMontant(s('varIsosign'))}</td>
+                <td className={td}>{formatMontant(s('isomark'))}</td>
+                <td className={taux}>{formatMontant(s('varIsomark'))}</td>
+                <td className={td}>{formatMontant(horsFmCumul)}</td>
+                <td className={taux}>{formatMontant(s('varFlooring'))}</td>
+                <td className={`${td} !pr-0 font-bold text-primary`}>{formatMontant(s('total'))}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        CA ISOSIGN (STI et RTE compris) et ISOMARK (ISOFLOOR compris) = réalisé mensuel du portefeuille FM ;
+        Flooring hors secteur = CA national hors FM du récap Flooring & Quartz. Le total variable mis en avant
+        est celui du dernier mois complet à la date d'arrêté.
+        {fqKo && <> <b className="text-destructive">Récap Flooring indisponible : part Flooring non comptée.</b></>}
+      </p>
+    </section>
+  );
+}
+
 /** Date du jour à Paris (AAAA-MM-JJ), pour savoir si la photo du jour est d'aujourd'hui. */
 function aujourdhuiParis() {
   return new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -776,6 +864,8 @@ export default function CaOdooPanel() {
       </section>
 
       <RecapFlooringQuartz fq={data.flooringQuartz} />
+
+      <RemunerationVariable mois={data.mois} fq={data.flooringQuartz} cutoff={data.cutoff} />
 
       {/* Méthode repliée par défaut : elle est longue, et on ne la relit pas
           tous les jours — mais elle doit rester à un clic, sans quoi les

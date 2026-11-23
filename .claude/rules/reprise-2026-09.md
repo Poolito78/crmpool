@@ -402,6 +402,12 @@ UTC → trié en heure de Paris), portefeuille FM. Photo à l'actualisation :
 l'écran signale une photo d'un autre jour. **À déployer** :
 `.\deploy-function.ps1 ca-refresh`.
 
+**Rémunération variable FM** (23 nov., `remunerationFM.ts`) : CA ISOSIGN ×
+0,5 % + CA ISOMARK × 1 % (réalisé mensuel du portefeuille FM) + Flooring
+national hors FM × **1 %** (2 % jusqu'au 23/11). Encart dans la tuile CA Odoo
+(total du dernier mois complet à l'arrêté) et onglet « Rémunération FM » de
+l'export, en formules lisant les taux de la colonne F.
+
 ## Relance des devis (12 oct.)
 
 `relanceDevis.ts` + `RelanceDevisDialogs.tsx` (migration `20261012100000`) :
