@@ -111,8 +111,12 @@ describe('applicateurPour (tarif net applicateur ISOMARK du 15/07/2026)', () => 
     expect(r.code).toBe('70109');
   });
 
-  it('ISOMARK TEMPORAIRE est hors tarif : aucun prix supposé', () => {
-    expect(applicateurPour(catalogue[0])).toBeUndefined();
+  it('ISOMARK TEMPORAIRE au prix de la JAUNE : 109 € le seau, 4,36 €/kg', () => {
+    expect(applicateurPour(catalogue[0])).toMatchObject({ code: '70205', prixConditionnement: 109, prixUnite: 4.36 });
+  });
+
+  it('un article absent du tarif n’a aucun prix supposé', () => {
+    expect(applicateurPour(art('EAFHIMAL8 ISO', 'ENDUIT HIMALAYA ISOSIGN 7.85KG', 'ISOMARK / H1', 7.85))).toBeUndefined();
   });
 
   it('diluant au litre', () => {
@@ -133,8 +137,10 @@ describe('applicateurPour (tarif net applicateur ISOMARK du 15/07/2026)', () => 
   });
 
   it('les articles au tarif passent devant ceux qui n’y sont pas', () => {
-    const refs = equivalentsPour('3SRoute™ Quasar 25.00KG', index)!.articles.map(a => a.reference);
-    expect(refs.indexOf('PSTSANCY25')).toBeLessThan(refs.indexOf('PSTTEMPO25P ISO'));
+    /* Enduit Color : aucune gamme désignée ; HIMALAYA (hors tarif) et EVEREST
+       (au tarif) pèsent tous deux 7,85 kg — le tarif départage. */
+    const refs = equivalentsPour('MMARoute™ Enduit Color 8.00KG', index)!.articles.map(a => a.reference);
+    expect(refs.indexOf('EAFEVEREST8 ISO')).toBeLessThan(refs.indexOf('EAFHIMAL8 ISO'));
   });
 });
 

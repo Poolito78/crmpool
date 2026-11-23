@@ -12,9 +12,11 @@
  * plus chers qu'en réalité. Le prix du tarif fait foi.
  *
  * Clé = notre référence (les copies LABOFRANCE / ALIZON / seau plastique d'un
- * même produit portent le même prix). Un article absent de la table (ISOMARK
- * TEMPORAIRE, HIMALAYA, RAL hors gamme, ONYX en couleur « nous consulter »)
- * n'a PAS de prix applicateur : on ne le devine pas.
+ * même produit portent le même prix). ISOMARK TEMPORAIRE (jaune) n'a pas sa
+ * ligne au tarif : il se vend au prix de la peinture JAUNE 70205 (règle de
+ * l'utilisateur, 23/11/2026). Un article absent de la table (HIMALAYA, RAL
+ * hors gamme, ONYX en couleur « nous consulter ») n'a PAS de prix
+ * applicateur : on ne le devine pas.
  *
  * `prixUnite` = colonne « Prix kg » / « Tarif €/litre » du tarif, recopiée
  * telle quelle (l'enduit à froid y est compté sur 8 kg, la fiche dit 7,85).
@@ -246,6 +248,9 @@ export const TARIF_ISOMARK_APPLICATEUR: Record<string, PrixTarifApplicateur> = {
   'PSTJAUNE25P ISO': JAUNE25,
   'PSTJAUNE25PLABO': JAUNE25,
   'PSTJAUNE25PALIZON': JAUNE25,
+  /* Temporaire jaune : au prix de la JAUNE (règle du 23/11/2026). */
+  'PSTTEMPO25P ISO': JAUNE25,
+  'PSTTEMPO25PLABO': JAUNE25,
   'PSTJAUNE5 ISO': COULEUR5('JAUNE'),
   'PSTNOIRE25P ISO': NOIR25,
   'PSTNOIRE25PLABO': NOIR25,
