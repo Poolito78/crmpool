@@ -21,7 +21,7 @@
  * Fonctions PURES.
  */
 import { designationProduit, type Produit } from './store';
-import { prixApplicateur, publicPourQuantite } from './remiseGammes';
+import { tarifApplicateurDe, DATE_TARIF_ISOMARK, type PrixTarifApplicateur } from './tarifIsomarkApplicateur.donnees';
 
 interface Famille {
   cle: string;
@@ -176,8 +176,11 @@ export function equivalentsPour(
     const leur = (p.poids && p.poids > 0 ? p.poids : undefined) ?? kgDuLibelle(designationProduit(p));
     return leur == null ? Number.MAX_SAFE_INTEGER : Math.abs(leur - kg);
   };
+  /* Un article au tarif applicateur se compare ; les autres passent après. */
+  const auTarif = (p: Produit) => (tarifApplicateurDe(p.reference) ? 0 : 1);
   const articles = [...tous].sort((a, b) =>
     rang(a) - rang(b)
+    || auTarif(a) - auTarif(b)
     || ecartKg(a) - ecartKg(b)
     /* À égalité, nos articles ISOSIGN avant les copies de laboratoire. */
     || Number(/ISOSIGN| ISO$/i.test(designationProduit(b) + ' ' + b.reference)) - Number(/ISOSIGN| ISO$/i.test(designationProduit(a) + ' ' + a.reference))
@@ -186,19 +189,26 @@ export function equivalentsPour(
 }
 
 /**
- * NOTRE PRIX APPLICATEUR AU KG, face au prix NET du concurrent.
+ * NOTRE PRIX APPLICATEUR, face au prix NET du concurrent.
  *
- * Le tarif d'un concurrent à un applicateur est un prix net, remise déduite :
- * le comparer à notre public le flattait de moitié (ISOMARK TEMPORAIRE à
- * 12,51 €/kg public, 6,26 €/kg applicateur). La remise est celle de la gamme
- * (`prixApplicateur`, `remiseGammes.ts` : H1 50 %, H2 et ISOFLOOR 30 %), sur
- * le public du premier palier. Poids : fiche, sinon libellé (« 25KG »).
+ * Le tarif d'un concurrent à un applicateur est un prix net, remise déduite.
+ * On le compare au TARIF NET APPLICATEUR ISOMARK (`tarifIsomarkApplicateur.donnees.ts`,
+ * 15/07/2026), jamais au public de la fiche moins une remise de gamme : les
+ * fiches portent le public d'Odoo, et SANCY sortait à 4,21 €/kg là où le tarif
+ * dit 2,95 €/kg. Un article absent du tarif n'a pas de prix applicateur —
+ * on ne le devine pas, et la ligne le dit.
  */
-export function applicateurAuKg(p: Produit): { prix: number; public: number; libelle: string; remise: number } | undefined {
-  const kg = (p.poids && p.poids > 0 ? p.poids : undefined) ?? kgDuLibelle(designationProduit(p));
-  const app = prixApplicateur(publicPourQuantite(p), p.categorie, p.catalogue);
-  if (!kg || !app) return undefined;
-  return { prix: app.prix / kg, public: app.public / kg, libelle: app.libelle, remise: app.remise };
+export function applicateurPour(p: Produit): (PrixTarifApplicateur & { source: string }) | undefined {
+  const t = tarifApplicateurDe(p.reference);
+  return t ? { ...t, source: `tarif ISOMARK ${DATE_TARIF_ISOMARK}, code ${t.code}` } : undefined;
+}
+
+/** L'unité d'un prix concurrent ramenée à celle du tarif (« Kg » → kg, « Ltr » → L). */
+export function uniteComparable(unite?: string): 'kg' | 'L' | undefined {
+  const u = (unite || '').trim().toLowerCase();
+  if (/^(kg|kilo)/.test(u)) return 'kg';
+  if (/^(l|ltr|lt|litre|liter)s?$/.test(u)) return 'L';
+  return undefined;
 }
 
 /** Écart de notre prix au leur, en % de leur prix (+ = nous sommes plus chers). */

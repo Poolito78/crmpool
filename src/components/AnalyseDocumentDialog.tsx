@@ -129,7 +129,7 @@ import { useDevisFournisseur, type DevisFournisseur } from '@/lib/devisFournisse
 import { useConcurrents } from '@/lib/concurrents';
 import { concurrentDuDocument } from '@/lib/concurrentDuDocument';
 import { classerDocumentConcurrent } from '@/lib/concurrentDocuments';
-import { indexEquivalences, equivalentsPour, applicateurAuKg, ecartPrix } from '@/lib/equivalencesConcurrents';
+import { indexEquivalences, equivalentsPour, applicateurPour, uniteComparable, ecartPrix } from '@/lib/equivalencesConcurrents';
 import {
   rapprocherClient, clientsParPersonne, motsFrequentsDuCatalogue, type CandidatClient,
 } from '@/lib/rapprochementClient';
@@ -9605,13 +9605,12 @@ const [contratOdoo, setContratOdoo] = useState<
                                   </p>
                                   {equiv.articles.map(p => {
                                     const actif = article?.id === p.id;
-                                    /* Leur prix est un NET applicateur : on le compare à notre
-                                       prix applicateur (remise de gamme), jamais au public. */
-                                    const auKg = applicateurAuKg(p);
-                                    const leurKg = /^(kg|kilo)/i.test((l.unite || '').trim())
-                                      ? Number((dcPrix[i] ?? String(l.prixUnitaireHT ?? '')).replace(',', '.'))
-                                      : NaN;
-                                    const ecart = auKg && Number.isFinite(leurKg) ? ecartPrix(auKg.prix, leurKg) : undefined;
+                                    /* Leur prix est un NET applicateur : on le compare à NOTRE
+                                       tarif net applicateur ISOMARK, dans la même unité. */
+                                    const app = applicateurPour(p);
+                                    const leur = Number((dcPrix[i] ?? String(l.prixUnitaireHT ?? '')).replace(',', '.'));
+                                    const ecart = app && uniteComparable(l.unite) === app.unite && Number.isFinite(leur)
+                                      ? ecartPrix(app.prixUnite, leur) : undefined;
                                     return (
                                       <button
                                         key={p.id}
@@ -9624,13 +9623,17 @@ const [contratOdoo, setContratOdoo] = useState<
                                         <Check className={`w-3 h-3 shrink-0 ${actif ? 'text-rose-600' : 'opacity-0'}`} />
                                         <span className="font-mono text-[10px]">{p.reference}</span>
                                         <span className="truncate flex-1" title={designationProduit(p)}>{designationProduit(p)}</span>
-                                        {auKg != null && (
+                                        {app ? (
                                           <span
                                             className="shrink-0 tabular-nums text-muted-foreground"
-                                            title={`${auKg.libelle} : public ${auKg.public.toFixed(2)} €/kg − ${(auKg.remise * 100).toFixed(0)} %`}
+                                            title={`${app.nom} — ${app.conditionnement} ${app.prixConditionnement.toFixed(2)} € net (${app.source})`}
                                           >
-                                            applicateur <span className="font-medium text-foreground">{auKg.prix.toFixed(2).replace('.', ',')} €/kg</span>
-                                            {auKg.remise > 0 && <span className="text-[10px]"> ({auKg.libelle} −{(auKg.remise * 100).toFixed(0)} %)</span>}
+                                            applicateur <span className="font-medium text-foreground">{app.prixUnite.toFixed(2).replace('.', ',')} €/{app.unite}</span>
+                                            <span className="text-[10px]"> ({app.conditionnement} {app.prixConditionnement.toFixed(2).replace('.', ',')} €)</span>
+                                          </span>
+                                        ) : (
+                                          <span className="shrink-0 text-[10px] italic text-muted-foreground" title="Absent du tarif net applicateur ISOMARK du 15/07/2026 : aucun prix n'est supposé.">
+                                            hors tarif applicateur
                                           </span>
                                         )}
                                         {ecart != null && (

@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('pdfjs-dist', () => ({ GlobalWorkerOptions: {}, getDocument: vi.fn() }));
 vi.mock('./modelesIA', () => ({ appelerGemini: vi.fn(), texteGemini: vi.fn() }));
 
-import { familleConcurrente, indexEquivalences, equivalentsPour, kgDuLibelle, applicateurAuKg, ecartPrix } from './equivalencesConcurrents';
+import { familleConcurrente, indexEquivalences, equivalentsPour, kgDuLibelle, applicateurPour, uniteComparable, ecartPrix } from './equivalencesConcurrents';
 import { prixDuTexte, type DocumentAnalysis } from './analyseDocument';
 import type { Produit } from './store';
 
@@ -62,9 +62,9 @@ describe('equivalentsPour', () => {
     expect(refs).not.toContain('EAFEMERAUDE20');
   });
 
-  it('le conditionnement le plus proche passe devant', () => {
-    const refs = equivalentsPour('Diluant AC, 20KG', index)!.articles.map(a => a.reference);
-    expect(refs[0]).toBe('DILACETYL22');
+  it('parmi les articles au tarif, le conditionnement le plus proche passe devant', () => {
+    const refs = equivalentsPour('3SRoute™ Quasar 5.00KG', index)!.articles.map(a => a.reference);
+    expect(refs[0]).toBe('PSTJAUNE5 ISO');
   });
 
   it('kgDuLibelle lit « 20.00KG » et « 7,85 kg »', () => {
@@ -103,20 +103,37 @@ describe('prixDuTexte (tarif GEVEKO CS ROUTE)', () => {
   });
 });
 
-describe('applicateurAuKg (leur net face à notre applicateur)', () => {
-  it('ISOMARK H1 : 50 % sur le public, ramené au kg', () => {
-    const r = applicateurAuKg(catalogue[0])!; // 312,86 € public, 25 kg, H1
-    expect(r.public).toBeCloseTo(12.51, 2);
-    expect(r.prix).toBeCloseTo(6.26, 2);
-    expect(r.libelle).toBe('ISOMARK H1');
+describe('applicateurPour (tarif net applicateur ISOMARK du 15/07/2026)', () => {
+  it('SANCY : 73,75 € le seau de 25 kg, soit 2,95 €/kg — pas 50 % du public de la fiche', () => {
+    const r = applicateurPour(catalogue[3])!; // PSTSANCY25, public fiche 100 €
+    expect(r.prixUnite).toBe(2.95);
+    expect(r.prixConditionnement).toBe(73.75);
+    expect(r.code).toBe('70109');
   });
 
-  it('écart à leur net : 6,26 €/kg contre 4,77 €/kg = +31 %', () => {
-    expect(Math.round(ecartPrix(6.26, 4.77)! * 100)).toBe(31);
-    expect(ecartPrix(6.26, 0)).toBeUndefined();
+  it('ISOMARK TEMPORAIRE est hors tarif : aucun prix supposé', () => {
+    expect(applicateurPour(catalogue[0])).toBeUndefined();
   });
 
-  it('sans poids connu, pas de prix au kg', () => {
-    expect(applicateurAuKg(catalogue[9])).toBeUndefined(); // DILACETYL5, 5 L sans poids
+  it('diluant au litre', () => {
+    const r = applicateurPour(catalogue[9])!; // DILACETYL5
+    expect(r.unite).toBe('L');
+    expect(r.prixUnite).toBe(8.34);
+  });
+
+  it('unités du concurrent ramenées à celles du tarif', () => {
+    expect(uniteComparable('Kg')).toBe('kg');
+    expect(uniteComparable('Ltr')).toBe('L');
+    expect(uniteComparable('u')).toBeUndefined();
+  });
+
+  it('écart : NEVA 2,85 €/kg face à SANCY 2,95 €/kg = +4 %', () => {
+    expect(Math.round(ecartPrix(2.95, 2.85)! * 100)).toBe(4);
+    expect(ecartPrix(2.95, 0)).toBeUndefined();
+  });
+
+  it('les articles au tarif passent devant ceux qui n’y sont pas', () => {
+    const refs = equivalentsPour('3SRoute™ Quasar 25.00KG', index)!.articles.map(a => a.reference);
+    expect(refs.indexOf('PSTSANCY25')).toBeLessThan(refs.indexOf('PSTTEMPO25P ISO'));
   });
 });
