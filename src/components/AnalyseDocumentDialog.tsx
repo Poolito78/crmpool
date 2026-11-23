@@ -128,6 +128,7 @@ import {
 import { useDevisFournisseur, type DevisFournisseur } from '@/lib/devisFournisseur';
 import { useConcurrents } from '@/lib/concurrents';
 import { concurrentDuDocument } from '@/lib/concurrentDuDocument';
+import { indexEquivalences, equivalentsPour, prixAuKgArticle } from '@/lib/equivalencesConcurrents';
 import {
   rapprocherClient, clientsParPersonne, motsFrequentsDuCatalogue, type CandidatClient,
 } from '@/lib/rapprochementClient';
@@ -5979,6 +5980,11 @@ const [contratOdoo, setContratOdoo] = useState<
   const isAutre = result && result.typeDocument === 'autre';
   const isDevisFournisseur = result && isDevisFourn(result.typeDocument);
   const isDevisConcurrent = result && result.typeDocument === 'devis_concurrent';
+  /* Nos articles ISOMARK / ISOFLOOR par famille (peinture solvantée, enduit à
+     froid…) : un produit GEVEKO n'a aucun mot commun avec notre catalogue. */
+  const indexEquiv = useMemo(
+    () => (isDevisConcurrent ? indexEquivalences(produits) : new Map()),
+    [isDevisConcurrent, produits]);
 
   /** Concurrent déjà connu dont le nom ressemble à celui du document. */
   const concurrentPressenti = isDevisConcurrent && result?.nomPartenaire
@@ -6036,6 +6042,8 @@ const [contratOdoo, setContratOdoo] = useState<
           quantite: l.quantite || undefined,
           quantiteUnite: l.unite || undefined,
           prixHT: prix,
+          /* « 4.77 € » sous une unité « Kg » : un prix au kilo. */
+          prixUnite: l.unite ? `€/${l.unite.trim().toLowerCase()}` : undefined,
           produitId: (odoo && produits.find(p => p.referenceOdoo === odoo.reference || p.reference === odoo.reference)?.id)
             ?? produitDeLigne(i)?.id,
           clientId: clientDc?.id,
@@ -9510,6 +9518,7 @@ const [contratOdoo, setContratOdoo] = useState<
                     <div className="space-y-2.5">
                       {result.lignes.map((l, i) => {
                         const article = produitDeLigne(i);
+                        const equiv = equivalentsPour(`${l.reference || ''} ${l.description || ''}`, indexEquiv);
                         return (
                           <div key={i} className="space-y-1">
                             <div className="flex items-center gap-2 text-xs">
@@ -9529,13 +9538,46 @@ const [contratOdoo, setContratOdoo] = useState<
                                 onChange={e => setDcPrix(prev => ({ ...prev, [i]: e.target.value }))}
                                 placeholder="Prix HT"
                               />
+                              {l.unite && <span className="text-muted-foreground shrink-0">€/{l.unite.toLowerCase()}</span>}
                             </div>
                             {/* Notre article équivalent : c'est lui qui permet de comparer
                                 notre prix au leur dans le chiffrage (useVeilleParProduit). */}
                             <div className="pl-6">
+                              {equiv && equiv.articles.length > 0 && (
+                                <div className="mb-1 rounded border border-rose-300/60 bg-background p-1 space-y-0.5">
+                                  <p className="text-[10px] font-medium text-rose-600">
+                                    Équivalents ISOMARK / ISOFLOOR — {equiv.famille}
+                                  </p>
+                                  {equiv.articles.map(p => {
+                                    const actif = article?.id === p.id;
+                                    const auKg = prixAuKgArticle(p);
+                                    return (
+                                      <button
+                                        key={p.id}
+                                        type="button"
+                                        title={actif ? 'Article retenu' : 'Retenir cet article comme équivalent'}
+                                        onClick={() => setChoixProduit(prev => ({ ...prev, [i]: p.id }))}
+                                        className={`flex w-full items-baseline gap-2 text-[11px] rounded px-1 py-0.5 text-left ${
+                                          actif ? 'bg-rose-100 ring-1 ring-rose-400 dark:bg-rose-950' : 'hover:bg-rose-50 dark:hover:bg-rose-950/40'}`}
+                                      >
+                                        <Check className={`w-3 h-3 shrink-0 ${actif ? 'text-rose-600' : 'opacity-0'}`} />
+                                        <span className="font-mono text-[10px]">{p.reference}</span>
+                                        <span className="truncate flex-1" title={designationProduit(p)}>{designationProduit(p)}</span>
+                                        {auKg != null && (
+                                          <span className="shrink-0 tabular-nums text-muted-foreground">
+                                            public {auKg.toFixed(2).replace('.', ',')} €/kg
+                                          </span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
                               <ProduitCombobox
                                 produits={produits}
-                                suggestions={candidatsPour(i)}
+                                suggestions={equiv?.articles.length
+                                  ? [...equiv.articles, ...candidatsPour(i).filter(c => !equiv.articles.some(a => a.id === c.id))]
+                                  : candidatsPour(i)}
                                 value={article?.id ?? ''}
                                 onSelect={(id) => setChoixProduit(prev => ({ ...prev, [i]: id }))}
                               />

@@ -204,6 +204,9 @@ d'ISOSIGN, ses prix alimentent la veille concurrence :
   si elle est écrite.
 - Prix par paliers de quantité : retiens le premier palier et cite les autres
   dans « description ».
+- Deux nombres sous « Quantité » (« 1 9999 », « de 1 à 9999 ») forment une
+  TRANCHE de quantité, jamais un prix : « quantite » vaut le premier (1), et
+  le prix est celui de la colonne « Prix net » / « P.U. », écrit en euros.
 - « unite » reprend l'unité de prix écrite (u, m², ml, kg, l, seau…).
 
 Extraction des lignes d'un devis ÉMIS (devis_client) — il sera comparé ligne à
@@ -568,8 +571,10 @@ export async function analyserDocument(
   onMorceau?: (fait: number, total: number) => void,
 ): Promise<DocumentAnalysis> {
   if (typeImpose === 'devis_concurrent') {
-    const decoupe = await analyserEnMorceaux(input, apiKey, openrouterKey, typeImpose, indice, onMorceau);
-    if (decoupe) return decoupe;
+    const texte = input.type === 'pdf' ? await extraireTextePDF(input.buffer) : input.texte;
+    const lue = await analyserEnMorceaux(texte, input, apiKey, openrouterKey, typeImpose, indice, onMorceau)
+      ?? { ...(await analyserSansType(input, apiKey, openrouterKey, typeImpose, indice)), typeDocument: typeImpose };
+    return prixDuTexte(lue, texte);
   }
   const analyse = await analyserSansType(input, apiKey, openrouterKey, typeImpose, indice);
   return avecKits(typeImpose ? { ...analyse, typeDocument: typeImpose } : analyse);
@@ -639,8 +644,43 @@ export function fusionnerAnalyses(parts: DocumentAnalysis[]): DocumentAnalysis {
   };
 }
 
+/**
+ * LE PRIX NET D'UNE LIGNE SE RELIT SUR LE DOCUMENT.
+ *
+ * Le tarif GEVEKO de CS ROUTE écrit, pour chaque article, une tranche de
+ * quantité « 1 — 9999 » puis le « Prix Net » « 4.77 € ». Le modèle prenait
+ * la borne 9999 pour le prix : quarante lignes à 9 999 €/kg dans la veille.
+ * Sans IA : la ligne du texte qui porte la RÉFÉRENCE de l'article est
+ * retrouvée, et le dernier montant suivi (ou précédé) de « € » — le net, après
+ * brut et remise — remplace un prix qui n'y figure pas en euros. Une ligne
+ * sans référence lisible, ou sans montant en euros, garde sa lecture.
+ * Fonction PURE.
+ */
+export function prixDuTexte(a: DocumentAnalysis, texte: string): DocumentAnalysis {
+  const lignesTexte = texte.split('\n');
+  const enMots = (t: string) => ` ${t.toUpperCase().replace(/[^A-Z0-9]+/g, ' ')} `;
+  const lignes = a.lignes.map(l => {
+    const ref = (l.reference || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+    if (ref.length < 3) return l;
+    const source = lignesTexte.find(t => enMots(t).includes(` ${ref} `));
+    if (!source) return l;
+    /* Un montant : milliers séparés par une espace (« 1 234,50 »), jamais
+       deux nombres voisins (« 1 9999 4.77 » n'est pas un montant). */
+    const montant = String.raw`(?<![\d.,])(\d{1,3}(?:[\u00a0 ]\d{3})+(?:[.,]\d{1,4})?|\d+(?:[.,]\d{1,4})?)`;
+    const euros = [...source.matchAll(new RegExp(String.raw`${montant}\s*€|€\s*${montant}`, 'g'))]
+      .map(m => nombreLu(m[1] ?? m[2]))
+      .filter((n): n is number => n != null && n > 0);
+    if (!euros.length) return l;
+    const lu = l.prixUnitaireHT;
+    if (lu != null && euros.some(e => Math.abs(e - lu) < 0.005)) return l;
+    return { ...l, prixUnitaireHT: euros[euros.length - 1] };
+  });
+  return { ...a, lignes };
+}
+
 /** Lit un document trop long morceau par morceau ; null s'il tient en un seul appel. */
 async function analyserEnMorceaux(
+  texte: string,
   input:
     | { type: 'pdf'; buffer: ArrayBuffer; texteSupplementaire?: string }
     | { type: 'text'; texte: string },
@@ -650,7 +690,6 @@ async function analyserEnMorceaux(
   indice: string | undefined,
   onMorceau?: (fait: number, total: number) => void,
 ): Promise<DocumentAnalysis | null> {
-  const texte = input.type === 'pdf' ? await extraireTextePDF(input.buffer) : input.texte;
   if (texte.length <= 6000) return null;
   const tous = decouperTexte(texte);
   const morceaux = tous.slice(0, MORCEAUX_MAX);
