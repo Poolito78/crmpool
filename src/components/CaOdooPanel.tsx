@@ -566,71 +566,81 @@ function RemunerationVariable({ mois, fq, cutoff }: { mois: CaMois[]; fq: CaFloo
   if (!lignes.length) return null;
   const moisV = moisVariable(cutoff);
   const lv = lignes.find(l => l.mois === moisV) ?? null;
-  const s = (k: 'isosign' | 'varIsosign' | 'isomark' | 'varIsomark' | 'varFlooring' | 'total') => lignes.reduce((a, l) => a + l[k], 0);
-  const horsFmCumul = lignes.reduce((a, l) => a + (l.horsFm ?? 0), 0);
-  const fqKo = !fq || 'erreur' in fq;
+  const fqOk = fq && !('erreur' in fq) ? fq : null;
+  const fqParMois = new Map((fqOk?.mois ?? []).map(m => [m.mois, m]));
+  const fqKo = !fqOk;
+  const nc = (v: number | null | undefined) => (v === null || v === undefined ? 'n.c.' : formatMontant(v));
+  // Mêmes colonnes, même ordre que l'onglet « Rémunération FM » de l'export.
+  const cols: { titre: string; val: (l: typeof lignes[number]) => number | null; part?: boolean }[] = [
+    { titre: 'Total isofloor', val: l => fqParMois.get(l.mois)?.total ?? null },
+    { titre: 'F. MOUHOT', val: l => fqParMois.get(l.mois)?.fm ?? null },
+    { titre: 'Hors FM CA NATIONAL', val: l => l.horsFm },
+    { titre: 'RÉMUNÉRATION BRUT FM', val: l => (l.horsFm === null ? null : l.varFlooring), part: true },
+    { titre: 'CA ISOSIGN', val: l => l.isosign },
+    { titre: '% ISOSIGN', val: l => l.varIsosign, part: true },
+    { titre: 'CA ISOMARK', val: l => l.isomark },
+    { titre: '% ISOMARK', val: l => l.varIsomark, part: true },
+  ];
+  const cumul = (c: typeof cols[number]) => lignes.reduce((a, l) => a + (c.val(l) ?? 0), 0);
+  const totalCumul = lignes.reduce((a, l) => a + l.total, 0);
+  const th = 'py-2 px-2 font-medium text-right whitespace-nowrap';
   const td = 'py-1.5 px-2 text-right tabular-nums whitespace-nowrap';
-  const taux = `${td} text-primary`;
 
   return (
     <section className="space-y-3 border-t border-border pt-4">
       <h3 className="text-sm font-semibold">
-        Rémunération variable FM{' '}
+        Rémunération variable FM — {cutoff?.slice(0, 4)}{' '}
         <span className="font-normal text-muted-foreground text-xs">
-          — ISOSIGN {tauxTexte(TAUX_ISOSIGN)}, ISOMARK {tauxTexte(TAUX_ISOMARK)}, Flooring hors secteur (national) {tauxTexte(TAUX_REMUNERATION_FM)}
+          — du 01/01 au {formatJour(cutoff)}
         </span>
       </h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-muted-foreground text-left">
+              <th className="py-2 pr-3 font-medium">Mois</th>
+              {cols.map(c => <th key={c.titre} className={th}>{c.titre}</th>)}
+              <th className={`${th} !pr-0 text-foreground`}>TOTAL VARIABLE</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lignes.map(l => (
+              <tr key={l.mois} className={`border-b border-border/50 ${l.mois === moisV ? 'bg-primary/5 font-medium' : ''}`}>
+                <td className="py-1.5 pr-3 whitespace-nowrap">{NOM_MOIS[l.mois - 1]?.toLowerCase() ?? l.mois}</td>
+                {cols.map(c => <td key={c.titre} className={`${td} ${c.part ? 'text-primary' : ''}`}>{nc(c.val(l))}</td>)}
+                <td className={`${td} !pr-0 font-semibold`}>{formatMontant(l.total)}</td>
+              </tr>
+            ))}
+            <tr className="font-semibold border-t-2 border-border">
+              <td className="py-2 pr-3">Cumul</td>
+              {cols.map(c => <td key={c.titre} className={`${td} ${c.part ? 'text-primary' : ''}`}>{formatMontant(cumul(c))}</td>)}
+              <td className={`${td} !pr-0 font-bold text-primary`}>{formatMontant(totalCumul)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
       {lv && moisV && (
-        <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <div><div className="text-xs text-muted-foreground">% ISOSIGN ({tauxTexte(TAUX_ISOSIGN)})</div><div className="font-semibold tabular-nums">{formatMontant(lv.varIsosign)}</div></div>
-          <div><div className="text-xs text-muted-foreground">% ISOMARK ({tauxTexte(TAUX_ISOMARK)})</div><div className="font-semibold tabular-nums">{formatMontant(lv.varIsomark)}</div></div>
-          <div><div className="text-xs text-muted-foreground">% Flooring hors secteur ({tauxTexte(TAUX_REMUNERATION_FM)})</div><div className="font-semibold tabular-nums">{lv.horsFm === null ? 'n.c.' : formatMontant(lv.varFlooring)}</div></div>
-          <div><div className="text-xs text-muted-foreground">Total variable {NOM_MOIS[moisV - 1]?.toLowerCase()}</div><div className="font-bold text-primary tabular-nums">{formatMontant(lv.total)}</div></div>
-        </div>
+        <table className="text-sm sm:ml-auto">
+          <tbody>
+            {[
+              ['% ISOSIGN', lv.varIsosign, TAUX_ISOSIGN],
+              ['% ISOMARK', lv.varIsomark, TAUX_ISOMARK],
+              ['% Flooring Hors secteur (National)', lv.horsFm === null ? null : lv.varFlooring, TAUX_REMUNERATION_FM],
+            ].map(([lib, v, t]) => (
+              <tr key={lib as string} className="border-b border-border/50">
+                <td className="py-1 pr-6">{lib}</td>
+                <td className="py-1 px-3 text-right tabular-nums font-semibold">{nc(v as number | null)}</td>
+                <td className="py-1 pl-3 text-right tabular-nums text-muted-foreground">{tauxTexte(t as number)}</td>
+              </tr>
+            ))}
+            <tr className="font-bold">
+              <td className="py-1.5 pr-6">Total Variable {NOM_MOIS[moisV - 1]?.toUpperCase()}</td>
+              <td className="py-1.5 px-3 text-right tabular-nums text-primary">{formatMontant(lv.total)}</td>
+              <td />
+            </tr>
+          </tbody>
+        </table>
       )}
-      <details className="text-xs">
-        <summary className="cursor-pointer font-medium py-1">Détail par mois</summary>
-        <div className="overflow-x-auto mt-1">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-muted-foreground text-left">
-                <th className="py-2 pr-3 font-medium">Mois</th>
-                <th className="py-2 px-2 font-medium text-right">CA ISOSIGN</th>
-                <th className="py-2 px-2 font-medium text-right">{tauxTexte(TAUX_ISOSIGN)}</th>
-                <th className="py-2 px-2 font-medium text-right">CA ISOMARK</th>
-                <th className="py-2 px-2 font-medium text-right">{tauxTexte(TAUX_ISOMARK)}</th>
-                <th className="py-2 px-2 font-medium text-right">Flooring hors FM</th>
-                <th className="py-2 px-2 font-medium text-right">{tauxTexte(TAUX_REMUNERATION_FM)}</th>
-                <th className="py-2 pl-2 font-medium text-right">Total variable</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lignes.map(l => (
-                <tr key={l.mois} className={`border-b border-border/50 ${l.mois === moisV ? 'bg-primary/5 font-medium' : ''}`}>
-                  <td className="py-1.5 pr-3 whitespace-nowrap">{NOM_MOIS[l.mois - 1] ?? l.mois}</td>
-                  <td className={td}>{formatMontant(l.isosign)}</td>
-                  <td className={taux}>{formatMontant(l.varIsosign)}</td>
-                  <td className={td}>{formatMontant(l.isomark)}</td>
-                  <td className={taux}>{formatMontant(l.varIsomark)}</td>
-                  <td className={td}>{l.horsFm === null ? 'n.c.' : formatMontant(l.horsFm)}</td>
-                  <td className={taux}>{l.horsFm === null ? '' : formatMontant(l.varFlooring)}</td>
-                  <td className={`${td} !pr-0 font-semibold`}>{formatMontant(l.total)}</td>
-                </tr>
-              ))}
-              <tr className="font-semibold">
-                <td className="py-2 pr-3">Cumul</td>
-                <td className={td}>{formatMontant(s('isosign'))}</td>
-                <td className={taux}>{formatMontant(s('varIsosign'))}</td>
-                <td className={td}>{formatMontant(s('isomark'))}</td>
-                <td className={taux}>{formatMontant(s('varIsomark'))}</td>
-                <td className={td}>{formatMontant(horsFmCumul)}</td>
-                <td className={taux}>{formatMontant(s('varFlooring'))}</td>
-                <td className={`${td} !pr-0 font-bold text-primary`}>{formatMontant(s('total'))}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </details>
       <p className="text-xs text-muted-foreground leading-relaxed">
         CA ISOSIGN (STI et RTE compris) et ISOMARK (ISOFLOOR compris) = réalisé mensuel du portefeuille FM ;
         Flooring hors secteur = CA national hors FM du récap Flooring & Quartz. Le total variable mis en avant
