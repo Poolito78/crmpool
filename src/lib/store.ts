@@ -882,6 +882,13 @@ export interface LigneDevis {
   /** Quantité de catalyseur saisie à la main : le calcul automatique ne la réécrit plus. */
   catalyseManuelle?: boolean;
   /**
+   * Conso DOSÉE EN % du poids d'autres lignes (pigment à 10 % de la résine
+   * Flowfast) : la conso et la quantité de la ligne s'en calculent
+   * (`consoRelative.ts`). `inclus` / `exclus` : lignes cochées ou décochées
+   * à la main, les résines du même groupe au-dessus étant prises d'office.
+   */
+  consoRelative?: { pct: number; inclus?: string[]; exclus?: string[] };
+  /**
    * Ligne à variante composée DÉPLIÉE : l'éditeur montre ses composants un par
    * un, et le devis (aperçu, PDF) les détaille sous la ligne. Repliée (absent),
    * elle reste une seule ligne. Les prix forcés du détail vivent dans

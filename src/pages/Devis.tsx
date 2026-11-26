@@ -57,6 +57,8 @@ import {
 } from '@/lib/catalyseur';
 import VarianteCompoDialog from '@/components/VarianteCompoDialog';
 import EpaisseurInput from '@/components/EpaisseurInput';
+import ConsoRelativePopover from '@/components/ConsoRelativePopover';
+import { calculerConsoRelative } from '@/lib/consoRelative';
 import {
   ajoutsCharge, calculerDosage, consoGranulat, consoMlEpaisseur, consoProduitRatio, copierLignes, dosagePourRatio, ratioRetenu, epaisseurMinimale, kgGranulat, libelleGranulat, libelleGranulatAuto, palierPour, quantiteGranulat, usageEpaisseur,
   type AjoutDosage,
@@ -1108,7 +1110,10 @@ export default function Devis() {
     /* Le catalyseur est le RÉSULTAT : seule sa température compte, pas sa quantité. */
     .map(l => estCatalyseur(produitParId(produits, l.produitId))
       ? [l.id, 'catalyseur', l.temperatureCatalyse ?? null]
-      : [l.id, l.produitId, l.quantite, l.epaisseurMm ?? null]));
+      /* Ligne dosée en % (pigment) : sa conso et sa quantité sont le RÉSULTAT, seul son dosage compte. */
+      : l.consoRelative ? [l.id, l.produitId, 'relative', l.consoRelative, l.surfaceM2 ?? null]
+      /* Surface et conso : ce que pèse une résine au chantier, d'où se dosent catalyseur et pigment. */
+      : [l.id, l.produitId, l.quantite, l.epaisseurMm ?? null, l.surfaceM2 ?? null, l.consommation ?? null, l.consommationMl ?? null]));
   const calculsAOuverture = (ls: LigneDevis[]) =>
     lignesFigeesRef.current.size > 0 && signatureCalculs(ls) === signatureOuvertureRef.current;
   /* Le PORT non plus : le calcul automatique tournait à chaque ouverture et
@@ -1618,6 +1623,57 @@ export default function Devis() {
     });
     if (change) setLignes(suivantes);
   }, [lignes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* UNE CONSO DOSÉE EN % D'AUTRES LIGNES (consoRelative.ts) : pigment à 10 %
+     du poids de la résine Flowfast consommée au-dessus. Kilos des sources ×
+     pourcentage → conso de la ligne (÷ sa surface) et quantité (÷ son poids,
+     au conditionnement supérieur). Forcée à la main (`qteMode: 'manuel'`),
+     la quantité n'est plus réécrite ; en « Qté chantier », `recalcChantier`
+     la porte avec les autres lignes du même article. */
+  useEffect(() => {
+    if (calculsAOuverture(lignes)) return;
+    if (!lignes.some(l => l.consoRelative)) return;
+    const estRev = clients.find(c => c.id === clientId)?.estRevendeur;
+    let change = false;
+    const suivantes = lignes.map(l => {
+      if (!l.consoRelative || !l.produitId) return l;
+      const art = produitParId(produits, l.produitId);
+      const calc = calculerConsoRelative(lignes, l.id, produits, surfaceGlobaleM2, uniteSurface);
+      if (!art || !calc) return l;
+      let suite = l;
+      const u = uniteL(l);
+      const surf = surfaceL(l);
+      // Kilos de la ligne : surface × conso arrondie quand il y a une surface — le calcul de `calcQuantiteSurface`.
+      let kgLigne = calc.kg;
+      if (surf > 0) {
+        const conso = Math.round(calc.kg / surf * 10000) / 10000;
+        kgLigne = surf * conso;
+        if (consoDeLigne(l, u) !== conso) {
+          suite = { ...suite, ...(u === 'ml' ? { consommationMl: conso } : { consommation: conso, consoUsage: undefined }) };
+        }
+      }
+      if (l.qteMode !== 'manuel' && l.qteMode !== 'chantier' && art.poids && art.poids > 0) {
+        const q = Math.ceil(kgLigne / art.poids - 1e-9);
+        if (q !== l.quantite) {
+          suite = { ...suite, quantite: q, ...(q > 0 ? { prixUnitaireHT: prixConserve(l, getPrixLigne(art, q, l.variantesChoisies, estRev)) } : {}) };
+        }
+      }
+      if (suite !== l) change = true;
+      return suite;
+    });
+    if (change) setLignes(recalcChantier(suivantes));
+  }, [lignes, produits, surfaceGlobaleM2, uniteSurface]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Passe une ligne en conso dosée en % d'autres lignes (`pct`), ou la rend à sa conso saisie (`null`). */
+  function changerConsoRelative(id: string, r: LigneDevis['consoRelative'] | null) {
+    saveSnapshot();
+    setLignes(prev => prev.map(l => {
+      if (l.id !== id) return l;
+      if (r) return { ...l, consoRelative: r, ...(l.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}) };
+      const { consoRelative: _r, ...reste } = l;
+      return reste;
+    }));
+  }
 
   /** Le granulat du tableau que porte cette ligne, au mélange de l'épaisseur de son mortier — ou la charge de son ratio. */
   function ajoutDeGranulat(ls: LigneDevis[], l: LigneDevis): AjoutDosage | undefined {
@@ -5192,7 +5248,9 @@ export default function Devis() {
                               /* `u` : l'unité de la conso saisie (kg/m² ou kg/ml). Les deux se gardent sur la ligne ;
                                  seule celle de l'unité de la ligne recalcule la quantité. */
                               const appliquerConso = (conso: number | undefined, usage?: string, u: UniteSurface = uniteLigne) => {
-                                const champ = u === 'ml' ? { consommationMl: conso } : { consommation: conso, consoUsage: usage || undefined };
+                                /* Une conso saisie à la main remplace le dosage en % d'autres lignes. */
+                                if (l.consoRelative) toast.info('Conso saisie à la main : le dosage en % des autres lignes est retiré.');
+                                const champ = { ...(u === 'ml' ? { consommationMl: conso } : { consommation: conso, consoUsage: usage || undefined }), consoRelative: undefined };
                                 if (u !== uniteLigne) {
                                   setLignes(prev => prev.map(li => li.id === l.id ? { ...li, ...champ } : li));
                                   return;
@@ -5333,6 +5391,12 @@ export default function Devis() {
                                           ))}
                                         </DropdownMenuContent>
                                       </DropdownMenu>
+                                    )}
+                                    {/* Conso dosée en % d'autres lignes (pigment à 10 % de la résine). */}
+                                    {prod && !estCata && (
+                                      <ConsoRelativePopover ligne={l} lignes={lignes} produits={produits}
+                                        surfaceGlobaleM2={surfaceGlobaleM2} uniteSurface={uniteSurface} ligneNums={ligneNums}
+                                        onChange={r => changerConsoRelative(l.id, r)} />
                                     )}
                                   </div>
                                 ),
@@ -5740,6 +5804,22 @@ ${dosage.source}` : ''}`}>
                                 {canAchat && tauxMarque !== null && <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>Marge: {tauxMarque.toFixed(1)}%</span>}
                                 {canAchat && coeff !== null && <span>Coeff: {coeff.toFixed(2)}</span>}
                                 {prixKg !== null && <span>{formatMontant(prixKg)}/kg</span>}
+                                {/* Conso dosée en % d'autres lignes : le calcul, en clair. */}
+                                {l.consoRelative && (() => {
+                                  const c = calculerConsoRelative(lignes, l.id, produits, surfaceGlobaleM2, uniteSurface);
+                                  if (!c) return null;
+                                  const n = (x: number) => String(Math.round(x * 100) / 100).replace('.', ',');
+                                  const retenues = c.sources.filter(s => s.retenue);
+                                  return retenues.length === 0 ? (
+                                    <span className="text-amber-600">Dosé à {n(c.pct)} % : aucune ligne cochée — quantité à 0 (bouton % de la conso)</span>
+                                  ) : (
+                                    <span className="font-medium text-foreground"
+                                      title={retenues.map(s => `#${ligneNums[s.ligne.id] ?? '?'} ${noteEnTexte(s.ligne.description)} : ${n(s.kg)} kg`).join('\n')}>
+                                      Dosé à {n(c.pct)} % de {n(c.kgSources)} kg ({retenues.map(s => `#${ligneNums[s.ligne.id] ?? '?'}`).join(' + ')}) = {n(c.kg)} kg
+                                      {l.qteMode === 'manuel' && <span className="text-orange-500 font-normal"> (quantité forcée à la main)</span>}
+                                    </span>
+                                  );
+                                })()}
                                 {kgReel !== null && (() => {
                                   const poidsConditionne = couvertureLigne ? Math.round(l.quantite * couvertureLigne * 100) / 100 : prod?.poids ? Math.round(l.quantite * prod.poids * 100) / 100 : null;
                                   const uniteChantier = couvertureLigne ? 'm²' : 'kg';
