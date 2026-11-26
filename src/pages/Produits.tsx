@@ -26,7 +26,7 @@ import {
 } from '@/lib/categorieDocuments';
 import { niveauGamme } from '@/lib/remiseGammes';
 import { champsFiche, lireDemandeFiche, memoriserLiaison, oublierDemandeFiche, type DemandeFiche } from '@/lib/ficheDepuisLigne';
-import { designationProduit, generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type ConsoUsage, type VarianteDimension, type VarianteOption, type AchatDate, type FicheTechnique } from '@/lib/store';
+import { designationProduit, generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type ConsoUsage, type ConsoRelativeProduit, type VarianteDimension, type VarianteOption, type AchatDate, type FicheTechnique } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { inscrireDansLaListeNoire, retirerDeLaListeNoire } from '@/lib/produitsSupprimes';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
@@ -166,6 +166,7 @@ const emptyProduit = {
   notes: undefined as string | undefined,
   consommations: undefined as ConsoUsage[] | undefined,
   dosageEpaisseur: undefined as DosageEpaisseur | undefined,
+  consoRelative: undefined as ConsoRelativeProduit | null | undefined,
   surfaceUniteM2: undefined as number | undefined,
   fichesSupplementaires: undefined as FicheTechnique[] | undefined,
   ficheType: undefined as TypeFiche | undefined,
@@ -1161,7 +1162,7 @@ export default function Produits() {
     const coefficient = prixEnregistres && prixAchat > 0 && prixRevendeur > 0
       ? Math.round(prixRevendeur / prixAchat * 10000) / 10000
       : p.coefficient;
-    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient, prixHT, coeffRevendeur: coefficient, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', ficheType: p.ficheType, fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, catalogue_tarif: p.catalogue_tarif, adr: p.adr, kgParPalette: p.kgParPalette, consoUnite: p.consoUnite, consommationMl: p.consommationMl, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined, dosageEpaisseur: p.dosageEpaisseur ? structuredClone(p.dosageEpaisseur) : undefined });
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient, prixHT, coeffRevendeur: coefficient, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', ficheType: p.ficheType, fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, catalogue_tarif: p.catalogue_tarif, adr: p.adr, kgParPalette: p.kgParPalette, consoUnite: p.consoUnite, consommationMl: p.consommationMl, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined, dosageEpaisseur: p.dosageEpaisseur ? structuredClone(p.dosageEpaisseur) : undefined, consoRelative: p.consoRelative ? { ...p.consoRelative, produits: p.consoRelative.produits ? [...p.consoRelative.produits] : undefined } : undefined });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -2828,6 +2829,51 @@ export default function Produits() {
                   <button type="button" title="Supprimer" onClick={() => setForm(p => ({ ...p, consommations: (p.consommations || []).filter((_, j) => j !== i) }))} className="text-muted-foreground hover:text-destructive"><Trash className="w-4 h-4" /></button>
                 </div>
               ))}
+            </div>
+            {/* Conso en % du poids d'autres articles du devis (pigment à 10 % de la résine FLOWFAST 319) :
+                recopiée sur la ligne quand l'article est choisi dans un devis (consoRelative.ts). */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Consommation en % du poids d'un autre produit du devis</Label>
+                {!form.consoRelative && (
+                  <button type="button" onClick={() => setForm(p => ({ ...p, consoRelative: { pct: 10 } }))}
+                    className="text-xs text-primary hover:underline flex items-center gap-1"><Plus className="h-3 w-3" /> Conso. en % d'un produit</button>
+                )}
+              </div>
+              {form.consoRelative && (() => {
+                const cr = form.consoRelative;
+                const choisis = (cr.produits ?? []).map(id => produits.find(x => x.id === id)).filter((x): x is Produit => !!x);
+                const majProduits = (ids: string[]) => setForm(p => ({ ...p, consoRelative: { pct: cr.pct, ...(ids.length ? { produits: ids } : {}) } }));
+                return (
+                  <div className="space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="w-24 shrink-0">
+                        <InputNombre decimales={2} value={cr.pct} onChange={v => setForm(p => ({ ...p, consoRelative: { ...cr, pct: v } }))} placeholder="10" />
+                      </div>
+                      <span className="text-sm text-muted-foreground">% du poids de</span>
+                      {choisis.length === 0 && <span className="text-sm italic text-muted-foreground">la résine Flowfast</span>}
+                      {choisis.map(x => (
+                        <span key={x.id} className="inline-flex items-center gap-1 rounded bg-muted px-2 py-1 text-xs">
+                          {x.reference} · {designationProduit(x)}
+                          <button type="button" title="Retirer ce produit" onClick={() => majProduits((cr.produits ?? []).filter(id => id !== x.id))}
+                            className="text-muted-foreground hover:text-destructive"><X className="h-3 w-3" /></button>
+                        </span>
+                      ))}
+                      <div className="w-72 shrink-0">
+                        <ProduitCombobox produits={produits} value=""
+                          onSelect={id => { if (id && id !== editing?.id && !(cr.produits ?? []).includes(id)) majProduits([...(cr.produits ?? []), id]); }} />
+                      </div>
+                      <button type="button" title="Retirer ce dosage de la fiche" onClick={() => setForm(p => ({ ...p, consoRelative: null }))}
+                        className="text-muted-foreground hover:text-destructive"><Trash className="w-4 h-4" /></button>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Dans un devis, les lignes de ce(s) produit(s) placées au-dessus, dans le même groupe, sont prises d'office
+                      (à défaut de produit choisi : les résines Flowfast). Kilos consommés × % → conso et quantité de la ligne.
+                    </p>
+                    {!(form.poids > 0) && <p className="text-[10px] text-destructive">Poids à renseigner : sans lui, la quantité n'est pas calculée.</p>}
+                  </div>
+                );
+              })()}
             </div>
             {/* Mortier chargé selon l'épaisseur (Flowfast F1 Mortar) : le devis en tire la conso du kit et propose les granulats. */}
             <DosageEpaisseurEditor value={form.dosageEpaisseur} kitKg={form.poids || undefined} produits={produits}

@@ -61,3 +61,31 @@ describe('conso dosée en % de la résine', () => {
     expect(calculerConsoRelative([r319, pig], pig.id, produits, 0)!.kg).toBe(4);
   });
 });
+
+describe('articles de référence de la fiche', () => {
+  const F319J = art('319j', 'FLOWFAST319', 'FLOWFAST 319 Unpigmented (20 kg)', 20, { referenceOdoo: 'FLOWFAST31920' });
+  const F319O = art('319o', 'FLOWFAST31920', 'FLOWFAST 319 FLEXIBLE SEAL UNPIGMENTED (20KG)', 20, { referenceOdoo: 'FLOWFAST31920' });
+  const cat2 = [...produits, F319J, F319O];
+
+  it('les lignes de l\'article nommé (et de son jumeau Odoo) sont prises, pas les autres résines', () => {
+    const p107 = ligne('107', { consommation: 0.3 });
+    const a = ligne('319o', { consommation: 0.5 });
+    const b = ligne('319j', { consommation: 0.1 });
+    const pig = ligne('pig', { consoRelative: { pct: 10, produits: ['319j'] } });
+    const c = calculerConsoRelative([p107, a, b, pig], pig.id, cat2, 100)!;
+    expect(c.sources.filter(s => s.retenue).map(s => s.ligne.id)).toEqual([a.id, b.id]);
+    expect(c.kg).toBe(6);
+  });
+
+  it('aucune dans le groupe : celles de tout le devis au-dessus', () => {
+    const a = ligne('319o', { consommation: 0.5 });
+    const g = groupe();
+    const pig = ligne('pig', { consoRelative: { pct: 10, produits: ['319o'] } });
+    expect(calculerConsoRelative([a, g, pig], pig.id, cat2, 100)!.kg).toBe(5);
+  });
+
+  it('basculer une source garde les articles de référence', () => {
+    const r = basculerSource({ pct: 10, produits: ['319o'] }, { ligne: ligne('107'), parDefaut: false }, true);
+    expect(r.produits).toEqual(['319o']);
+  });
+});

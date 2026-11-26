@@ -37,13 +37,18 @@ function Contenu({ ligne, lignes, produits, surfaceGlobaleM2, uniteSurface, lign
   const calc = calculerConsoRelative(vues, ligne.id, produits, surfaceGlobaleM2, uniteSurface);
   if (!calc) return null;
   const pctModifie = actif && pct !== enregistre.pct;
+  const references = (enregistre.produits ?? []).map(id => produitParId(produits, id)).filter((x): x is Produit => !!x).map(x => x.reference);
   const choixManuel = !!(enregistre.inclus?.length || enregistre.exclus?.length);
   const appliquer = (x: ConsoRelative = r) => onChange(x);
   return (
     <div className="space-y-3 text-sm">
       <div>
         <p className="font-medium">Conso. en % du poids d'autres lignes</p>
-        <p className="text-xs text-muted-foreground">Ex. : pigment à 10 % du poids de résine consommée. Les résines Flowfast du même groupe, au-dessus, sont prises d'office.</p>
+        <p className="text-xs text-muted-foreground">
+          Ex. : pigment à 10 % du poids de résine consommée. {references.length
+            ? <>Prises d'office (fiche article) : les lignes de <span className="text-foreground">{references.join(', ')}</span> du même groupe, au-dessus.</>
+            : <>Les résines Flowfast du même groupe, au-dessus, sont prises d'office.</>}
+        </p>
       </div>
       <div className="flex items-center gap-2">
         <InputNombre decimales={2} value={pct} className="h-8 w-20 text-sm"
@@ -67,7 +72,7 @@ function Contenu({ ligne, lignes, produits, surfaceGlobaleM2, uniteSurface, lign
                 <span className="flex-1 min-w-0">
                   <span className="text-muted-foreground">#{ligneNums[s.ligne.id] ?? '?'} </span>
                   <span className={s.retenue ? 'text-foreground' : 'text-muted-foreground'}>{p ? designationProduit(p) : s.ligne.description}</span>
-                  {s.parDefaut && <span className="text-[10px] text-primary"> · résine</span>}
+                  {s.parDefaut && <span className="text-[10px] text-primary"> · d'office</span>}
                 </span>
                 <span className="tabular-nums text-xs shrink-0" title={
                   s.base === 'resine' ? 'Résine consommée (surface × conso ; un kit ne compte que sa résine)'
@@ -86,8 +91,8 @@ function Contenu({ ligne, lignes, produits, surfaceGlobaleM2, uniteSurface, lign
       </p>
       {choixManuel && (
         <button type="button" className="text-xs text-primary hover:underline"
-          onClick={() => appliquer({ pct })}
-          title="Oublier les lignes cochées / décochées à la main : seules les résines Flowfast du même groupe, au-dessus, comptent">
+          onClick={() => appliquer({ pct, ...(enregistre.produits?.length ? { produits: enregistre.produits } : {}) })}
+          title="Oublier les lignes cochées / décochées à la main : seules les lignes prises d'office comptent">
           Revenir aux lignes prises d'office
         </button>
       )}

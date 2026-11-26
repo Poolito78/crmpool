@@ -13,8 +13,11 @@ import { calculerCatalyse, estCatalyseur, familleResine } from './catalyseur';
  *
  * LES SOURCES SE PRENNENT D'OFFICE : les résines Flowfast placées AU-DESSUS,
  * dans le même groupe (deux lignes de 319 dans la finition comptent toutes
- * les deux ; le primaire 107 d'un autre groupe, non). On en coche d'autres
- * (`inclus`) ou on en décoche (`exclus`) : le choix est retenu sur la ligne.
+ * les deux ; le primaire 107 d'un autre groupe, non). La fiche article peut
+ * nommer ses articles de référence (`Produit.consoRelative.produits`,
+ * recopiés sur la ligne) : ce sont alors eux, jumeaux Odoo compris, et non les
+ * résines. Aucun dans le groupe : ceux de tout le devis au-dessus. On en coche
+ * d'autres (`inclus`) ou on en décoche (`exclus`) : le choix reste sur la ligne.
  *
  * Le poids d'une source est celui CONSOMMÉ (surface × conso), comme pour le
  * catalyseur ; sans surface ni conso, celui des unités vendues. Un kit dont on
@@ -24,6 +27,8 @@ import { calculerCatalyse, estCatalyseur, familleResine } from './catalyseur';
 export interface ConsoRelative {
   /** Pourcentage du poids des sources (10 = 10 %). */
   pct: number;
+  /** Articles de référence, recopiés de la fiche (`Produit.consoRelative`) ; absents = les résines Flowfast. */
+  produits?: string[];
   /** Lignes cochées à la main, en plus des résines prises d'office. */
   inclus?: string[];
   /** Lignes décochées à la main, parmi les résines prises d'office. */
@@ -115,14 +120,26 @@ export function calculerConsoRelative(
   const seg = segment(lignes, idx);
   const inclus = new Set(r.inclus ?? []);
   const exclus = new Set(r.exclus ?? []);
-  const sources: SourceConso[] = [];
+  /* Les articles de référence de la fiche (FLOWFAST 319…), jumeaux Odoo compris
+     (FLOWFAST319 / FLOWFAST31920 : même `referenceOdoo`) ; sans eux, les résines Flowfast. */
+  const ids = new Set(r.produits ?? []);
+  const cle = (s?: string) => (s ?? '').trim().toUpperCase();
+  const refs = new Set([...ids].map(id => cle(produitParId(produits, id)?.referenceOdoo)).filter(Boolean));
+  const correspond = (p: Produit) => (ids.size ? ids.has(p.id) || refs.has(cle(p.referenceOdoo)) : estResine(p));
+  const vues: { l: LigneDevis; p: Produit; memeGroupe: boolean; corr: boolean }[] = [];
   for (let i = 0; i < idx; i++) {
     const l = lignes[i];
     if (!estArticle(l) || l.consoRelative || !l.produitId) continue;
     const p = produitParId(produits, l.produitId);
     if (!p || estCatalyseur(p)) continue;
+    vues.push({ l, p, memeGroupe: segment(lignes, i) === seg, corr: correspond(p) });
+  }
+  // Le même groupe d'abord ; s'il n'en porte aucune, toutes celles au-dessus.
+  const dansLeGroupe = vues.some(v => v.corr && v.memeGroupe);
+  const sources: SourceConso[] = [];
+  for (const { l, p, memeGroupe, corr } of vues) {
     const { kg, base } = kgDeLigne(l, p, produits, surfaceGlobaleM2, uniteDevis);
-    const parDefaut = estResine(p) && segment(lignes, i) === seg;
+    const parDefaut = corr && (memeGroupe || !dansLeGroupe);
     if (!(kg > 0) && !parDefaut) continue;
     const retenue = inclus.has(l.id) || (parDefaut && !exclus.has(l.id));
     sources.push({ ligne: l, kg: arrondi(kg), base, parDefaut, retenue });
@@ -139,5 +156,8 @@ export function basculerSource(r: ConsoRelative, s: Pick<SourceConso, 'ligne' | 
   const id = s.ligne.id;
   if (s.parDefaut) { inclus.delete(id); if (coche) exclus.delete(id); else exclus.add(id); }
   else { exclus.delete(id); if (coche) inclus.add(id); else inclus.delete(id); }
-  return { pct: r.pct, ...(inclus.size ? { inclus: [...inclus] } : {}), ...(exclus.size ? { exclus: [...exclus] } : {}) };
+  return {
+    pct: r.pct, ...(r.produits?.length ? { produits: r.produits } : {}),
+    ...(inclus.size ? { inclus: [...inclus] } : {}), ...(exclus.size ? { exclus: [...exclus] } : {}),
+  };
 }

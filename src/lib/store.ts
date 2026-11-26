@@ -413,6 +413,22 @@ export interface ConsoUsage {
   usage: string;
 }
 
+/** Conso d'un article dosée en % du poids d'autres articles (`produits` : leurs id ; vide = les résines Flowfast). */
+export interface ConsoRelativeProduit {
+  pct: number;
+  produits?: string[];
+}
+
+/** Lit la colonne `conso_relative` : `undefined` si absente ou sans pourcentage. */
+function lireConsoRelative(v: unknown): ConsoRelativeProduit | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const o = v as { pct?: unknown; produits?: unknown };
+  const pct = Number(o.pct);
+  if (!(pct > 0)) return undefined;
+  const produits = Array.isArray(o.produits) ? o.produits.filter((x): x is string => typeof x === 'string' && !!x) : [];
+  return { pct, ...(produits.length ? { produits } : {}) };
+}
+
 export interface PrixPalier {
   qteMin: number;        // quantité/poids minimum pour déclencher ce palier
   prixAchat: number;     // prix achat HT à ce palier
@@ -511,6 +527,13 @@ export interface Produit {
   consommations?: ConsoUsage[];
   /** Dosé selon l'épaisseur : conso par mm (kg/m², kg/ml), et granulats par kit pour un mortier chargé (`dosageEpaisseur.ts`). */
   dosageEpaisseur?: DosageEpaisseur;
+  /**
+   * Conso dosée en % du poids d'AUTRES articles du devis (pigment à 10 % de
+   * la résine FLOWFAST 319) : recopiée sur la ligne quand l'article est choisi
+   * dans un devis (`LigneDevis.consoRelative`, `consoRelative.ts`). `null` =
+   * retirée de la fiche (efface la colonne).
+   */
+  consoRelative?: ConsoRelativeProduit | null;
   stock: number;
   stockMin: number;
   fournisseurId?: string;
@@ -887,7 +910,7 @@ export interface LigneDevis {
    * (`consoRelative.ts`). `inclus` / `exclus` : lignes cochées ou décochées
    * à la main, les résines du même groupe au-dessus étant prises d'office.
    */
-  consoRelative?: { pct: number; inclus?: string[]; exclus?: string[] };
+  consoRelative?: { pct: number; produits?: string[]; inclus?: string[]; exclus?: string[] };
   /**
    * Ligne à variante composée DÉPLIÉE : l'éditeur montre ses composants un par
    * un, et le devis (aperçu, PDF) les détaille sous la ligne. Repliée (absent),
@@ -1329,6 +1352,7 @@ function dbToProduit(r: any): Produit {
     notes: r.notes || undefined,
     consommations: Array.isArray(r.consommations) && r.consommations.length ? r.consommations : undefined,
     dosageEpaisseur: lireDosage(r.dosage_epaisseur),
+    consoRelative: lireConsoRelative(r.conso_relative),
     surfaceUniteM2: r.surface_unite_m2 != null ? Number(r.surface_unite_m2) : undefined,
     stock: Number(r.stock) || 0,
     stockMin: Number(r.stock_min) || 0,
@@ -1424,6 +1448,8 @@ function produitToDb(p: Produit, userId: string) {
     ...(p.consommations !== undefined ? { consommations: p.consommations.filter(c => c.valeur > 0).length ? p.consommations.filter(c => c.valeur > 0) : null } : {}),
     ...(p.notes !== undefined ? { notes: p.notes.trim() ? p.notes : null } : {}),
     ...(p.dosageEpaisseur !== undefined ? { dosage_epaisseur: lireDosage(p.dosageEpaisseur) ?? null } : {}),
+    // Seulement si la fiche en porte un (ou vient de le retirer) : sans la colonne, PostgREST rejetterait la ligne.
+    ...(p.consoRelative !== undefined ? { conso_relative: lireConsoRelative(p.consoRelative) ?? null } : {}),
     ...(p.consoUnite !== undefined || p.surfaceUniteM2 ? { conso_unite: p.consoUnite ?? 'kg', surface_unite_m2: p.surfaceUniteM2 ?? null } : {}),
     ...(p.consommationMl !== undefined ? { consommation_ml: p.consommationMl > 0 ? p.consommationMl : null } : {}),
     stock: p.stock,

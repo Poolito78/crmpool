@@ -2861,7 +2861,12 @@ export default function Devis() {
             if (dim.options.length > 0 && !partages.has(cleDimension(dim.nom))) variantesChoisies[dim.id] = dim.options[0].label;
           });
         }
-        return { ...l, fournisseurId: undefined, produitId: p.id, description: designationProduit(p), prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise: remiseReprise, quantite, surfaceM2: surfaceLigne > 0 ? surfaceLigne : undefined, consommation: undefined, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
+        /* Dosé en % d'autres articles sur sa fiche (pigment à 10 % de la résine) : la ligne
+           le reprend, et sa conso / sa quantité se calculent aussitôt (`recalcConsoRelative`). */
+        const consoRelative = p.consoRelative?.pct
+          ? { pct: p.consoRelative.pct, ...(p.consoRelative.produits?.length ? { produits: [...p.consoRelative.produits] } : {}) }
+          : undefined;
+        return { ...l, fournisseurId: undefined, produitId: p.id, description: designationProduit(p), prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise: remiseReprise, quantite, surfaceM2: surfaceLigne > 0 ? surfaceLigne : undefined, consommation: undefined, consoRelative, qteMode: consoRelative && l.qteMode === 'manuel' ? undefined : l.qteMode, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
       }));
       // Initialise le fournisseur prioritaire pour cette ligne dans le comparatif
       const pfs = produitFournisseurs.filter(pf => pf.produitId === produitId);
