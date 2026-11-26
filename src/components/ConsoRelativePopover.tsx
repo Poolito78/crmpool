@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/button';
 import { InputNombre } from '@/components/InputNombre';
 import { designationProduit, type LigneDevis, type Produit, type UniteSurface } from '@/lib/store';
 import { produitParId } from '@/lib/indexProduits';
-import { basculerSource, calculerConsoRelative, PCT_CONSO_RELATIVE_DEFAUT, type ConsoRelative } from '@/lib/consoRelative';
+import { basculerSource, calculerConsoRelative, libelleDosage, PCT_CONSO_RELATIVE_DEFAUT, type ConsoRelative } from '@/lib/consoRelative';
 
 /**
  * Le bouton « % » de la cellule Conso. : la conso de la ligne dosée en
- * pourcentage du poids d'autres lignes (pigment à 10 % de la résine). La
+ * pourcentage du poids d'autres lignes (pigment à 10 % de la résine), ou en
+ * coefficient (SNLC = × 0,5 le poids du 319) — même calcul, autre saisie. La
  * fenêtre liste les lignes au-dessus, les résines Flowfast du même groupe
  * cochées d'office ; on coche, on décoche, et le choix reste sur la ligne.
  */
@@ -32,32 +33,42 @@ function Contenu({ ligne, lignes, produits, surfaceGlobaleM2, uniteSurface, lign
   /* Le % se SAISIT puis s'APPLIQUE (bouton ou Entrée) : il ne recalcule pas la
      ligne à chaque chiffre tapé. La fenêtre montre ce que donnerait la saisie. */
   const [pct, setPct] = useState(enregistre.pct);
-  const r: ConsoRelative = { ...enregistre, pct };
+  const [mode, setMode] = useState<ConsoRelative['mode']>(enregistre.mode);
+  const { mode: _m, ...sansMode } = enregistre;
+  const r: ConsoRelative = { ...sansMode, pct, ...(mode ? { mode } : {}) };
+  const coef = mode === 'coef';
   const vues = lignes.map(l => (l.id === ligne.id ? { ...l, consoRelative: r } : l));
   const calc = calculerConsoRelative(vues, ligne.id, produits, surfaceGlobaleM2, uniteSurface);
   if (!calc) return null;
-  const pctModifie = actif && pct !== enregistre.pct;
+  const pctModifie = actif && (pct !== enregistre.pct || mode !== enregistre.mode);
   const references = (enregistre.produits ?? []).map(id => produitParId(produits, id)).filter((x): x is Produit => !!x).map(x => x.reference);
   const choixManuel = !!(enregistre.inclus?.length || enregistre.exclus?.length);
   const appliquer = (x: ConsoRelative = r) => onChange(x);
   return (
     <div className="space-y-3 text-sm">
       <div>
-        <p className="font-medium">Conso. en % du poids d'autres lignes</p>
+        <p className="font-medium">Conso. en % ou × le poids d'autres lignes</p>
         <p className="text-xs text-muted-foreground">
-          Ex. : pigment à 10 % du poids de résine consommée. {references.length
+          Ex. : pigment à 10 % de la résine, SNLC × 0,5 le FLOWFAST 319. {references.length
             ? <>Prises d'office (fiche article) : les lignes de <span className="text-foreground">{references.join(', ')}</span> du même groupe, au-dessus.</>
             : <>Les résines Flowfast du même groupe, au-dessus, sont prises d'office.</>}
         </p>
       </div>
       <div className="flex items-center gap-2">
-        <InputNombre decimales={2} value={pct} className="h-8 w-20 text-sm"
-          onChange={v => setPct(v)}
+        {/* % ou coefficient : la même grandeur (× 0,5 = 50 %), saisie à sa façon. */}
+        <div className="flex rounded border overflow-hidden shrink-0 text-xs">
+          <button type="button" onClick={() => setMode(undefined)} title="Dosage en pourcentage du poids (pigment à 10 %)"
+            className={`h-8 px-2 ${!coef ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>%</button>
+          <button type="button" onClick={() => setMode('coef')} title="Dosage en coefficient du poids (SNLC = 0,5 × le 319)"
+            className={`h-8 px-2 ${coef ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>×</button>
+        </div>
+        <InputNombre key={mode ?? 'pct'} decimales={coef ? 4 : 2} value={coef ? pct / 100 : pct} className="h-8 w-20 text-sm"
+          onChange={v => setPct(coef ? Math.round(v * 100 * 1e6) / 1e6 : v)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); appliquer(); } }} />
-        <span className="text-muted-foreground">% du poids des lignes cochées</span>
+        <span className="text-muted-foreground">{coef ? '× le poids des lignes cochées' : '% du poids des lignes cochées'}</span>
       </div>
       {pctModifie && (
-        <p className="text-xs text-orange-500">Dosage enregistré : {String(enregistre.pct).replace('.', ',')} % — « Appliquer » pour passer à {String(pct).replace('.', ',')} %.</p>
+        <p className="text-xs text-orange-500">Dosage enregistré : {libelleDosage(enregistre)} — « Appliquer » pour passer à {libelleDosage(r)}.</p>
       )}
       {calc.sources.length === 0 ? (
         <p className="text-xs text-amber-600">Aucune ligne d'article au-dessus de celle-ci : rien à doser.</p>
@@ -86,12 +97,12 @@ function Contenu({ ligne, lignes, produits, surfaceGlobaleM2, uniteSurface, lign
         </div>
       )}
       <p className="text-xs">
-        {kg(calc.kgSources)} × {String(calc.pct).replace('.', ',')} % = <span className="font-semibold">{kg(calc.kg)}</span>
+        {kg(calc.kgSources)} {coef ? libelleDosage(r) : `× ${libelleDosage(r)}`} = <span className="font-semibold">{kg(calc.kg)}</span>
         {calc.sources.length > 0 && !calc.sources.some(s => s.retenue) && <span className="text-amber-600"> — aucune ligne cochée</span>}
       </p>
       {choixManuel && (
         <button type="button" className="text-xs text-primary hover:underline"
-          onClick={() => appliquer({ pct, ...(enregistre.produits?.length ? { produits: enregistre.produits } : {}) })}
+          onClick={() => appliquer({ pct, ...(mode ? { mode } : {}), ...(enregistre.produits?.length ? { produits: enregistre.produits } : {}) })}
           title="Oublier les lignes cochées / décochées à la main : seules les lignes prises d'office comptent">
           Revenir aux lignes prises d'office
         </button>
@@ -114,7 +125,7 @@ export default function ConsoRelativePopover(props: Props) {
       <PopoverTrigger asChild>
         <button type="button"
           title={actif
-            ? `Conso dosée à ${String(props.ligne.consoRelative!.pct).replace('.', ',')} % du poids d'autres lignes — cliquer pour régler`
+            ? `Conso dosée : ${libelleDosage(props.ligne.consoRelative!)} le poids d'autres lignes — cliquer pour régler`
             : 'Doser la conso en % du poids d\'autres lignes (pigment à 10 % de la résine…)'}
           className={`h-8 w-5 shrink-0 rounded flex items-center justify-center hover:bg-muted ${actif ? 'text-primary bg-primary/10' : 'text-muted-foreground'}`}>
           <Percent className="w-3.5 h-3.5" />

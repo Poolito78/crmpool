@@ -25,8 +25,10 @@ import { calculerCatalyse, estCatalyseur, familleResine } from './catalyseur';
  * granulat ne se pigmente pas.
  */
 export interface ConsoRelative {
-  /** Pourcentage du poids des sources (10 = 10 %). */
+  /** Pourcentage du poids des sources (10 = 10 % ; × 0,5 = 50). */
   pct: number;
+  /** Saisi et affiché en coefficient (SNLC = 0,5 × le 319) plutôt qu'en % ; le calcul est le même. */
+  mode?: 'coef';
   /** Articles de référence, recopiés de la fiche (`Produit.consoRelative`) ; absents = les résines Flowfast. */
   produits?: string[];
   /** Lignes cochées à la main, en plus des résines prises d'office. */
@@ -149,6 +151,12 @@ export function calculerConsoRelative(
   return { pct, sources, kgSources, kg: arrondi(kgSources * pct / 100) };
 }
 
+/** Le dosage en clair : « 10 % » ou « × 0,5 ». */
+export function libelleDosage(r: Pick<ConsoRelative, 'pct' | 'mode'>): string {
+  const n = (x: number) => String(Math.round(x * 10000) / 10000).replace('.', ',');
+  return r.mode === 'coef' ? `× ${n(r.pct / 100)}` : `${n(r.pct)} %`;
+}
+
 /** Coche ou décoche une source : retenue d'office, on la retire des exclus ; sinon on l'ajoute aux inclus (et inversement). */
 export function basculerSource(r: ConsoRelative, s: Pick<SourceConso, 'ligne' | 'parDefaut'>, coche: boolean): ConsoRelative {
   const inclus = new Set(r.inclus ?? []);
@@ -157,7 +165,7 @@ export function basculerSource(r: ConsoRelative, s: Pick<SourceConso, 'ligne' | 
   if (s.parDefaut) { inclus.delete(id); if (coche) exclus.delete(id); else exclus.add(id); }
   else { exclus.delete(id); if (coche) inclus.add(id); else inclus.delete(id); }
   return {
-    pct: r.pct, ...(r.produits?.length ? { produits: r.produits } : {}),
+    pct: r.pct, ...(r.mode ? { mode: r.mode } : {}), ...(r.produits?.length ? { produits: r.produits } : {}),
     ...(inclus.size ? { inclus: [...inclus] } : {}), ...(exclus.size ? { exclus: [...exclus] } : {}),
   };
 }

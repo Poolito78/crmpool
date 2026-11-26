@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculerConsoRelative, basculerSource } from './consoRelative';
+import { calculerConsoRelative, basculerSource, libelleDosage } from './consoRelative';
 import type { LigneDevis, Produit } from './store';
 
 const art = (id: string, reference: string, description: string, poids: number, extra: object = {}) =>
@@ -87,5 +87,16 @@ describe('articles de référence de la fiche', () => {
   it('basculer une source garde les articles de référence', () => {
     const r = basculerSource({ pct: 10, produits: ['319o'] }, { ligne: ligne('107'), parDefaut: false }, true);
     expect(r.produits).toEqual(['319o']);
+  });
+});
+
+describe('dosage en coefficient', () => {
+  it('SNLC = 0,5 × le 319 : même calcul qu\'à 50 %', () => {
+    const r319 = ligne('319', { consommation: 0.5 });
+    const snlc = ligne('snlc', { consoRelative: { pct: 50, mode: 'coef' } });
+    expect(calculerConsoRelative([r319, snlc], snlc.id, produits, 100)!.kg).toBe(25);
+    expect(libelleDosage({ pct: 50, mode: 'coef' })).toBe('× 0,5');
+    expect(libelleDosage({ pct: 10 })).toBe('10 %');
+    expect(basculerSource({ pct: 50, mode: 'coef' }, { ligne: r319, parDefaut: true }, false).mode).toBe('coef');
   });
 });

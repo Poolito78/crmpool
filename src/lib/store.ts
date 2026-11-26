@@ -415,8 +415,11 @@ export interface ConsoUsage {
 
 /** Conso d'un article dosée en % du poids d'autres articles (`produits` : leurs id ; vide = les résines Flowfast). */
 export interface ConsoRelativeProduit {
+  /** Toujours en pourcentage (× 0,5 = 50). */
   pct: number;
   produits?: string[];
+  /** Saisi et affiché en coefficient (« × 0,5 ») plutôt qu'en % ; le calcul est le même. */
+  mode?: 'coef';
 }
 
 /** Lit la colonne `conso_relative` : `undefined` si absente ou sans pourcentage. */
@@ -426,7 +429,7 @@ function lireConsoRelative(v: unknown): ConsoRelativeProduit | undefined {
   const pct = Number(o.pct);
   if (!(pct > 0)) return undefined;
   const produits = Array.isArray(o.produits) ? o.produits.filter((x): x is string => typeof x === 'string' && !!x) : [];
-  return { pct, ...(produits.length ? { produits } : {}) };
+  return { pct, ...(produits.length ? { produits } : {}), ...((o as { mode?: unknown }).mode === 'coef' ? { mode: 'coef' as const } : {}) };
 }
 
 export interface PrixPalier {
@@ -910,7 +913,7 @@ export interface LigneDevis {
    * (`consoRelative.ts`). `inclus` / `exclus` : lignes cochées ou décochées
    * à la main, les résines du même groupe au-dessus étant prises d'office.
    */
-  consoRelative?: { pct: number; produits?: string[]; inclus?: string[]; exclus?: string[] };
+  consoRelative?: { pct: number; mode?: 'coef'; produits?: string[]; inclus?: string[]; exclus?: string[] };
   /**
    * Ligne à variante composée DÉPLIÉE : l'éditeur montre ses composants un par
    * un, et le devis (aperçu, PDF) les détaille sous la ligne. Repliée (absent),

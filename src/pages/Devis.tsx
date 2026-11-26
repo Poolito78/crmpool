@@ -58,7 +58,7 @@ import {
 import VarianteCompoDialog from '@/components/VarianteCompoDialog';
 import EpaisseurInput from '@/components/EpaisseurInput';
 import ConsoRelativePopover from '@/components/ConsoRelativePopover';
-import { calculerConsoRelative } from '@/lib/consoRelative';
+import { calculerConsoRelative, libelleDosage } from '@/lib/consoRelative';
 import {
   ajoutsCharge, calculerDosage, consoGranulat, consoMlEpaisseur, consoProduitRatio, copierLignes, dosagePourRatio, ratioRetenu, epaisseurMinimale, kgGranulat, libelleGranulat, libelleGranulatAuto, palierPour, quantiteGranulat, usageEpaisseur,
   type AjoutDosage,
@@ -2864,7 +2864,7 @@ export default function Devis() {
         /* Dosé en % d'autres articles sur sa fiche (pigment à 10 % de la résine) : la ligne
            le reprend, et sa conso / sa quantité se calculent aussitôt (`recalcConsoRelative`). */
         const consoRelative = p.consoRelative?.pct
-          ? { pct: p.consoRelative.pct, ...(p.consoRelative.produits?.length ? { produits: [...p.consoRelative.produits] } : {}) }
+          ? { pct: p.consoRelative.pct, ...(p.consoRelative.mode ? { mode: p.consoRelative.mode } : {}), ...(p.consoRelative.produits?.length ? { produits: [...p.consoRelative.produits] } : {}) }
           : undefined;
         return { ...l, fournisseurId: undefined, produitId: p.id, description: designationProduit(p), prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise: remiseReprise, quantite, surfaceM2: surfaceLigne > 0 ? surfaceLigne : undefined, consommation: undefined, consoRelative, qteMode: consoRelative && l.qteMode === 'manuel' ? undefined : l.qteMode, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
       }));
@@ -5829,11 +5829,14 @@ ${dosage.source}` : ''}`}>
                                   const n = (x: number) => String(Math.round(x * 100) / 100).replace('.', ',');
                                   const retenues = c.sources.filter(s => s.retenue);
                                   return retenues.length === 0 ? (
-                                    <span className="text-amber-600">Dosé à {n(c.pct)} % : aucune ligne cochée — quantité à 0 (bouton % de la conso)</span>
+                                    <span className="text-amber-600">Dosé {l.consoRelative!.mode === 'coef' ? '' : 'à '}{libelleDosage(l.consoRelative!)} : aucune ligne cochée — quantité à 0 (bouton % de la conso)</span>
                                   ) : (
                                     <span className="font-medium text-foreground"
                                       title={retenues.map(s => `#${ligneNums[s.ligne.id] ?? '?'} ${noteEnTexte(s.ligne.description)} : ${n(s.kg)} kg`).join('\n')}>
-                                      Dosé à {n(c.pct)} % de {n(c.kgSources)} kg ({retenues.map(s => `#${ligneNums[s.ligne.id] ?? '?'}`).join(' + ')}) = {n(c.kg)} kg
+                                      {/* « Dosé à 10 % de 50 kg (#3) = 5 kg » ou « Dosé : 50 kg (#3) × 0,5 = 25 kg ». */}
+                                      {l.consoRelative!.mode === 'coef'
+                                        ? <>Dosé : {n(c.kgSources)} kg ({retenues.map(s => `#${ligneNums[s.ligne.id] ?? '?'}`).join(' + ')}) {libelleDosage(l.consoRelative!)} = {n(c.kg)} kg</>
+                                        : <>Dosé à {libelleDosage(l.consoRelative!)} de {n(c.kgSources)} kg ({retenues.map(s => `#${ligneNums[s.ligne.id] ?? '?'}`).join(' + ')}) = {n(c.kg)} kg</>}
                                       {l.qteMode === 'manuel' && <span className="text-orange-500 font-normal"> (quantité forcée à la main)</span>}
                                     </span>
                                   );

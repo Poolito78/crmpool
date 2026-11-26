@@ -2834,23 +2834,37 @@ export default function Produits() {
                 recopiée sur la ligne quand l'article est choisi dans un devis (consoRelative.ts). */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-xs">Consommation en % du poids d'un autre produit du devis</Label>
+                <Label className="text-xs">Consommation en % ou × le poids d'un autre produit du devis</Label>
                 {!form.consoRelative && (
                   <button type="button" onClick={() => setForm(p => ({ ...p, consoRelative: { pct: 10 } }))}
-                    className="text-xs text-primary hover:underline flex items-center gap-1"><Plus className="h-3 w-3" /> Conso. en % d'un produit</button>
+                    className="text-xs text-primary hover:underline flex items-center gap-1"><Plus className="h-3 w-3" /> Conso. en % / × d'un produit</button>
                 )}
               </div>
               {form.consoRelative && (() => {
                 const cr = form.consoRelative;
                 const choisis = (cr.produits ?? []).map(id => produits.find(x => x.id === id)).filter((x): x is Produit => !!x);
-                const majProduits = (ids: string[]) => setForm(p => ({ ...p, consoRelative: { pct: cr.pct, ...(ids.length ? { produits: ids } : {}) } }));
+                const majProduits = (ids: string[]) => setForm(p => ({ ...p, consoRelative: { pct: cr.pct, ...(cr.mode ? { mode: cr.mode } : {}), ...(ids.length ? { produits: ids } : {}) } }));
+                /* % (pigment à 10 % de la résine) ou coefficient (SNLC = × 0,5 le 319) : `pct` porte toujours le pourcentage. */
+                const coef = cr.mode === 'coef';
+                const changerMode = (m: 'coef' | undefined) => setForm(p => {
+                  const { mode: _m, ...reste } = cr;
+                  return { ...p, consoRelative: { ...reste, ...(m ? { mode: m } : {}) } };
+                });
                 return (
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="w-24 shrink-0">
-                        <InputNombre decimales={2} value={cr.pct} onChange={v => setForm(p => ({ ...p, consoRelative: { ...cr, pct: v } }))} placeholder="10" />
+                      <div className="flex rounded border overflow-hidden shrink-0 text-xs">
+                        <button type="button" onClick={() => changerMode(undefined)} title="Dosage en pourcentage du poids (pigment à 10 %)"
+                          className={`h-9 px-2.5 ${!coef ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>%</button>
+                        <button type="button" onClick={() => changerMode('coef')} title="Dosage en coefficient du poids (SNLC = 0,5 × le 319)"
+                          className={`h-9 px-2.5 ${coef ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>×</button>
                       </div>
-                      <span className="text-sm text-muted-foreground">% du poids de</span>
+                      <div className="w-24 shrink-0">
+                        <InputNombre key={coef ? 'coef' : 'pct'} decimales={coef ? 4 : 2} value={coef ? cr.pct / 100 : cr.pct}
+                          onChange={v => setForm(p => ({ ...p, consoRelative: { ...cr, pct: coef ? Math.round(v * 100 * 1e6) / 1e6 : v } }))}
+                          placeholder={coef ? '0,5' : '10'} />
+                      </div>
+                      <span className="text-sm text-muted-foreground">{coef ? '× le poids de' : '% du poids de'}</span>
                       {choisis.length === 0 && <span className="text-sm italic text-muted-foreground">la résine Flowfast</span>}
                       {choisis.map(x => (
                         <span key={x.id} className="inline-flex items-center gap-1 rounded bg-muted px-2 py-1 text-xs">
@@ -2868,7 +2882,7 @@ export default function Produits() {
                     </div>
                     <p className="text-[10px] text-muted-foreground">
                       Dans un devis, les lignes de ce(s) produit(s) placées au-dessus, dans le même groupe, sont prises d'office
-                      (à défaut de produit choisi : les résines Flowfast). Kilos consommés × % → conso et quantité de la ligne.
+                      (à défaut de produit choisi : les résines Flowfast). Kilos consommés × % (ou × coefficient) → conso et quantité de la ligne.
                     </p>
                     {!(form.poids > 0) && <p className="text-[10px] text-destructive">Poids à renseigner : sans lui, la quantité n'est pas calculée.</p>}
                   </div>
