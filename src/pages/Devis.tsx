@@ -1630,15 +1630,15 @@ export default function Devis() {
      au conditionnement supérieur). Forcée à la main (`qteMode: 'manuel'`),
      la quantité n'est plus réécrite ; en « Qté chantier », `recalcChantier`
      la porte avec les autres lignes du même article. */
-  useEffect(() => {
-    if (calculsAOuverture(lignes)) return;
-    if (!lignes.some(l => l.consoRelative)) return;
+  /** Les lignes dosées en % recalculées (conso et quantité) ; le même tableau si rien ne change. */
+  function recalcConsoRelative(ls: LigneDevis[]): LigneDevis[] {
+    if (!ls.some(l => l.consoRelative)) return ls;
     const estRev = clients.find(c => c.id === clientId)?.estRevendeur;
     let change = false;
-    const suivantes = lignes.map(l => {
+    const suivantes = ls.map(l => {
       if (!l.consoRelative || !l.produitId) return l;
       const art = produitParId(produits, l.produitId);
-      const calc = calculerConsoRelative(lignes, l.id, produits, surfaceGlobaleM2, uniteSurface);
+      const calc = calculerConsoRelative(ls, l.id, produits, surfaceGlobaleM2, uniteSurface);
       if (!art || !calc) return l;
       let suite = l;
       const u = uniteL(l);
@@ -1661,18 +1661,31 @@ export default function Devis() {
       if (suite !== l) change = true;
       return suite;
     });
-    if (change) setLignes(recalcChantier(suivantes));
+    return change ? recalcChantier(suivantes) : ls;
+  }
+
+  useEffect(() => {
+    if (calculsAOuverture(lignes)) return;
+    const suivantes = recalcConsoRelative(lignes);
+    if (suivantes !== lignes) setLignes(suivantes);
   }, [lignes, produits, surfaceGlobaleM2, uniteSurface]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** Passe une ligne en conso dosée en % d'autres lignes (`pct`), ou la rend à sa conso saisie (`null`). */
+  /**
+   * Applique (ou réapplique) le dosage en % d'une ligne, ou le retire (`null`).
+   * Le calcul se fait AUSSITÔT, devis rouvert compris, et une quantité forcée
+   * à la main repasse en automatique : réappliquer, c'est redemander le calcul.
+   */
   function changerConsoRelative(id: string, r: LigneDevis['consoRelative'] | null) {
     saveSnapshot();
-    setLignes(prev => prev.map(l => {
-      if (l.id !== id) return l;
-      if (r) return { ...l, consoRelative: r, ...(l.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}) };
-      const { consoRelative: _r, ...reste } = l;
-      return reste;
-    }));
+    setLignes(prev => {
+      const out = prev.map(l => {
+        if (l.id !== id) return l;
+        if (r) return { ...l, consoRelative: r, ...(l.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}) };
+        const { consoRelative: _r, ...reste } = l;
+        return reste;
+      });
+      return r ? recalcConsoRelative(out) : out;
+    });
   }
 
   /** Le granulat du tableau que porte cette ligne, au mélange de l'épaisseur de son mortier — ou la charge de son ratio. */
