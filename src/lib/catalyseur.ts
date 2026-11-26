@@ -11,8 +11,10 @@ import { cleSousCompo, composantsPersonnalises, varianteDeLigne, type VarianteCo
  *
  * La ligne du catalyseur (CATALYST2, 2 kg) porte la température
  * (`LigneDevis.temperatureCatalyse`, 20 °C par défaut) et sa quantité se
- * calcule : kilos de résine du devis × pourcentage → kilos de catalyseur →
- * contenants entiers.
+ * calcule : kilos de résine × pourcentage → kilos de catalyseur → contenants
+ * entiers. ⚠️ La résine est celle CONSOMMÉE sur le chantier (surface × conso,
+ * `lignesResineConsommee`, odooSync.ts), pas les seaux vendus : 3 seaux de
+ * 20 kg pour 51 kg posés dosent 51 kg (règle du 26/11/2026).
  *
  * ⚠️ ON COMPTE LA RÉSINE, PAS LE POIDS DE LA LIGNE. Un kit pèse aussi son
  * granulat : FLOWFAST21535 fait 35 kg pour 10 kg de 215, le kit 319 ROAD

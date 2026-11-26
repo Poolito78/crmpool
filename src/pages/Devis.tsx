@@ -8,7 +8,7 @@ import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type DevisOdooLie, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Building2, MoveHorizontal, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, BarChart3, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, RefreshCw, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat, FilePlus } from 'lucide-react';
 import { demandeDepuisLigne, memoriserDemandeFiche, prendreLiaison, lierLigneAuProduit } from '@/lib/ficheDepuisLigne';
-import { genererScriptOdoo, promptOdooPartnerName, getOdooPartnerId, setOdooPartnerId, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, type OdooPayload } from '@/lib/odooSync';
+import { genererScriptOdoo, promptOdooPartnerName, getOdooPartnerId, setOdooPartnerId, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, lignesResineConsommee, type OdooPayload } from '@/lib/odooSync';
 import { dimensionTeinte, teinteDeReference } from '@/lib/referenceTeinte';
 import { delaiDeTeinte } from '@/lib/nuancierFlowcrete';
 import { motsRechercheOdoo, classerClientsOdoo, natureFicheOdoo, type CandidatOdoo } from '@/lib/clientOdoo';
@@ -1570,7 +1570,7 @@ export default function Devis() {
       return { ...l, quantite: q };
     });
     if (change) setLignes(suivantes);
-  }, [lignes, produits]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lignes, produits, surfaceGlobaleM2, uniteSurface]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* LES GRANULATS D'UN MORTIER DOSÉ SUIVENT SES KITS (dosageEpaisseur.ts) :
      kits de la ligne du mortier × kg par kit du mélange de son épaisseur. Une
@@ -1736,7 +1736,8 @@ export default function Devis() {
     const tSaisie = cata[0].temperatureCatalyse ?? TEMPERATURE_PAR_DEFAUT;
     const t = ligneDuTableau(tSaisie);
     if (t == null) return null;
-    const calc = calculerCatalyse(ls, trouver, t, undefined);
+    // La résine CONSOMMÉE sur le chantier (surface × conso), pas les seaux vendus.
+    const calc = calculerCatalyse(lignesResineConsommee(ls, produits, surfaceGlobaleM2, uniteSurface), trouver, t, undefined);
     if (!calc.resines.length) return null;
     const contenants = cata.flatMap(l => {
       const kg = contenanceCatalyseur(trouver(l.produitId!));
@@ -5036,7 +5037,7 @@ export default function Devis() {
                     const tempCata = ligneDuTableau(tempSaisie);
                     const repartCata = estCata ? repartitionCatalyse(lignes) : null;
                     const calcCata = estCata && tempCata != null
-                      ? (repartCata?.calc ?? calculerCatalyse(lignes, id => produitParId(produits, id), tempCata, undefined)) : null;
+                      ? (repartCata?.calc ?? calculerCatalyse(lignesResineConsommee(lignes, produits, surfaceGlobaleM2, uniteSurface), id => produitParId(produits, id), tempCata, undefined)) : null;
                     const temperatureEl = estCata ? (
                       <div className="shrink-0 w-[96px]">
                         <span className="text-xs truncate block text-muted-foreground">T° chantier °C</span>

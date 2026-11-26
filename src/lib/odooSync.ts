@@ -279,6 +279,34 @@ export function coutChantierLigne(
 }
 
 /**
+ * LA RÉSINE CONSOMMÉE SUR LE CHANTIER, PAS CELLE QU'ON A VENDUE.
+ *
+ * Chaque ligne d'article à surface et conso connues voit sa quantité ramenée à
+ * surface × conso ÷ poids, en unités fractionnaires (sans arrondi au seau) :
+ * 3 seaux de 20 kg vendus pour 51 kg posés comptent 51 kg. Une ligne sans
+ * surface ni conso garde sa quantité vendue — on ne devine pas une conso.
+ * Sert au DOSAGE du catalyseur (quantité de la ligne, règle du 26/11/2026) et
+ * à son coût chantier (`coutCatalyseConsommee`) : les deux lisent la même résine.
+ */
+export function lignesResineConsommee(
+  lignes: LigneDevis[],
+  produits: Produit[],
+  surfaceGlobaleM2: number,
+  uniteDevis?: UniteSurface,
+): LigneDevis[] {
+  const trouver = (id: string) => produitParId(produits, id);
+  return lignes.map(x => {
+    if (x.type === 'groupe' || x.type === 'soustotal' || x.type === 'texte' || !x.produitId) return x;
+    const prod = trouver(x.produitId);
+    if (!prod || estCatalyseur(prod) || !(prod.poids && prod.poids > 0)) return x;
+    const unite = uniteDeLigne(x, uniteDevis);
+    const conso = consoDeLigne(x, unite) || consoFiche(prod, unite) || 0;
+    const surf = surfaceDeLigne(x, surfaceGlobaleM2, uniteDevis);
+    return conso > 0 && surf > 0 ? { ...x, quantite: surf * conso / prod.poids } : x;
+  });
+}
+
+/**
  * LE CATALYSEUR CONSOMMÉ, PAS CELUI QU'ON A VENDU NI UNE CONSO FIGÉE.
  *
  * Le catalyseur se dose sur la RÉSINE (`catalyseur.ts`) : sa quantité vendue
@@ -313,17 +341,7 @@ export function coutCatalyseConsommee(
   const t = ligneDuTableau(cata[0]?.temperatureCatalyse ?? TEMPERATURE_PAR_DEFAUT);
   if (t == null) return null;
 
-  // La résine consommée : la quantité devient surface × conso ÷ poids, sans arrondi au seau.
-  const consommees = lignes.map(x => {
-    if (!estArticle(x) || !x.produitId) return x;
-    const prod = trouver(x.produitId);
-    if (!prod || estCatalyseur(prod) || !(prod.poids && prod.poids > 0)) return x;
-    const unite = uniteDeLigne(x, uniteDevis);
-    const conso = consoDeLigne(x, unite) || consoFiche(prod, unite) || 0;
-    const surf = surfaceDeLigne(x, surfaceGlobaleM2, uniteDevis);
-    return conso > 0 && surf > 0 ? { ...x, quantite: surf * conso / prod.poids } : x;
-  });
-  const calc = calculerCatalyse(consommees, trouver, t, undefined);
+  const calc = calculerCatalyse(lignesResineConsommee(lignes, produits, surfaceGlobaleM2, uniteDevis), trouver, t, undefined);
   if (calc.aVerifier.length || !calc.resines.length) return null;
 
   const kgDe = (x: LigneDevis) => {
