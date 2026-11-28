@@ -1200,3 +1200,197 @@ en dur et ne suivent pas** : les reprendre à la main ou demander un recalcul.
 
 ⚠️ SNLR1 (1,455 kg, hors tarif QRM) : MO fiche = 2,07 €, règle QRM ≈ 2,75 €. Non touché.
 ⚠️ SNLC1/SNLC2/SNLC5 existants : coefficient ≈ 3,07, paliers saisis à la main — calcul différent des 3 nouveaux SNLC.
+
+## Fiche client : recherche dans Odoo (18 nov.)
+
+Bouton **« Rechercher dans Odoo »** (nouveau client) ou **« Compléter depuis Odoo »** (fiche existante)
+dans l'onglet Infos. Code : `ficheClientOdoo.ts`, `RechercheClientOdoo.tsx`, `Clients.tsx` ;
+côté fonction, mode `ficheClient` d'`odoo-prix` (**version 89 déployée**).
+
+- **Recherche mot à mot** (et multi-mot dans le désordre) dans nom, société, courriel, ville, TVA.
+- **Encart de résultats** : société, adresses de facturation/livraison, contacts à cocher.
+  - **Adresse principale** = adresse de facturation Odoo s'il y en a une, sinon siège.
+  - **Adresses de la fiche** = autres adresses (livraison, siège quand la facturation est ailleurs) ;
+    la première livraison est cochée par défaut. ⚠️ Doublon = même rue + CP + rôle ; rôle seul
+    différent → deux adresses distinctes.
+  - Contacts cochés d'office si la recherche portait sur eux.
+- **Remplir** : adresse, téléphone, courriel, TVA, SIRET, règlement (ramené à 30J, 45J FDM…),
+  contacts, note « partenaire #id » ; puis tarifs Odoo relus automatiquement.
+- Sur une **fiche existante** : ne remplit que les champs vides, ne duplique pas les contacts
+  ni les adresses existantes.
+- ⚠️ Le n° de TVA absent chez Odoo reste vide (pas calculé depuis le SIRET).
+- ⚠️ Nom tout en majuscules → tout dans le champ nom, sans découper le prénom.
+- **Si le client est déjà dans le CRM** (même TVA, SIRET, courriel ou raison sociale),
+  bandeau orange avec « Ouvrir cette fiche ».
+- Rien n'est jamais écrit dans Odoo.
+- ⚠️ Hover sur le bouton : fond violet foncé (correctif f11e0ea, 18/11).
+
+## F1 Mortar : dosage selon l'épaisseur (oct. 2026)
+
+`dosageEpaisseur.ts`, migration `20261014140000_dosage_epaisseur_f1_mortar.sql`.
+Devis système **DEV-2026-142 « Flowfast F1 Mortar »** (client SYSTEME, statut système) :
+groupe Primaire (FLOWFAST 107 Primer + Quartz 0,3-0,8 + Catalyst 2 kg) + groupe F1 Mortar.
+
+**Calcul** : 2,12 kg/m²/mm s'applique au **mélange entier** (granulats compris).
+La part du kit = poids total × (poids kit / poids mélange). Ex. 30 mm :
+2,12 × 30 = 63,6 kg/m² total → kit = 63,6 × 20/28 = **45,43 kg/m²** (28 kg = 20 kg kit + 8 kg sable 2-8
+du palier 25 mm). Validé par l'utilisateur.
+
+Paliers (épaisseur min du palier, conso kit, granulats par kit) :
+6 mm → 12,72 kg/m², aucun granulat | 25 mm → 37,86 kg/m², 8 kg 2-8 |
+50 mm → 60,57 kg/m², 3 kg 2-8 + 12 kg 8-16 | 120 mm → 129,80 kg/m², 4,8 kg 2-8 + 6,4 kg 8-16 + 8 kg 16-32.
+
+- Champ **« Épaisseur mm »** dans le devis, pris en compte à la sortie du champ.
+- Granulats cochés d'office sous la ligne, lien restant après changement d'épaisseur.
+- **Épaisseur affichée sur le PDF** : « Épaisseur : 30 mm » (tableau système) ou « ép. 30 mm » (standard).
+- ⚠️ Sable 2-8, 8-16, 16-32 : pas d'article catalogue, lignes libres à 0 €, « prix à saisir ».
+  Dès qu'un article existe, le rattacher dans le tableau de la fiche FLOWFASTF1.
+- ⚠️ La modification refusée (`dosageEpaisseur.ts`) avait malgré tout été écrite ; elle a été annulée
+  (calcul d'origine rétabli, tests verts).
+- **280 kg de sable sur PDF** : colonne KG (non Unité) pour une ligne libre vendue au kilo.
+- **Duplication / reprise modèle** : les lignes de granulat conservent leur lien avec leur ligne F1
+  (correctif `ffc1897`).
+
+## Menu : déplacement par appui long et inter-groupes (21 nov.)
+
+`useReordonnerAppuiLong.ts`, `ordreNav.ts`, branché dans `CRMLayout.tsx`.
+Commits 22e8fc9 (appui long), e49adaf (inter-groupes), b67b4eb (mâts neufs).
+
+- **Appui long ~0,5 s** puis glisser : réordonne les entrées du menu. Un clic bref ouvre toujours la page.
+- **Premier niveau entre lui** : Tableau de bord, CRM, groupes Vente/Achat/Paramètres…
+- **Pages d'un groupe** : peuvent sortir du groupe, changer de groupe, ou rejoindre le premier niveau.
+  Maintenir ~0,6 s sur l'en-tête d'un groupe l'ouvre et y insère l'entrée en tête.
+- **Un groupe entier** ne bouge qu'au premier niveau ; CRM est un lien simple : on ne peut rien y déposer.
+- Message « Menu réorganisé » + bouton **« Ordre d'origine »**. Ordre gardé dans ce navigateur seulement.
+- Rien ne se déplace menu replié en icônes. ⚠️ Le menu de l'appui long mobile est supprimé par le geste.
+- ⚠️ Testé uniquement par tests automatiques (50 tests) ; à essayer sur mobile.
+
+## Chiffrage ISOSIGN : lien dans le menu (21 nov.)
+
+Clic sur **« Chiffrage ISOSIGN »** dans le menu CRM → lance `Chiffrage ISOSIGN.bat`
+(protocole custom enregistré dans le registre Windows par `Installer le lien MonCRM.bat`),
+qui ouvre la fenêtre noire (serveur Python) et la page. Si la fenêtre tourne déjà, seule la page s'ouvre.
+Sur un autre poste ou si le dossier change de place, relancer `Installer le lien MonCRM.bat`.
+Bulle au lancement : « Lancement du Chiffrage ISOSIGN… » (note de dossier retirée, commit e5c5dca).
+
+## Plans directionnels : mâts neufs tous/aucun (21 nov.)
+
+Boutons **Tous** / **Aucun** dans l'encart des plans pour cocher ou décocher tous les mâts neufs
+d'un clic. Compteur « N / M ensemble(s)… ». Case par ensemble toujours disponible pour le détail.
+Bouton grisé quand sans effet. Commit b67b4eb.
+
+## CA Odoo : tableau par commercial et hors FM (21 nov.)
+
+Dans la tuile CA Odoo et dans l'onglet **CA ISOFLOOR** de l'export Excel :
+
+- **Tableau par commercial** (modèle Odoo) : colonnes = mois de jan. à oct., Total HT ;
+  lignes = Total + un commercial par ligne.
+- **Ligne CA national hors FM** = Total − François MOUHOT, pour chaque mois.
+  Cumul 2026 au 11/10 : Total 273 283,17 €, FM 247 366,35 €, hors FM **25 916,82 €**.
+- **Sous ISOSIGN** : ligne « dont signalisation verticale (hors STI et RTE) » = `isosign_sv`.
+- ⚠️ Factures CLIENTS seulement (`move_type`) : sans ce filtre, les factures fournisseurs
+  entraient en négatif (ligne « Sans commercial » à −166 068,75 €).
+
+**Bouton « Extraire vers Excel »** dans la tuile, à côté d'« Actualiser ».
+Fichier `CA_Odoo_<date>.xlsx` : onglets Marques / Réalisé mensuel / CA ISOFLOOR / **Rémunération FM**.
+L'onglet Rémunération FM = recap par mois (Total isofloor, FM, hors FM, Rémunération brute FM
+= hors FM × taux en vigueur), en formules Excel. Taux actuellement 2 % (voir reprise section Rémunération).
+
+**STI 2025 réel** : chaque mois 2025 complet provient du fichier Excel
+`12 CA ISOSIGN 2025 y compris STI.xlsx`, ligne François Mouhot, non d'Odoo.
+Chiffres retenus (jan → déc. 2025, €) :
+47 425 / 85 260 / 74 497 / 70 528 / 95 280 / 141 620 / 117 306 / 43 453 / 74 407 / 126 720 / 59 960 / 10 192.
+⚠️ Redéployer `ca-refresh` AVANT d'actualiser, sinon l'actualisation écrase les mois du fichier.
+
+## Pièces jointes visibles sur les cartes de devis (21 nov.)
+
+`DocumentsDevis.tsx`, `piecesJointesDevis.ts`, branché dans `Devis.tsx`.
+- **Vue cartes** : lien par document sous la ligne client/date (icône PDF/image/lien, nom).
+  Clic → ouvre dans un nouvel onglet, sans ouvrir le devis.
+- **Vue tableau** : trombone à côté du n° ; un seul document → ouverture directe ;
+  plusieurs → compte + liste déroulante.
+- Document ajouté depuis « Notes & Fichiers » → visible sur la carte après fermeture du devis.
+- Document confidentiel affiché avec un cadenas.
+
+## Allègement JSON du Chiffrage (21 nov.)
+
+`projetChiffrage.ts` (branché dans `DevisChatter.tsx`) : un `Projet_….json` joint à un devis
+ne garde que les images des articles effectivement posés ou chiffrés. Sur DISPAM 45 :
+2,10 Mo → 0,37 Mo (56 images de panneaux retirées, plan et métré intacts).
+
+Le Chiffrage lui-même (`chiffrage.html`, dossier ChiffrageISOSIGN) : même filtre à l'enregistrement
+(`btnSaveProj`, fonctions `codesDuProjet` / `imagesDuProjet`). **Pas de git** dans ChiffrageISOSIGN,
+modification directe dans le fichier ; historique OneDrive permet de revenir en arrière.
+⚠️ Si une autre session touche `chiffrage.html`, vérifier que les deux modifications cohabitent.
+À l'ouverture d'un projet allégé, le Chiffrage ajoute ses images à la bibliothèque existante : rien n'est perdu.
+
+## Systèmes depuis les devis modèles (21 nov.)
+
+`systemesDevis.ts`, `rapprochementSysteme.ts`. Les devis au statut **« système »** (client SYSTEME)
+sont lus comme modèles de système, en plus de la table `systemes` (Flowcrete).
+- Consommation absente → lue dans la note de la ligne (« @ 0,5 kg/m² »).
+- Groupe « Tire à zéro » du modèle → facultatif.
+- Nombres dans le nom (« 107 », « 319 ») comptent dans le rapprochement : « 107 flowfast 319 Road »
+  retrouve DEV-2026-036 (Flowfast 107 + 319 Road), pas la version Road seule.
+- ⚠️ DEV-2026-036 incomplet : quartz `consommation: 1` mais note dit 0,5 kg/m² ;
+  primaire sans consommation propre. À corriger sur le devis modèle.
+- ⚠️ Devis avec vrai client (DEV-2026-012…) ne sont PAS sources de modèle.
+
+## Bug : enregistrer une fiche article effaçait la remise des lignes (21 nov.)
+
+**Cause** : `Produits.tsx`, à l'enregistrement d'une fiche article, réécrivait le prix public
+sur **toutes les lignes de tous les devis** portant cet article — remise client remise à zéro,
+désignation repassée à celle du modèle. Déclenchait aussi via « ↗ modifier la fiche » depuis une ligne.
+DEV-2026-139 (TOP SIGNALISATION) : FLOWFASTF1 passé de 85,28 € (−30 %) à 121,83 € et envoyé
+au client à ce prix.
+
+**Correction** : enregistrer une fiche n'écrit plus aucune ligne de devis.
+Pour répercuter un changement de prix, utiliser **« ↻ Re-tarifer les lignes »** dans le devis.
+⚠️ DEV-2026-139 : re-tarifer et renvoyer une version corrigée si nécessaire.
+
+## Articles Odoo retenus : remise négociée appliquée (21 nov.)
+
+Auparavant, un article retenu chez Odoo se chiffrait toujours au tarif de gamme.
+Désormais :
+- Si la fiche locale est plus récente qu'Odoo → chiffré comme un article local (remise client, gamme, contrat).
+- La **remise négociée** du client (les 30 % de TOP SIGNALISATION) s'applique en premier.
+- Désignation, catégorie et unité restent reprises d'Odoo sans comparaison de date.
+
+## Filtre par client dans l'onglet Relances (21 nov.)
+
+Liste déroulante « Tous les clients » à droite des boutons de filtre. Ne propose que les clients
+ayant au moins un devis en attente ; compteurs des trois boutons suivent le filtre.
+Lien « effacer » remet tous les clients. Remis sur « Tous » en quittant la page.
+
+## Assistant vocal (21 nov.)
+
+`AssistantVocal.tsx`, `assistantVocal.ts`, `stockDisponible.ts`, branché dans `CRMLayout.tsx` et `VoiceButton`.
+
+- Bouton 🎤 « Assistant vocal » dans le menu, sous « Analyse de document » (séparé par un trait).
+  Raccourci **Alt+M**. Panneau en bas à droite ; dire « aide » pour la liste des commandes.
+- **Un seul micro** dans toute l'application : fusionne le micro de l'en-tête du devis,
+  les boutons Dicter (analyse, assistant IA, devis vocal, veille vocale) et l'assistant.
+- **Navigation** : « ouvre les devis », « va aux clients », « ouvre le stock dans une nouvelle fenêtre »…
+- **CRM** : « nouvelle tâche », « nouvel appel pour Dupont », « nouveau rendez-vous »,
+  client pré-rempli si non ambigu.
+- **Devis** : « nouveau devis », « cherche le devis 112 », « ouvre le devis Eiffage Pantin ».
+- **Stock** : « stock du produit KC1 800 », « combien de ECLIPSE25 en stock » — disponible, stock, Odoo.
+- **Champs ouverts** : « aller au titre », « description », « date planifiée demain », « valider »,
+  « clique sur Envoyer »… Dictée libre dans les champs ; « corrige », « efface tout ».
+- **Apprentissage** : phrase inconnue → « me l'apprendre ? » ; geste à la souris → « terminé » → « oui ».
+  Bouton « Oublie la commande … » ou croix dans l'aide. Stocké dans ce navigateur seulement.
+- **Pendant la dictée dans une zone ciblée** (analyse, veille…) : aucune commande interprétée,
+  panneau affiche « Dictée dans … ». « Fin de dictée » ou « stop » pour revenir aux commandes.
+- ⚠️ Chrome / Edge uniquement. Phrases apprises locales (pas en base).
+
+## Trame TRAMPAV2.10X10 : consommation m² (26 nov.)
+
+Fiche TRAMPAV2.10X10.DROITE.2958.696 réglée en base : consommation en **m²**, **12 m²/carton**.
+Sur DEV-2026-181, la ligne affiche « ↳ 10,5 m² chantier (390,93 €) · 12 m² cond. »
+et le coût chantier est à 390,93 € (au lieu du carton entier).
+
+## Autorisations SQL Supabase et permission Claude (26 nov.)
+
+`.claude/settings.json` : noms des connecteurs Supabase SQL autorisés mis à jour
+(ancien + nouveau nom), commit 34ca5c9. Claude peut désormais exécuter des requêtes
+SQL directes (lecture, écriture, suppression) sans demande de confirmation.
