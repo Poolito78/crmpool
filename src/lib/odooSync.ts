@@ -159,6 +159,10 @@ function buildLignes(devis: Devis, produits: Produit[], avertissements?: string[
         ...(codeNegoce(produit, l) ? { negoce: codeNegoce(produit, l) } : {}),
         ...(t.teinte ? { teinte: t.teinte } : {}),
       });
+      /* La note de la ligne (« Option anti glisse à saupoudrer… ») suit son
+         article chez Odoo, en ligne de note juste dessous. */
+      const note = noteEnTexte(l.note || '').trim();
+      if (note) result.push({ type: 'note', desc: note });
     }
   }
 
