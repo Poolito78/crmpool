@@ -104,10 +104,10 @@ describe('referenceSelonTeinte — AF041510 / P29317', () => {
     expect(r.ref).toBeUndefined();
     expect(r.aVerifier).toBeTruthy();
   });
-  it('référence sans segment de teinte : inchangée', () => {
+  it('référence sans segment de teinte : la teinte choisie la complète (PIGMENTKG → PIGMENTKG.L9016, seul code Odoo)', () => {
     const PIGMENTKG = { ...PIGMENT2KG, referenceOdoo: undefined, reference: 'PIGMENTKG' } as unknown as Produit;
     expect(referenceSelonTeinte('PIGMENTKG', PIGMENTKG, { [TEINTE]: 'RAL 9016' }))
-      .toEqual({ ref: 'PIGMENTKG', teinte: 'RAL 9016' });
+      .toEqual({ ref: 'PIGMENTKG.L9016', teinte: 'RAL 9016' });
   });
   it('article sans dimension de teinte : le code laqué fait foi', () => {
     const laque = { id: 'x', reference: 'A11', variantes: [] } as unknown as Produit;

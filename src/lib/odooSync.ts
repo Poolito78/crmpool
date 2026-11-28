@@ -11,6 +11,7 @@ import { estGamme, niveauGamme } from '@/lib/remiseGammes';
 import { noteEnTexte } from '@/lib/noteRiche';
 import { calculerCatalyse, contenanceCatalyseur, estCatalyseur, ligneDuTableau, TEMPERATURE_PAR_DEFAUT } from '@/lib/catalyseur';
 import { libelleAvecTeinte, referenceSelonTeinte } from '@/lib/referenceTeinte';
+import { modeExpeditionSH } from '@/lib/transportGammes';
 
 // ── Gestion du nom Odoo par client (localStorage) ────────────────────────────
 
@@ -134,6 +135,9 @@ function buildLignes(devis: Devis, produits: Produit[], avertissements?: string[
       const { totalHT } = calculerTotalLigne(l);
       const montant = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(totalHT);
       result.push({ type: 'note', desc: `PM (pour mémoire, non compris dans le total) — ${noteEnTexte(l.description)} : ${l.quantite} ${l.unite || ''} — ${montant} HT`.replace(/\s+—/g, ' —') });
+      // La note de la ligne la suit, comme pour un article.
+      const notePM = noteEnTexte(l.note || '').trim();
+      if (notePM) result.push({ type: 'note', desc: notePM });
     } else {
       const produit = produitParId(produits, l.produitId);
       /* La référence ODOO d'abord.
@@ -174,15 +178,27 @@ function buildLignes(devis: Devis, produits: Produit[], avertissements?: string[
 
   // Frais de port comme ligne séparée si > 0
   if (devis.fraisPortHT && devis.fraisPortHT > 0) {
+    /* DEVIS ISOMARK / ISOFLOOR SANS MODE D'EXPÉDITION : le port part sous
+       l'article SH de sa tranche de poids (PORTSH25/100/700/701), pas sous le
+       [PORT] générique. Lignes pour mémoire exclues du poids. */
+    let portNom = devis.fraisPortLibelle;
+    if (!portNom) {
+      const articles = devis.lignes.filter(l => (!l.type || l.type === 'ligne') && !l.pourMemoire);
+      const estSH = articles.some(l => !!codeNegoce(produitParId(produits, l.produitId), l));
+      if (estSH) {
+        const poids = articles.reduce((s, l) => s + (produitParId(produits, l.produitId)?.poids || 0) * (l.quantite || 0), 0);
+        portNom = modeExpeditionSH(poids);
+      }
+    }
     result.push({
       type: 'product',
-      desc: devis.fraisPortLibelle || 'Frais de port',
+      desc: portNom || 'Frais de port',
       ref: undefined,
       qty: 1,
       pu: devis.fraisPortHT,
       rem: 0,
       port: true,
-      ...(devis.fraisPortLibelle ? { portNom: devis.fraisPortLibelle } : {}),
+      ...(portNom ? { portNom } : {}),
     });
   }
 

@@ -132,6 +132,14 @@ export function referenceSelonTeinte(
   const dim = dimensionTeinte(produit);
   const choisie = dim ? variantesChoisies?.[dim.id]?.trim() || undefined : undefined;
   const seg = teinteDeReference(ref);
+  /* RÉFÉRENCE SANS SEGMENT, ARTICLE À TEINTE : chez Odoo le pigment au kg
+     n'existe qu'en teinte (PIGMENTKG.L7036), PIGMENTKG seul est introuvable
+     et la ligne partait en négoce. La teinte choisie, si elle a un RAL,
+     complète la référence. */
+  if (ref && !seg && dim && choisie) {
+    const ralChoisi = ralDeLibelle(choisie);
+    if (ralChoisi) return { ref: `${ref}.L${ralChoisi}`, teinte: choisie };
+  }
   if (!ref || !seg || !dim) return { ref, teinte: choisie };
 
   if (!choisie) {
