@@ -6348,7 +6348,7 @@ ${dosage.source}` : ''}`}>
                         const dateAchat = prod?.prixAchatMaj && l.prixAchatLigne == null ? formatDate(prod.prixAchatMaj) : null;
                         const dateVente = prod?.prixVenteMaj ? formatDate(prod.prixVenteMaj) : null;
                         const pastilleDate = (d: string | null, titre: string) => d
-                          ? <span className="ml-1 text-[10px] text-muted-foreground whitespace-nowrap" title={titre}>({d})</span>
+                          ? <div className="text-[10px] leading-tight text-muted-foreground whitespace-nowrap" title={titre}>({d})</div>
                           : null;
                         return (
                           <tr key={l.id} className="border-b border-border/50 hover:bg-muted/30">
@@ -6480,13 +6480,13 @@ ${dosage.source}` : ''}`}>
                                   >
                                     {formatMontant(puVente)}
                                   </span>
-                                  {pastilleDate(dateVente, 'Date de mise à jour du prix de vente de la fiche article')}
                                   <Pencil
                                     className="w-3 h-3 opacity-0 group-hover/editv:opacity-50 text-muted-foreground shrink-0 cursor-pointer hover:opacity-100"
                                     onClick={() => { setCompaEditingId(l.id); setCompaEditingField('vente'); setCompaEditVal(String(+puVente.toFixed(4))); }}
                                   />
                                 </div>
                               )}
+                              {compaEditingId !== l.id && pastilleDate(dateVente, 'Date de mise à jour du prix de vente de la fiche article')}
                             </td>
                             <td className="px-2 py-1.5 text-right font-medium">{formatMontant(totVente)}</td>
                             <td className={`px-2 py-1.5 text-right ${marge < 0 ? 'text-destructive' : ''}`}>{totAchat > 0 ? formatMontant(marge) : <span className="text-muted-foreground">—</span>}</td>
