@@ -96,6 +96,22 @@ describe('port selon la destination', () => {
     expect(portFournisseur(seul, 80, 0, '76')).toMatchObject({ montant: 55, dept: '13', approximatif: true });
   });
 
+  it('le poids d’abord : un relevé proche en poids passe devant un générique « dès 0 kg » (TREMCO)', () => {
+    const tremco = four('TREMCO', {
+      paliersPortPoids: [
+        { poidsMin: 0, coutTransport: 38.11 },
+        { poidsMin: 59, coutTransport: 45.03, dept: '71' },
+        { poidsMin: 269, coutTransport: 71.21, dept: '77', mode: 'affretement' },
+        { poidsMin: 500, coutTransport: 101.53, dept: '95' },
+      ],
+    });
+    expect(portFournisseur(tremco, 354, 0, '60')).toMatchObject({ montant: 71.21, dept: '77', approximatif: true });
+    expect(portFournisseur(tremco, 30, 0, '60')).toMatchObject({ montant: 38.11 });
+    expect(portFournisseur(tremco, 30, 0, '60')?.approximatif).toBeUndefined();
+    expect(portFournisseur(tremco, 600, 0, '95')).toMatchObject({ montant: 101.53, dept: '95' });
+    expect(portFournisseur(tremco, 600, 0, '95')?.approximatif).toBeUndefined();
+  });
+
   it('sans département, les tarifs d’avant se lisent comme avant', () => {
     expect(portFournisseur(four('F3', { paliersPortPoids: [{ poidsMin: 0, coutTransport: 20 }, { poidsMin: 50, coutTransport: 30 }] }), 60, 0)).toMatchObject({ montant: 30 });
   });

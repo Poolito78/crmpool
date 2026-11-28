@@ -305,13 +305,20 @@ export function portFournisseur(
       ...(aff.service ? { service: aff.service } : {}),
     };
   }
-  const tous = [...(f.paliersPortPoids ?? [])].sort((a, b) => b.poidsMin - a.poidsMin);
-  const atteint = (liste: PalierPortPoids[]) => (poidsKg > 0 ? liste.find(x => poidsKg >= x.poidsMin) : undefined);
-  const exact = dept ? atteint(tous.filter(p => p.dept === dept)) : undefined;
-  const partout = atteint(tous.filter(p => !p.dept));
-  const ailleurs = atteint(tous.filter(p => !!p.dept && p.dept !== dept));
-  const p = exact ?? partout ?? ailleurs;
-  if (p) return { montant: p.coutTransport, source: 'palier', mode: p.mode, ...(p.dept ? { dept: p.dept } : {}), ...(p === ailleurs ? { approximatif: true } : {}) };
+  /* Paliers de poids. LE POIDS D'ABORD (règle du 28/11/2026) : le palier
+     atteint le plus haut l'emporte, quel que soit son département — un tarif
+     relevé à 269 kg pour le 77 dit mieux le prix de 354 kg vers le 60 qu'un
+     tarif générique « dès 0 kg » à 38,11 € (TREMCO, DEV-2026-212). À poids
+     égal : département du devis, puis tarif valable partout, puis un autre
+     département. Un tarif d'un autre département reste une ESTIMATION
+     (`approximatif`), que l'écran signale. */
+  const rang = (p: PalierPortPoids) => (dept && p.dept === dept ? 0 : !p.dept ? 1 : 2);
+  const p = poidsKg > 0
+    ? [...(f.paliersPortPoids ?? [])]
+      .filter(x => poidsKg >= x.poidsMin)
+      .sort((a, b) => b.poidsMin - a.poidsMin || rang(a) - rang(b))[0]
+    : undefined;
+  if (p) return { montant: p.coutTransport, source: 'palier', mode: p.mode, ...(p.dept ? { dept: p.dept } : {}), ...(rang(p) === 2 ? { approximatif: true } : {}) };
   if (f.coutTransport > 0) return { montant: f.coutTransport, source: 'fixe' };
   return null;
 }
