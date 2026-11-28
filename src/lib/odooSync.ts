@@ -10,7 +10,7 @@ import { produitParId } from '@/lib/indexProduits';
 import { estGamme, niveauGamme } from '@/lib/remiseGammes';
 import { noteEnTexte } from '@/lib/noteRiche';
 import { calculerCatalyse, contenanceCatalyseur, estCatalyseur, ligneDuTableau, TEMPERATURE_PAR_DEFAUT } from '@/lib/catalyseur';
-import { libelleAvecTeinte, referenceSelonTeinte } from '@/lib/referenceTeinte';
+import { dimensionTeinte, libelleAvecTeinte, referenceSelonTeinte } from '@/lib/referenceTeinte';
 import { modeExpeditionSH } from '@/lib/transportGammes';
 
 // ── Gestion du nom Odoo par client (localStorage) ────────────────────────────
@@ -119,8 +119,51 @@ interface LigneScript {
   teinte?: string;
 }
 
+/** Un article « BLANK » : base non pigmentée, teintée par le pigment du système. */
+const EST_BLANK = /\bblank\b/i;
+
+/**
+ * LA TEINTE D'UN BLANK EST CELLE DU SYSTÈME. Le FLOWCOAT SF41 BLANK n'a pas
+ * de teinte à lui : c'est le pigment de son groupe (RAL 7036) qui la donne.
+ * Pour chaque groupe, la teinte choisie sur ses lignes, si elle est unique ;
+ * à défaut, celle du devis entier si elle est unique. Sinon rien : on
+ * n'invente pas une couleur.
+ */
+function teintesDesBlanks(devis: Devis, produits: Produit[]): Map<string, string> {
+  const teinteDe = (l: LigneDevis) => {
+    const dim = dimensionTeinte(produitParId(produits, l.produitId));
+    return dim ? l.variantesChoisies?.[dim.id]?.trim() || undefined : undefined;
+  };
+  const groupeDe = new Map<string, string>();
+  const parGroupe = new Map<string, Set<string>>();
+  const duDevis = new Set<string>();
+  let grp = '';
+  for (const l of devis.lignes) {
+    if (l.type === 'groupe') { grp = l.id; continue; }
+    if (l.type === 'soustotal') { grp = ''; continue; }
+    if (l.type === 'texte' || l.pourMemoire) continue;
+    groupeDe.set(l.id, grp);
+    const t = teinteDe(l);
+    if (!t) continue;
+    duDevis.add(t);
+    if (!parGroupe.has(grp)) parGroupe.set(grp, new Set());
+    parGroupe.get(grp)!.add(t);
+  }
+  const unique = (s?: Set<string>) => (s && s.size === 1 ? [...s][0] : undefined);
+  const res = new Map<string, string>();
+  for (const l of devis.lignes) {
+    if (l.type && l.type !== 'ligne') continue;
+    const p = produitParId(produits, l.produitId);
+    if (!EST_BLANK.test(`${p?.description || ''} ${l.description || ''}`) || teinteDe(l)) continue;
+    const t = unique(parGroupe.get(groupeDe.get(l.id) ?? '')) ?? unique(duDevis);
+    if (t) res.set(l.id, t);
+  }
+  return res;
+}
+
 function buildLignes(devis: Devis, produits: Produit[], avertissements?: string[]): LigneScript[] {
   const result: LigneScript[] = [];
+  const teinteBlank = teintesDesBlanks(devis, produits);
 
   for (const l of devis.lignes) {
     if (l.type === 'soustotal') continue;
@@ -161,7 +204,7 @@ function buildLignes(devis: Devis, produits: Produit[], avertissements?: string[
         type: 'product',
         // Odoo n'a pas de gras : le texte part sans les balises de mise en forme.
         // La teinte rejoint le libellé : une ligne en négoce n'a que lui.
-        desc: libelleAvecTeinte(noteEnTexte(l.description), t.teinte),
+        desc: libelleAvecTeinte(noteEnTexte(l.description), t.teinte ?? teinteBlank.get(l.id)),
         ref: ref || undefined,
         qty: l.quantite,
         pu: l.prixUnitaireHT,
