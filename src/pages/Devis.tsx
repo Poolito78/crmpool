@@ -5,7 +5,7 @@ import SocieteDocumentDialog from '@/components/SocieteDocumentDialog';
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type ReactNode } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type DevisOdooLie, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
+import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, totalPourMemoire, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type DevisOdooLie, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Building2, MoveHorizontal, Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, BarChart3, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, RefreshCw, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat, FilePlus } from 'lucide-react';
 import { demandeDepuisLigne, memoriserDemandeFiche, prendreLiaison, lierLigneAuProduit } from '@/lib/ficheDepuisLigne';
 import { genererScriptOdoo, promptOdooPartnerName, getOdooPartnerId, setOdooPartnerId, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, lignesResineConsommee, type OdooPayload } from '@/lib/odooSync';
@@ -1977,7 +1977,7 @@ export default function Devis() {
     const rows: Array<{ id: string; description: string; categorie: string; pct: number; exclu: boolean; baseAchat: number; baseVente: number; surchargeAchat: number; surchargeVente: number }> = [];
     let totalAchat = 0, totalVente = 0;
     for (const l of lignes) {
-      if (l.type && l.type !== 'ligne') continue;
+      if ((l.type && l.type !== 'ligne') || l.pourMemoire) continue;
       if (!l.produitId) continue;
       const prod = produitParId(produits, l.produitId);
       if (!prod) continue;
@@ -3353,6 +3353,7 @@ export default function Devis() {
     }
     if (!fraisPortAuto || !dialogOpen) return;
     const poidsTotal = lignes.reduce((acc, l) => {
+      if (l.pourMemoire) return acc;
       const prod = l.produitId ? produitParId(produits, l.produitId) : null;
       return acc + (prod?.poids || 0) * l.quantite;
     }, 0);
@@ -3862,7 +3863,7 @@ export default function Devis() {
                   const client = clients.find(c => c.id === d.clientId);
                   const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
                   const totalAchat = d.lignes.reduce((acc, l) => {
-                    if (l.type && l.type !== 'ligne') return acc;
+                    if ((l.type && l.type !== 'ligne') || l.pourMemoire) return acc;
                     const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                     const puA = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
                     return acc + puA * l.quantite + forfaitCommandeLigne(l, d.lignes, id => produitParId(produits, id));
@@ -4025,7 +4026,7 @@ export default function Devis() {
           const client = clients.find(c => c.id === d.clientId);
           const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
           const totalAchatD = d.lignes.reduce((acc, l) => {
-            if (l.type && l.type !== 'ligne') return acc;
+            if ((l.type && l.type !== 'ligne') || l.pourMemoire) return acc;
             // prixAchatLigne (override manuel / surcharge) prioritaire, sinon palier ; pas de remise sur l'achat
             const prod = l.produitId ? produitParId(produits, l.produitId) : null;
             const puA = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
@@ -4896,7 +4897,7 @@ export default function Devis() {
                           </div>
                         );
                       })}
-                      <span className="shrink-0 w-[76px]" />
+                      <span className="shrink-0 w-[108px]" />
                     </div>
                   </div>
                 )}
@@ -4916,7 +4917,7 @@ export default function Devis() {
                   }
                   const grpSub: Record<string, number> = {};
                   for (const l of lignes) {
-                    if (!l.type || l.type === 'ligne') {
+                    if ((!l.type || l.type === 'ligne') && !l.pourMemoire) {
                       const gid = lineGroup[l.id];
                       if (gid) grpSub[gid] = (grpSub[gid] || 0) + calculerTotalLigne(l).totalHT;
                     }
@@ -5244,7 +5245,7 @@ export default function Devis() {
                           ${lineGroup[l.id] && lignesView !== 'tableau' ? ' ml-4' : ''}
                           ${selectedLignes.has(l.id) ? 'ring-2 ring-primary/50' : ''}
                           ${draggedId === l.id ? 'opacity-40 border-border/60 bg-muted/40' : ''}
-                          ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : 'bg-zinc-200 dark:bg-zinc-700 border-border'}`}>
+                          ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : l.pourMemoire ? 'bg-amber-100 dark:bg-amber-950/50 border-amber-400 border-dashed' : 'bg-zinc-200 dark:bg-zinc-700 border-border'}`}>
                         <>
                             {/* ── Cellules (contenu réutilisé cartes + tableau) ── */}
                             {(() => {
@@ -5492,11 +5493,18 @@ export default function Devis() {
                                     <span className="text-[10px] text-muted-foreground">× {coeffLigne != null ? coeffLigne.toFixed(2) : '—'}</span>
                                   </div>
                                 ),
-                                total: <span className="text-sm font-semibold h-8 flex items-center justify-end text-right">{formatMontant(t.totalHT)}</span>,
+                                total: l.pourMemoire
+                                  ? <span className="h-8 flex items-center justify-end gap-1 text-right" title="Pour mémoire : montant indiqué, non compté dans le devis"><span className="rounded bg-amber-500 px-1 text-[10px] font-bold text-white">PM</span><span className="text-sm italic text-muted-foreground line-through decoration-amber-500/70">{formatMontant(t.totalHT)}</span></span>
+                                  : <span className="text-sm font-semibold h-8 flex items-center justify-end text-right">{formatMontant(t.totalHT)}</span>,
                               };
                               const labels: Record<TLCKey, string> = { ref: 'Réf.', description: 'Description', surface: uniteLigne === 'ml' && !colLineaire ? 'Linéaire ml' : 'Surface m²', conso: couvertureLigne ? 'Conso. m²' : uniteLigne === 'ml' && !colConsoMl ? 'Conso. kg/ml' : 'Conso. kg/m²', lineaire: 'Linéaire ml', consoMl: 'Conso. kg/ml', poids: 'Poids kg', qte: hasAutoCalc ? (l.qteMode === 'chantier' ? 'Qté chantier' : l.qteMode === 'manuel' ? 'Qté manuel' : 'Qté auto') : 'Qté', unite: 'Unité', prixht: 'Prix HT', remise: 'Rem. %', netht: 'Net HT', marge: 'Marge / Coeff', total: 'Total HT' };
                               const actionsCell = (
                                 <div className="flex items-center h-8 gap-0.5">
+                                  <label onClick={e => e.stopPropagation()} title="Pour mémoire (PM) : le montant de la ligne s'affiche mais n'est pas compté dans le devis"
+                                    className={`flex items-center gap-0.5 rounded px-0.5 text-[10px] font-bold cursor-pointer select-none ${l.pourMemoire ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground hover:text-foreground'}`}>
+                                    <input type="checkbox" checked={!!l.pourMemoire} onChange={e => updateLigne(l.id, 'pourMemoire', e.target.checked || undefined)} className="w-3 h-3 accent-amber-500 cursor-pointer" />
+                                    PM
+                                  </label>
                                   <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
                                   <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
                                   <button onClick={() => duplicateLigne(l.id)} title="Dupliquer" className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
@@ -5517,7 +5525,7 @@ export default function Devis() {
                                         {cell[c.key]}
                                       </div>
                                     ))}
-                                    <div className="shrink-0 w-[76px] flex justify-end">{actionsCell}</div>
+                                    <div className="shrink-0 w-[108px] flex justify-end">{actionsCell}</div>
                                   </div>
                                 );
                               }
@@ -5555,7 +5563,9 @@ export default function Devis() {
                                   <div className="shrink-0 flex flex-col items-end">
                                     <Label className="text-xs">Total HT</Label>
                                     <div className="flex items-center h-8 gap-0.5">
-                                      <span className="text-sm font-semibold w-24 text-right">{formatMontant(t.totalHT)}</span>
+                                      {l.pourMemoire
+                                        ? <span className="w-24 flex items-center justify-end gap-1 text-right" title="Pour mémoire : montant indiqué, non compté dans le devis"><span className="rounded bg-amber-500 px-1 text-[10px] font-bold text-white">PM</span><span className="text-sm italic text-muted-foreground line-through decoration-amber-500/70">{formatMontant(t.totalHT)}</span></span>
+                                        : <span className="text-sm font-semibold w-24 text-right">{formatMontant(t.totalHT)}</span>}
                                       {actionsCell}
                                     </div>
                                   </div>
@@ -5989,6 +5999,7 @@ ${dosage.source}` : ''}`}>
               )}
               {fraisPortAuto && (() => {
                 const poidsTotal = lignes.reduce((acc, l) => {
+                  if (l.pourMemoire) return acc;
                   const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                   return acc + (prod?.poids || 0) * l.quantite;
                 }, 0);
@@ -6045,12 +6056,13 @@ ${dosage.source}` : ''}`}>
             {/* Totals */}
             {(() => {
               const poidsTotal = lignes.reduce((acc, l) => {
+                if (l.pourMemoire) return acc;
                 const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                 return acc + (prod?.poids || 0) * l.quantite;
               }, 0);
               // Identique au comparatif : prixAchatLigne (override manuel) prioritaire, sinon palier ; pas de remise sur l'achat
               const totalAchat = lignes.reduce((acc, l) => {
-                if (l.type && l.type !== 'ligne') return acc;
+                if ((l.type && l.type !== 'ligne') || l.pourMemoire) return acc;
                 const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                 const puAchat = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
                 return acc + puAchat * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id));
@@ -6081,6 +6093,11 @@ ${dosage.source}` : ''}`}>
               return (
                 <div className="bg-muted/50 rounded-lg p-4 space-y-1 text-sm">
                   <div className="flex justify-between"><span>Total HT (lignes)</span><span className="font-semibold">{formatMontant(totalHTLignes)}</span></div>
+                  {lignes.some(l => l.pourMemoire) && (
+                    <div className="flex justify-between text-xs text-amber-600 dark:text-amber-400" title="Lignes « Pour mémoire » : montant affiché au devis, non compris dans les totaux">
+                      <span>Pour mémoire (non compté)</span><span className="italic">{formatMontant(totalPourMemoire(lignes))}</span>
+                    </div>
+                  )}
                   {fraisPortHT > 0 && <div className="flex justify-between"><span>Frais de port HT</span><span>{formatMontant(fraisPortHT)}</span></div>}
                   <div className="flex justify-between"><span>Total TVA</span><span>{formatMontant(total.totalTVA)}</span></div>
                   <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="font-semibold">Total TTC</span><span className="font-heading font-bold text-lg">{formatMontant(total.totalTTC)}</span></div>
@@ -6252,10 +6269,11 @@ ${dosage.source}` : ''}`}>
           </div>
           {/* ── Onglet Comparatif achat / vente ─────────────────────────────── */}
           {canAchat && dialogTab === 'comparatif' && (() => {
-            const lignesCompa = lignes.filter(l => !l.type || l.type === 'ligne');
+            const lignesCompa = lignes.filter(l => (!l.type || l.type === 'ligne') && !l.pourMemoire);
             let totalAchat = 0, totalVente = 0;
             // ── Transport ──
             const poidsCompa = lignes.reduce((acc, l) => {
+              if (l.pourMemoire) return acc;
               const prod = l.produitId ? produitParId(produits, l.produitId) : null;
               return acc + (prod?.poids || 0) * l.quantite;
             }, 0);
@@ -6324,6 +6342,14 @@ ${dosage.source}` : ''}`}>
                         totalAchat += totAchat;
                         totalVente += totVente;
                         const coeffColor = coeff == null ? '' : coeff >= 1.55 ? 'text-emerald-600 dark:text-emerald-400' : coeff >= 1.43 ? 'text-orange-500' : 'text-destructive';
+                        /* Dates de mise à jour des prix de la FICHE article (`prix_achat_maj`,
+                           `prix_vente_maj`). Un achat saisi à la main sur la ligne n'a pas de
+                           date de fiche : rien n'est affiché plutôt qu'une date trompeuse. */
+                        const dateAchat = prod?.prixAchatMaj && l.prixAchatLigne == null ? formatDate(prod.prixAchatMaj) : null;
+                        const dateVente = prod?.prixVenteMaj ? formatDate(prod.prixVenteMaj) : null;
+                        const pastilleDate = (d: string | null, titre: string) => d
+                          ? <span className="ml-1 text-[10px] text-muted-foreground whitespace-nowrap" title={titre}>({d})</span>
+                          : null;
                         return (
                           <tr key={l.id} className="border-b border-border/50 hover:bg-muted/30">
                             <td className="px-2 py-1.5 max-w-[220px]">
@@ -6369,6 +6395,7 @@ ${dosage.source}` : ''}`}>
                               ) : (
                                 <span className="text-muted-foreground italic text-xs">—</span>
                               )}
+                              {pastilleDate(dateAchat, "Date de mise à jour du prix d'achat de la fiche article")}
                             </td>
                             <td className="px-2 py-1.5 text-right">
                               {!l.produitId ? (
@@ -6453,6 +6480,7 @@ ${dosage.source}` : ''}`}>
                                   >
                                     {formatMontant(puVente)}
                                   </span>
+                                  {pastilleDate(dateVente, 'Date de mise à jour du prix de vente de la fiche article')}
                                   <Pencil
                                     className="w-3 h-3 opacity-0 group-hover/editv:opacity-50 text-muted-foreground shrink-0 cursor-pointer hover:opacity-100"
                                     onClick={() => { setCompaEditingId(l.id); setCompaEditingField('vente'); setCompaEditVal(String(+puVente.toFixed(4))); }}
