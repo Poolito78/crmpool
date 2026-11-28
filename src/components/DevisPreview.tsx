@@ -1,6 +1,6 @@
 import { useState, useRef, Fragment, useEffect, useCallback, type CSSProperties } from 'react';
 import { valeursVisibles } from '@/lib/variantesCompo';
-import { type Devis, type Client, type Produit, type LigneDevis, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, consoDeLigne, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
+import { type Devis, type Client, type Produit, type LigneDevis, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, consoDeLigne, calculerTotalLigne, calculerTotalDevis, totalPourMemoire, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil, Loader2, Send, FolderOpen, FileText, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -47,6 +47,25 @@ function lignesDetail(l: Devis['lignes'][number]): { designation: string; quanti
 }
 
 /** Désignation d'une ligne : revient à la ligne pour que le tableau tienne dans la page (voir l'usage). */
+/** Pastille « Pour mémoire » : styles en ligne, rendus tels quels au PDF (html2canvas). */
+const PM_PASTILLE: CSSProperties = {
+  display: 'inline-block', backgroundColor: '#F59E0B', color: '#fff', fontSize: '0.62rem', fontWeight: 'bold',
+  letterSpacing: '0.04em', padding: '0 5px', borderRadius: '3px', height: '16px', lineHeight: '16px',
+  whiteSpace: 'nowrap', verticalAlign: 'middle', flexShrink: 0, textTransform: 'uppercase',
+};
+const PM_FOND: CSSProperties = { backgroundColor: '#FFF7E6' };
+
+/** Total HT d'une ligne : « PM » et le montant entre parenthèses, en gris, pour une ligne pour mémoire. */
+function montantLigne(l: LigneDevis, totalHT: number) {
+  if (!l.pourMemoire) return totalHT !== 0 ? formatMontant(totalHT) : '';
+  return (
+    <span style={{ whiteSpace: 'nowrap' }}>
+      <span style={PM_PASTILLE}>PM</span><br />
+      <span style={{ fontStyle: 'italic', fontWeight: 'normal', color: '#777', fontSize: '0.92em' }}>({formatMontant(totalHT)})</span>
+    </span>
+  );
+}
+
 const DESIGNATION_QUI_SE_COUPE: CSSProperties = {
   whiteSpace: 'pre-line', overflowWrap: 'anywhere', minWidth: 0, flex: '0 1 auto',
 };
@@ -1086,6 +1105,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, onO
                   }
                   const grpSub: Record<string, number> = {};
                   for (const { l, t } of allLines) {
+                    if (l.pourMemoire) continue;   // pour mémoire : hors sous-total
                     const gid = lineGroup[l.id];
                     if (gid) grpSub[gid] = (grpSub[gid] || 0) + t.totalHT;
                   }
@@ -1134,10 +1154,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, onO
                       </tr>
                     )}
                     {/* Ligne produit principal */}
-                    <tr className="border-b border-border/60">
+                    <tr className="border-b border-border/60" style={l.pourMemoire ? PM_FOND : undefined}>
                       <td className="py-1.5 px-2 font-medium align-middle">
                         {/* Description + badge(s) sur la même ligne flex */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          {l.pourMemoire && <span style={PM_PASTILLE}>Pour mémoire</span>}
                           {/* Le gras posé dans un nom de variante (balises `**`, noteRiche) se rend ici et au PDF.
                               ⚠️ La désignation REVIENT À LA LIGNE (`pre-line` : à la largeur de la colonne, et aux
                               retours saisis). En `nowrap`, une désignation longue élargissait le tableau au-delà
@@ -1221,7 +1242,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, onO
                             <td className="py-1.5 px-1 text-right">{poidsComp && l.quantite ? Math.round(l.quantite * poidsComp * 10) / 10 : ''}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKgComp != null ? `(${formatMontant(prixKgComp)})` : ''}</td>
-                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT !== 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(compDatas.reduce((sum, c) => sum + (c.totalKgComp != null && c.prixKg != null ? c.totalKgComp * c.prixKg : 0), 0))}</td>
+                            <td className="py-1.5 px-1 text-right font-bold">{montantLigne(l, t.totalHT)}{coutLigneEl(compDatas.reduce((sum, c) => sum + (c.totalKgComp != null && c.prixKg != null ? c.totalKgComp * c.prixKg : 0), 0))}</td>
                           </>
                         );
                       })() : (() => {
@@ -1243,7 +1264,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, onO
                             <td className={`py-1.5 px-1 text-right${auKg ? ' font-semibold text-primary' : ''}`}>{auKg ? (l.quantite ? fmt(l.quantite, 2) : '') : poidsC && l.quantite ? Math.round(l.quantite * poidsC * 10) / 10 : ''}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKg != null ? `(${formatMontant(prixKg)})` : ''}</td>
-                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT !== 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutLigneDevis(l, surfaceLigne))}</td>
+                            <td className="py-1.5 px-1 text-right font-bold">{montantLigne(l, t.totalHT)}{coutLigneEl(coutLigneDevis(l, surfaceLigne))}</td>
                           </>
                         );
                       })()}
@@ -1337,6 +1358,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, onO
                 }
                 const grpSubS: Record<string, number> = {};
                 for (const l of lignesEffectives) {
+                  if (l.pourMemoire) continue;   // pour mémoire : hors sous-total
                   const gid = lineGroupS[l.id];
                   if (gid) grpSubS[gid] = (grpSubS[gid] || 0) + calculerTotalLigne(l).totalHT;
                 }
@@ -1385,8 +1407,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, onO
                           <td className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right whitespace-nowrap">{formatMontant(grpSubS[myGrpS!] || 0)}</td>
                         </tr>
                       )}
-                      <tr className="border-b border-border">
+                      <tr className="border-b border-border" style={l.pourMemoire ? PM_FOND : undefined}>
                         <td className={`py-2 ${myGrpS ? 'pl-4' : ''}`}>
+                          {l.pourMemoire && <span style={{ ...PM_PASTILLE, marginRight: '6px' }}>Pour mémoire</span>}
                           <span style={DESIGNATION_QUI_SE_COUPE}>{noteEnTexte(l.description) === l.description ? l.description : <NoteRiche note={l.description} />}</span>
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
@@ -1459,7 +1482,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, onO
                         {showRemise && <td className="py-2 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT) : ''}</td>}
                         {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : ''}</td>}
                         <td className="py-2 text-right">{prixNet > 0 ? formatMontant(prixNet) : ''}</td>
-                        <td className="py-2 text-right font-medium">{t.totalHT !== 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutLigneDevis(l, getSurfaceLigne(l.id)))}</td>
+                        <td className="py-2 text-right font-medium">{montantLigne(l, t.totalHT)}{coutLigneEl(coutLigneDevis(l, getSurfaceLigne(l.id)))}</td>
                       </tr>
                       {showComposants && composants && composants.length > 0 && composants.map(comp => {
                         const compProd = produits.find(p => p.id === comp.produitId);
@@ -1545,6 +1568,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, onO
               );
             })()}
             <div className="flex justify-between"><span className="text-muted-foreground">Total HT</span><span>{formatMontant(totals.totalHT)}</span></div>
+            {lignesEffectives.some(l => l.pourMemoire) && (
+              <div className="flex justify-between items-baseline gap-3" style={{ color: '#B45309' }}>
+                <span style={{ fontSize: '0.8em' }}><span style={PM_PASTILLE}>PM</span> Pour mémoire, non compris dans le total</span>
+                <span style={{ fontStyle: 'italic', whiteSpace: 'nowrap' }}>({formatMontant(totalPourMemoire(lignesEffectives))})</span>
+              </div>
+            )}
             {(devis.fraisPortHT || 0) > 0 && (
               <div className="flex justify-between"><span className="text-muted-foreground">dont frais de port HT</span><span>{formatMontant(devis.fraisPortHT!)}</span></div>
             )}

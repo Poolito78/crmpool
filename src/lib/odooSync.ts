@@ -5,7 +5,7 @@
  */
 
 import type { Devis, Client, Produit, Contact, LigneDevis, UniteSurface } from './store';
-import { couvertureM2, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne } from './store';
+import { couvertureM2, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, calculerTotalLigne } from './store';
 import { produitParId } from '@/lib/indexProduits';
 import { estGamme, niveauGamme } from '@/lib/remiseGammes';
 import { noteEnTexte } from '@/lib/noteRiche';
@@ -128,6 +128,12 @@ function buildLignes(devis: Devis, produits: Produit[], avertissements?: string[
       result.push({ type: 'section', desc: l.description });
     } else if (l.type === 'texte') {
       result.push({ type: 'note', desc: l.description });
+    } else if (l.pourMemoire) {
+      /* « POUR MÉMOIRE » : chez Odoo, une ligne d'article compterait dans le
+         total de la commande. Elle part en note, montant compris. */
+      const { totalHT } = calculerTotalLigne(l);
+      const montant = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(totalHT);
+      result.push({ type: 'note', desc: `PM (pour mémoire, non compris dans le total) — ${noteEnTexte(l.description)} : ${l.quantite} ${l.unite || ''} — ${montant} HT`.replace(/\s+—/g, ' —') });
     } else {
       const produit = produitParId(produits, l.produitId);
       /* La référence ODOO d'abord.
@@ -253,6 +259,7 @@ export function coutChantierLigne(
   lignesDevis?: LigneDevis[],
 ): number {
   if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') return 0;
+  if (l.pourMemoire) return 0;   // « Pour mémoire » : hors coût chantier comme hors total
   if (lignesDevis) {
     const cata = coutCatalyseConsommee(l, lignesDevis, produits, surfaceGlobaleM2, uniteDevis);
     if (cata != null) return cata;

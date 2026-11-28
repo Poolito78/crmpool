@@ -162,11 +162,14 @@ export default function CommandeARPreview({ commande, client, dateDepart, dateLi
             );
             return (
               <tr key={l.id} style={{ backgroundColor: bg }}>
-                <td style={{ padding: '5px 8px', borderBottom: '1px solid #eee' }}>{l.description}</td>
+                <td style={{ padding: '5px 8px', borderBottom: '1px solid #eee' }}>
+                  {l.pourMemoire && <span style={{ backgroundColor: '#F59E0B', color: '#fff', fontSize: '8px', fontWeight: 'bold', padding: '1px 4px', borderRadius: '3px', marginRight: '5px', textTransform: 'uppercase' }}>Pour mémoire</span>}
+                  {l.description}
+                </td>
                 <td style={{ padding: '5px 8px', textAlign: 'center', borderBottom: '1px solid #eee' }}>{l.quantite}</td>
                 <td style={{ padding: '5px 8px', textAlign: 'center', borderBottom: '1px solid #eee', color: '#555' }}>{l.unite}</td>
                 <td style={{ padding: '5px 8px', textAlign: 'right', borderBottom: '1px solid #eee' }}>{formatMontant(l.prixUnitaireHT)}</td>
-                <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #eee' }}>{formatMontant(t.totalHT)}</td>
+                <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #eee' }}>{l.pourMemoire ? <>PM<br /><span style={{ fontWeight: 'normal', fontStyle: 'italic', color: '#777' }}>({formatMontant(t.totalHT)})</span></> : formatMontant(t.totalHT)}</td>
               </tr>
             );
           })}

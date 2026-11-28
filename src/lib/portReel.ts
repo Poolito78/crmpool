@@ -142,7 +142,7 @@ export function portReelParFournisseur(e: Entree): PortReel {
 
   for (const l of e.lignes) {
     // Un article se reconnaît par exclusion : `type` absent DÉSIGNE une ligne d'article.
-    if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') continue;
+    if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte' || l.pourMemoire) continue;
     if (!l.produitId) continue;
     const pfs = e.produitFournisseurs.filter(pf => pf.produitId === l.produitId);
     const pf = pfs.find(p => p.fournisseurId === e.choix[l.id]) ?? pfs.find(p => p.estPrioritaire) ?? pfs[0];

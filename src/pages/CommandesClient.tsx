@@ -888,7 +888,7 @@ export default function CommandesClient() {
                   <span>Total à facturer</span>
                   <span>{formatMontant(
                     factureCommande.lignes
-                      .filter(l => factureLignesSelectees.includes(l.id))
+                      .filter(l => factureLignesSelectees.includes(l.id) && !l.pourMemoire)
                       .reduce((acc, l) => acc + calculerTotalLigne(l).totalHT, 0)
                   )}</span>
                 </div>

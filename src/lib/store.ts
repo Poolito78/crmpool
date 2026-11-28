@@ -827,6 +827,12 @@ export interface LigneDevis {
   prixUnitaireHT: number;
   tva: number;
   remise: number;
+  /**
+   * Ligne « Pour mémoire » (PM) : son montant s'affiche (éditeur, PDF) mais
+   * n'entre dans AUCUN total — ni total du devis, ni sous-total de groupe, ni
+   * marge, ni coût chantier. Chez Odoo, elle part en ligne de note.
+   */
+  pourMemoire?: boolean;
   /** Surface de la ligne, dans SON unité (`uniteSurface`) : m² ou ml. */
   surfaceM2?: number;
   /** m² ou ml pour cette ligne seule ; absent = l'unité du devis. La conso suit (kg/m² ou kg/ml). */
@@ -3145,8 +3151,19 @@ export function calculerTotalLigne(ligne: LigneDevis) {
   return { totalHT, totalTVA, totalTTC: Math.round((totalHT + totalTVA) * 100) / 100 };
 }
 
+/** Ligne « Pour mémoire » : montant affiché, jamais compté (`LigneDevis.pourMemoire`). */
+export function estPourMemoire(l: Pick<LigneDevis, 'type' | 'pourMemoire'>): boolean {
+  return !!l.pourMemoire && (!l.type || l.type === 'ligne');
+}
+
+/** Montant HT des lignes « Pour mémoire », hors totaux — pour l'annoncer sous le total. */
+export function totalPourMemoire(lignes: LigneDevis[]): number {
+  return lignes.filter(estPourMemoire).reduce((s, l) => s + calculerTotalLigne(l).totalHT, 0);
+}
+
 export function calculerTotalDevis(lignes: LigneDevis[], fraisPortHT = 0, fraisPortTVA = 20) {
   const lignesTotal = lignes.reduce((acc, l) => {
+    if (estPourMemoire(l)) return acc;
     const { totalHT, totalTVA, totalTTC } = calculerTotalLigne(l);
     return { totalHT: acc.totalHT + totalHT, totalTVA: acc.totalTVA + totalTVA, totalTTC: acc.totalTTC + totalTTC };
   }, { totalHT: 0, totalTVA: 0, totalTTC: 0 });
